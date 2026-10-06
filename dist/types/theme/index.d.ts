@@ -527,6 +527,13 @@ export declare function themeTokenCssVar(token: string): string | null;
 /** Every theme token name, in declaration order. */
 export declare function themeTokenNames(): Array<keyof ThemeTokens>;
 /**
+ * The CSS gradient functions a `$theme({ gradients: { brand: "…" } })` STRING
+ * may start with (`linear-gradient(…)`, …); any other string, a plain colour
+ * included, is dropped. The DSL types print `ThemeGradient` from this list, and
+ * tests/style-types-runtime.test.ts pins it to what `$theme` actually accepts.
+ */
+export declare const THEME_GRADIENT_FUNCTIONS: readonly string[];
+/**
  * Apply theme tokens to the host element. Also sets `data-rui-theme` so the
  * shadow-DOM stylesheet can hook into theme-specific overrides (fonts,
  * gradients, animations, etc.) that go beyond raw token values.

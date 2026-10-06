@@ -133,14 +133,15 @@ export interface TableCellCol {
     /** Cell value formatting hint (`text|number|currency|date`). */
     format?: string;
     /**
-     * Optional `(value, rowIndex) => Component | string | (Component|string)[]`
-     * mapper. Lets a column render arbitrary components — action buttons,
-     * badges, avatars, links — instead of plain text. When omitted, a cell
-     * value that is itself a component node still renders directly.
+     * Optional `(value, rowIndex, row) => Component | string | (Component|string)[]`
+     * mapper, where `row` is the whole row (see `fillTableCell`). Lets a column
+     * render arbitrary components — action buttons, badges, avatars, links —
+     * instead of plain text. When omitted, a cell value that is itself a
+     * component node still renders directly.
      */
     render?: unknown;
     /**
-     * Optional `(value, rowIndex) => void` fired when the cell is clicked or
+     * Optional `(value, rowIndex, row) => void` fired when the cell is clicked or
      * activated via keyboard. Clicks originating on an interactive child
      * (a rendered Button / link / input) are ignored so nested actions keep
      * their own handlers.
@@ -150,7 +151,7 @@ export interface TableCellCol {
 /**
  * Populate a `<td>` for one Table / DataGrid cell. Content resolution order:
  *
- *   1. `col.render(value, rowIndex)` — when provided, its result (a
+ *   1. `col.render(value, rowIndex, row)` — when provided, its result (a
  *      component, string, or array of either) is rendered. This is the
  *      idiomatic way to put buttons / badges / links in a column.
  *   2. a component-node `value` — rendered directly (so authors can also
@@ -158,7 +159,7 @@ export interface TableCellCol {
  *   3. otherwise the value is formatted as text via `formatValue`.
  *
  * When `col.onClick` is a callable the whole cell becomes an accessible
- * button (pointer + Enter/Space), firing `onClick(value, rowIndex)`.
+ * button (pointer + Enter/Space), firing `onClick(value, rowIndex, row)`.
  */
 export declare function fillTableCell(td: HTMLElement, col: TableCellCol, value: unknown, rowIndex: number, helpers: CellRenderHelpers, formatValue: (value: unknown, format: string) => string, 
 /**

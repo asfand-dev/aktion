@@ -614,6 +614,7 @@ function isNode(value) {
   const first = kind.charCodeAt(0);
   return first >= 65 && first <= 90;
 }
+const NON_CHILD_KEYS = /* @__PURE__ */ new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
 function walk(program, visit) {
   for (const stmt of program.statements) visitNode(stmt, null, null, null, 0, visit);
 }
@@ -623,7 +624,7 @@ function walkNode(root, visit) {
 function visitNode(node, parent, key, index, depth, visit) {
   if (visit({ node, parent, key, index, depth }) === false) return;
   for (const childKey of Object.keys(node)) {
-    if (childKey === "loc") continue;
+    if (NON_CHILD_KEYS.has(childKey)) continue;
     const value = node[childKey];
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i += 1) {
@@ -641,7 +642,7 @@ function visitNode(node, parent, key, index, depth, visit) {
 }
 function visitRecord(record, owner, key, depth, visit) {
   for (const inner of Object.keys(record)) {
-    if (inner === "loc") continue;
+    if (NON_CHILD_KEYS.has(inner)) continue;
     const value = record[inner];
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i += 1) {
@@ -670,7 +671,7 @@ function parse(source, options = {}) {
     softNewlines: options.softNewlines
   });
   const openLiteral = tokens[tokens.length - 2]?.open === true;
-  const ctx = new ParserContext(tokens, comments, options.softNewlines);
+  const ctx = new ParserContext(tokens, comments, options.softNewlines, options.statementBlocks === true);
   const statements = [];
   const errors = [];
   while (!ctx.isEnd()) {
@@ -869,6 +870,18 @@ function parseStatementImpl(ctx, _topLevel) {
       case "try":
         return parseTryStatement(ctx);
     }
+  }
+  if (ctx.statementBlocks && head.type === "Punctuation" && head.value === "{") {
+    const start = ctx.snapshot();
+    try {
+      return parseExpressionStatement(ctx);
+    } catch {
+      ctx.restore(start);
+      ctx.takePending();
+    }
+    const block = parseBlock(ctx);
+    skipTerminator(ctx);
+    return { kind: "ExpressionStatement", expression: block, loc: { line: head.line, column: head.column } };
   }
   const saved = ctx.snapshot();
   if (couldStartAssignment(ctx)) {
@@ -1507,7 +1520,7 @@ function parseReturn(ctx) {
 }
 const EOF_TOKEN = { type: "EOF", value: "", line: 0, column: 0 };
 class ParserContext {
-  constructor(tokens, comments = [], softNewlines) {
+  constructor(tokens, comments = [], softNewlines, statementBlocks = false) {
     __publicField(this, "index", 0);
     /**
      * Whether newlines are significant, innermost region last: `true` while
@@ -1545,6 +1558,7 @@ class ParserContext {
     this.tokens = tokens;
     this.comments = comments;
     this.softNewlines = softNewlines;
+    this.statementBlocks = statementBlocks;
   }
   isEnd() {
     return this.peek().type === "EOF";
@@ -1591,11 +1605,11 @@ class ParserContext {
    * interpolation (`base` = its synthetic prefix) needs. `undefined` when there
    * are none.
    */
-  softNewlinesWithin(offset, length, base) {
+  softNewlinesWithin(offset, length2, base) {
     if (!this.softNewlines || this.softNewlines.size === 0) return void 0;
     const out = /* @__PURE__ */ new Set();
     for (const at of this.softNewlines) {
-      if (at >= offset && at < offset + length) out.add(base + (at - offset));
+      if (at >= offset && at < offset + length2) out.add(base + (at - offset));
     }
     return out.size > 0 ? out : void 0;
   }
@@ -1942,6 +1956,35 @@ function rebaseTemplateLocations(root, line, column) {
     }
     loc.line = line + (loc.line - 1);
   });
+}
+function rebaseTemplatePosition(pos, line, column) {
+  if (pos.line !== 1) return { line: line + (pos.line - 1), column: pos.column };
+  const exprStartColumn = column + "${".length;
+  return { line, column: Math.max(exprStartColumn, exprStartColumn + (pos.column - (TEMPLATE_SUB_PREFIX.length + 1))) };
+}
+function interpolationError(sub, source, line, column) {
+  if (source.trim() === "") {
+    return {
+      message: "Empty `${}` in a template literal — write an expression inside it, or remove it.",
+      line,
+      column
+    };
+  }
+  const first = sub.errors[0];
+  if (first) {
+    const at = rebaseTemplatePosition(first, line, column);
+    const message = first.message.startsWith("Unexpected token EOF") ? "Unexpected end of the `${…}` interpolation — it needs a complete expression." : first.message;
+    return { message, ...at };
+  }
+  if (sub.statements.length !== 1 || sub.statements[0].kind !== "Assignment") {
+    const loc = sub.statements[1]?.loc;
+    const at = loc ? rebaseTemplatePosition(loc, line, column) : { line, column };
+    return {
+      message: "A `${…}` interpolation holds a single expression — move the other statements out of the template.",
+      ...at
+    };
+  }
+  return null;
 }
 function parseTernary(ctx) {
   const test = parseLogicalOr(ctx);
@@ -2354,13 +2397,14 @@ function parsePrimary(ctx) {
       if (looksLikeFunctionExpr) {
         const start = tok;
         ctx.consume();
-        if (ctx.peek().type === "Identifier") ctx.consume();
+        const selfName = ctx.peek().type === "Identifier" ? ctx.consume().value : void 0;
         const params = parseFunctionParams(ctx);
         const body = parseBlock(ctx);
         return {
           kind: "Lambda",
           params,
           body,
+          ...selfName !== void 0 ? { selfName } : {},
           loc: { line: start.line, column: start.column }
         };
       }
@@ -2423,6 +2467,10 @@ function parsePrimary(ctx) {
       }
       const softNewlines = part.offset === void 0 ? void 0 : ctx.softNewlinesWithin(part.offset, part.source.length, TEMPLATE_SUB_PREFIX.length);
       const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`, softNewlines ? { softNewlines } : {});
+      if (tok.open !== true) {
+        const problem = interpolationError(sub, part.source, part.line, part.column);
+        if (problem) throw problem;
+      }
       const firstStmt = sub.statements[0];
       if (firstStmt && firstStmt.kind === "Assignment") {
         rebaseTemplateLocations(firstStmt.expression, part.line, part.column);
@@ -3048,7 +3096,9 @@ function parseObjectProps(ctx) {
     if (keyTok.type === "Punctuation" && keyTok.value === "[") {
       ctx.consume();
       skipWhitespace(ctx);
+      const keyStart = ctx.peek();
       computedKey = parseExpression(ctx);
+      if (!computedKey.loc) computedKey.loc = { line: keyStart.line, column: keyStart.column };
       skipWhitespace(ctx);
       ctx.expect("Punctuation", "]");
       key = "";
@@ -3730,18 +3780,24 @@ function sanitiseCssUrl(raw) {
 }
 const CSS_LENGTH_ALLOWED = /^[a-zA-Z0-9.%+\-*/\s(),]+$/;
 function sanitiseCssLength(raw, fallback) {
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw)) return fallback;
+    return raw === 0 ? "0" : `${raw}px`;
+  }
   const trimmed = (asString(raw) ?? "").trim();
   if (!trimmed) return fallback;
   if (trimmed.length > 64) return fallback;
   if (!CSS_LENGTH_ALLOWED.test(trimmed)) return fallback;
   return trimmed;
 }
-const CSS_COLOR_ALLOWED = /^[a-zA-Z0-9#%.,()\s+\-]+$/;
+const CSS_COLOR_ALLOWED = /^[a-zA-Z0-9#%.,()\s+\-/_]+$/;
+const CSS_COLOR_MAX_LENGTH = 256;
 function sanitiseCssColor(raw) {
   const trimmed = asString(raw).trim();
   if (!trimmed) return "";
-  if (trimmed.length > 64) return "";
+  if (trimmed.length > CSS_COLOR_MAX_LENGTH) return "";
   if (!CSS_COLOR_ALLOWED.test(trimmed)) return "";
+  if (/\/\*|\*\//.test(trimmed)) return "";
   if (/\burl\s*\(|\bexpression\s*\(|javascript\s*:|@import\b/i.test(trimmed)) return "";
   return trimmed;
 }
@@ -3889,7 +3945,7 @@ const BREAKPOINT_MIN = {
   lg: 1024,
   xl: 1280
 };
-const BP_ORDER = { base: 0, sm: 1, md: 2, lg: 3, xl: 4 };
+const bpOrder = (bp) => Math.max(0, RESPONSIVE_BREAKPOINTS.indexOf(bp));
 let dynSheet;
 const ruleCache = /* @__PURE__ */ new Map();
 let classCounter = 0;
@@ -3910,7 +3966,7 @@ function getResponsiveSheet() {
 function responsiveClassFor(groups) {
   const sheet = getResponsiveSheet();
   if (!sheet) return null;
-  const ordered = [...groups].filter((g) => g.decls.length > 0).sort((a, b) => (BP_ORDER[a.bp] ?? 0) - (BP_ORDER[b.bp] ?? 0));
+  const ordered = [...groups].filter((g) => g.decls.length > 0).sort((a, b) => bpOrder(a.bp) - bpOrder(b.bp));
   if (ordered.length === 0) return null;
   const cacheKey = ordered.map((g) => `${g.bp}{${g.decls.map(([p, v]) => `${p}:${v}`).join(";")}}`).join("|");
   const cached = ruleCache.get(cacheKey);
@@ -3932,7 +3988,7 @@ function responsiveClassFor(groups) {
 function isResponsiveMap(v) {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   const map = v;
-  return "base" in map || "sm" in map || "md" in map || "lg" in map || "xl" in map;
+  return RESPONSIVE_BREAKPOINTS.some((bp) => bp in map);
 }
 const STATE_SELECTOR = {
   hover: ":hover",
@@ -3945,10 +4001,11 @@ const STATE_SELECTOR = {
   "group-hover": ""
   // handled specially below
 };
+const INTERACTION_STATES = Object.keys(STATE_SELECTOR);
 function stateClassFor(groups) {
   const sheet = getResponsiveSheet();
   if (!sheet) return null;
-  const valid = groups.filter((g) => g.decls.length > 0 && g.state in STATE_SELECTOR);
+  const valid = groups.filter((g) => g.decls.length > 0 && INTERACTION_STATES.includes(g.state));
   if (valid.length === 0) return null;
   const cacheKey = "S|" + valid.map((g) => `${g.state}{${g.decls.map(([p, v]) => `${p}:${v}`).join(";")}}`).join("|");
   const cached = ruleCache.get(cacheKey);
@@ -4100,29 +4157,46 @@ const POSITION = /* @__PURE__ */ new Set(["relative", "absolute", "fixed", "stic
 const OVERFLOW = /* @__PURE__ */ new Set(["hidden", "auto", "scroll", "visible", "clip"]);
 const CURSOR = /* @__PURE__ */ new Set(["pointer", "default", "not-allowed", "grab", "grabbing", "text", "move", "wait", "help", "none"]);
 const TEXT_ALIGN = /* @__PURE__ */ new Set(["left", "center", "right", "justify", "start", "end"]);
+function length(v) {
+  if (typeof v === "number") return Number.isFinite(v) ? v === 0 ? "0" : `${v}px` : null;
+  return sanitiseCssLength(asString(v).trim(), "") || null;
+}
 function space(v) {
+  if (typeof v === "number") return length(v);
   const s = asString(v).trim();
   if (!s) return null;
-  if (s in SPACING) return SPACING[s];
-  return sanitiseCssLength(s, "") || null;
+  return lookup(SPACING, s) ?? length(s);
 }
 function size(v) {
+  if (typeof v === "number") return length(v);
   const s = asString(v).trim();
   if (!s) return null;
-  if (s in SIZE_KEYWORDS) return SIZE_KEYWORDS[s];
-  return sanitiseCssLength(s, "") || null;
+  return lookup(SIZE_KEYWORDS, s) ?? length(s);
+}
+function radius(v) {
+  if (typeof v === "number") return length(v);
+  const r = asString(v).trim();
+  return lookup(RADIUS, r) ?? length(r);
+}
+const GRADIENT_REF_PREFIX = "gradient.";
+const GRADIENT_CSS_VAR_PREFIX = "--rui-gradient-";
+function gradientRef(s) {
+  if (!s.startsWith(GRADIENT_REF_PREFIX)) return null;
+  return `var(${GRADIENT_CSS_VAR_PREFIX}${cssIdent(s.slice(GRADIENT_REF_PREFIX.length))})`;
 }
 function color(v) {
   const s = asString(v).trim();
   if (!s) return null;
-  if (s in COLORS) return COLORS[s];
-  if (s.startsWith("gradient.")) return `var(--rui-gradient-${cssIdent(s.slice("gradient.".length))})`;
+  const token = lookup(COLORS, s);
+  if (token) return token;
+  if (s.startsWith(GRADIENT_REF_PREFIX)) return null;
   return sanitiseCssColor(s) || null;
 }
 function bg(v) {
-  const s = asString(v).trim();
-  if (s.startsWith("gradient.")) return `var(--rui-gradient-${cssIdent(s.slice("gradient.".length))})`;
-  return color(v);
+  return gradientRef(asString(v).trim()) ?? color(v);
+}
+function lookup(table, key) {
+  return Object.prototype.hasOwnProperty.call(table, key) ? table[key] : null;
 }
 function cssIdent(raw) {
   return raw.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 40);
@@ -4134,10 +4208,10 @@ function num(v) {
   return null;
 }
 function fontSize(v) {
+  if (typeof v === "number") return length(v);
   const s = asString(v).trim();
   if (!s) return null;
-  if (s in FONT_SIZE) return FONT_SIZE[s];
-  return sanitiseCssLength(s, "") || null;
+  return lookup(FONT_SIZE, s) ?? length(s);
 }
 function fontWeight(v) {
   const s = asString(v).trim();
@@ -4154,18 +4228,15 @@ function safeBgUrl(raw) {
 function overlayLayer(v) {
   const s = asString(v).trim();
   if (!s) return null;
-  if (s.startsWith("gradient.")) return `var(--rui-gradient-${cssIdent(s.slice("gradient.".length))})`;
+  const gradient = gradientRef(s);
+  if (gradient) return gradient;
   const c = color(s);
   return c ? `linear-gradient(${c}, ${c})` : null;
 }
 function resolveResponsive(v) {
-  if (v && typeof v === "object" && !Array.isArray(v)) {
-    const map = v;
-    if ("base" in map || "sm" in map || "md" in map || "lg" in map || "xl" in map) {
-      return map.base ?? map.sm ?? map.md ?? map.lg ?? map.xl;
-    }
-  }
-  return v;
+  if (!isResponsiveMap(v)) return v;
+  for (const bp of RESPONSIVE_BREAKPOINTS) if (v[bp] != null) return v[bp];
+  return void 0;
 }
 const RESPONSIVE_RESOLVERS = {
   p: (v) => pair("padding", space(v)),
@@ -4204,14 +4275,8 @@ const RESPONSIVE_RESOLVERS = {
   maxH: (v) => pair("max-height", size(v)),
   bg: (v) => pair("background", bg(v)),
   color: (v) => pair("color", color(v)),
-  radius: (v) => {
-    const r = asString(v).trim();
-    return pair("border-radius", r in RADIUS ? RADIUS[r] : sanitiseCssLength(r, "") || null);
-  },
-  shadow: (v) => {
-    const s = asString(v).trim();
-    return s in SHADOW ? [["box-shadow", SHADOW[s]]] : [];
-  },
+  radius: (v) => pair("border-radius", radius(v)),
+  shadow: (v) => pair("box-shadow", lookup(SHADOW, asString(v).trim())),
   display: (v) => {
     const d = asString(v).trim();
     return DISPLAY.has(d) ? [["display", d]] : [];
@@ -4220,14 +4285,8 @@ const RESPONSIVE_RESOLVERS = {
     const d = asString(v).trim();
     return DIRECTION.has(d) ? [["flex-direction", d]] : [];
   },
-  align: (v) => {
-    const a = asString(v).trim();
-    return a in ALIGN ? [["align-items", ALIGN[a]]] : [];
-  },
-  justify: (v) => {
-    const j = asString(v).trim();
-    return j in JUSTIFY ? [["justify-content", JUSTIFY[j]]] : [];
-  },
+  align: (v) => pair("align-items", lookup(ALIGN, asString(v).trim())),
+  justify: (v) => pair("justify-content", lookup(JUSTIFY, asString(v).trim())),
   textAlign: (v) => {
     const t = asString(v).trim();
     return TEXT_ALIGN.has(t) ? [["text-align", t]] : [];
@@ -4243,7 +4302,7 @@ const RESPONSIVE_RESOLVERS = {
   opacity: (v) => pair("opacity", num(v)),
   zIndex: (v) => {
     const zs = asString(v).trim();
-    return pair("z-index", zs in Z_INDEX ? Z_INDEX[zs] : num(zs));
+    return pair("z-index", lookup(Z_INDEX, zs) ?? num(zs));
   },
   overflow: (v) => {
     const o = asString(v).trim();
@@ -4252,7 +4311,7 @@ const RESPONSIVE_RESOLVERS = {
   grow: (v) => pair("flex-grow", num(v)),
   shrink: (v) => pair("flex-shrink", num(v)),
   basis: (v) => pair("flex-basis", size(v)),
-  wrap: (v) => v === true || asString(v) === "true" ? [["flex-wrap", "wrap"]] : v === false || asString(v) === "false" ? [["flex-wrap", "nowrap"]] : [],
+  wrap: (v) => pair("flex-wrap", flexWrap(v)),
   position: (v) => {
     const p = asString(v).trim();
     return POSITION.has(p) ? [["position", p]] : [];
@@ -4261,10 +4320,7 @@ const RESPONSIVE_RESOLVERS = {
   right: (v) => pair("right", size(v)),
   bottom: (v) => pair("bottom", size(v)),
   left: (v) => pair("left", size(v)),
-  inset: (v) => {
-    const i = asString(v).trim();
-    return pair("inset", i === "0" ? "0" : sanitiseCssLength(i, "") || null);
-  },
+  inset: (v) => pair("inset", length(v)),
   fontSize: (v) => pair("font-size", fontSize(v)),
   weight: (v) => pair("font-weight", fontWeight(v)),
   textDecoration: (v) => {
@@ -4273,15 +4329,24 @@ const RESPONSIVE_RESOLVERS = {
   }
 };
 const TEXT_DECORATION = /* @__PURE__ */ new Set(["underline", "none", "line-through", "overline"]);
+const BORDER_PRESETS = {
+  none: "none",
+  subtle: "1px solid var(--rui-color-border-subtle)",
+  strong: "1px solid var(--rui-color-text)",
+  default: "1px solid var(--rui-color-border)",
+  true: "1px solid var(--rui-color-border)"
+};
 function resolveBorder(v) {
   const b = asString(v).trim();
-  if (!b) return [];
-  if (b === "none") return [["border", "none"]];
-  if (b === "subtle") return [["border", "1px solid var(--rui-color-border-subtle)"]];
-  if (b === "strong") return [["border", "1px solid var(--rui-color-text)"]];
-  if (b === "true" || b === "default") return [["border", "1px solid var(--rui-color-border)"]];
+  if (!b || b === "false") return [];
+  const preset = lookup(BORDER_PRESETS, b);
+  if (preset) return [["border", preset]];
   const c = color(b);
   return c ? [["border", `1px solid ${c}`]] : [];
+}
+function flexWrap(v) {
+  const w = asString(v).trim();
+  return w === "true" ? "wrap" : w === "false" ? "nowrap" : null;
 }
 function pair(prop2, value) {
   return value ? [[prop2, value]] : [];
@@ -4292,7 +4357,7 @@ function applyResponsive(sx, classes) {
     const value = sx[key];
     if (!isResponsiveMap(value)) continue;
     const groups = [];
-    for (const bp of ["base", "sm", "md", "lg", "xl"]) {
+    for (const bp of RESPONSIVE_BREAKPOINTS) {
       if (!(bp in value)) continue;
       const decls = resolver(value[bp]);
       if (decls.length > 0) groups.push({ bp, decls });
@@ -4306,6 +4371,8 @@ function applyResponsive(sx, classes) {
   }
   return handled;
 }
+const BACKDROP_FILTERS = { blur: "blur(12px)" };
+const BG_SIZES = ["cover", "contain"];
 function serializeSx(sxRaw) {
   const classes = [];
   if (!sxRaw || typeof sxRaw !== "object" || Array.isArray(sxRaw)) return { style: "", classes };
@@ -4346,26 +4413,18 @@ function serializeSx(sxRaw) {
   const bc = color(get("borderColor"));
   if (bc) decls.push(["border-color", bc]);
   const rad = get("radius");
-  if (rad != null) {
-    const r = asString(rad).trim();
-    decls.push(["border-radius", r in RADIUS ? RADIUS[r] : sanitiseCssLength(r, "") || null]);
-  }
+  if (rad != null) decls.push(["border-radius", radius(rad)]);
   const sh = get("shadow");
-  if (sh != null) {
-    const s = asString(sh).trim();
-    if (s in SHADOW) decls.push(["box-shadow", SHADOW[s]]);
-  }
+  if (sh != null) decls.push(["box-shadow", lookup(SHADOW, asString(sh).trim())]);
   const op = num(get("opacity"));
   if (op) decls.push(["opacity", op]);
   const disp = asString(get("display")).trim();
   if (DISPLAY.has(disp)) decls.push(["display", disp]);
   const dir = asString(get("direction")).trim();
   if (DIRECTION.has(dir)) decls.push(["flex-direction", dir]);
-  const al = asString(get("align")).trim();
-  if (al in ALIGN) decls.push(["align-items", ALIGN[al]]);
-  const ju = asString(get("justify")).trim();
-  if (ju in JUSTIFY) decls.push(["justify-content", JUSTIFY[ju]]);
-  if (get("wrap") === true || asString(get("wrap")) === "true") decls.push(["flex-wrap", "wrap"]);
+  decls.push(["align-items", lookup(ALIGN, asString(get("align")).trim())]);
+  decls.push(["justify-content", lookup(JUSTIFY, asString(get("justify")).trim())]);
+  decls.push(["flex-wrap", flexWrap(get("wrap"))]);
   const grow = num(get("grow"));
   if (grow) decls.push(["flex-grow", grow]);
   const shrink = num(get("shrink"));
@@ -4380,15 +4439,11 @@ function serializeSx(sxRaw) {
   decls.push(["right", size(get("right"))]);
   decls.push(["bottom", size(get("bottom"))]);
   decls.push(["left", size(get("left"))]);
-  const inset = get("inset");
-  if (inset != null) {
-    const i = asString(inset).trim();
-    decls.push(["inset", i === "0" ? "0" : sanitiseCssLength(i, "") || null]);
-  }
+  decls.push(["inset", length(get("inset"))]);
   const z = get("zIndex");
   if (z != null) {
     const zs = asString(z).trim();
-    decls.push(["z-index", zs in Z_INDEX ? Z_INDEX[zs] : num(zs)]);
+    decls.push(["z-index", lookup(Z_INDEX, zs) ?? num(zs)]);
   }
   decls.push(["font-size", fontSize(get("fontSize"))]);
   decls.push(["font-weight", fontWeight(get("weight"))]);
@@ -4400,10 +4455,10 @@ function serializeSx(sxRaw) {
   if (CURSOR.has(cur)) decls.push(["cursor", cur]);
   const ta = asString(get("textAlign")).trim();
   if (TEXT_ALIGN.has(ta)) decls.push(["text-align", ta]);
-  const backdrop = asString(get("backdrop")).trim();
-  if (backdrop === "blur") {
-    decls.push(["backdrop-filter", "blur(12px)"]);
-    decls.push(["-webkit-backdrop-filter", "blur(12px)"]);
+  const backdrop = lookup(BACKDROP_FILTERS, asString(get("backdrop")).trim());
+  if (backdrop) {
+    decls.push(["backdrop-filter", backdrop]);
+    decls.push(["-webkit-backdrop-filter", backdrop]);
   }
   const bgImage = asString(get("bgImage")).trim();
   const overlay = overlayLayer(get("bgOverlay"));
@@ -4412,7 +4467,8 @@ function serializeSx(sxRaw) {
     if (safe) {
       const url = `url("${safe}")`;
       decls.push(["background-image", overlay ? `${overlay}, ${url}` : url]);
-      decls.push(["background-size", asString(get("bgSize")).trim() === "contain" ? "contain" : "cover"]);
+      const bgSize = asString(get("bgSize")).trim();
+      decls.push(["background-size", BG_SIZES.includes(bgSize) ? bgSize : BG_SIZES[0]]);
       decls.push(["background-position", "center"]);
     }
   } else if (overlay) {
@@ -4424,29 +4480,23 @@ function serializeSx(sxRaw) {
   const style = decls.filter((d) => d[1] != null && d[1] !== "").map(([k, v]) => `${k}:${v}`).join(";");
   return { style, classes };
 }
-const STATE_EFFECTS = /* @__PURE__ */ new Set(["lift", "grow", "glow", "bright", "border", "underline", "scale"]);
+const HOVER_EFFECTS = /* @__PURE__ */ new Set(["lift", "grow", "glow", "bright", "border", "underline", "scale"]);
+const FOCUS_EFFECTS = /* @__PURE__ */ new Set(["glow", "border"]);
 function collectStateClasses(raw, state, classes) {
   if (raw == null) return;
+  const effects = state === "hover" ? HOVER_EFFECTS : FOCUS_EFFECTS;
   if (typeof raw === "string") {
-    if (STATE_EFFECTS.has(raw)) classes.push(`ak-${state}-${raw}`);
+    if (effects.has(raw)) classes.push(`ak-${state}-${raw}`);
     return;
   }
   if (typeof raw === "object" && !Array.isArray(raw)) {
     for (const [k, v] of Object.entries(raw)) {
-      if (v && STATE_EFFECTS.has(k)) classes.push(`ak-${state}-${k}`);
+      if (k === "scale" && v !== true) continue;
+      if (v && effects.has(k)) classes.push(`ak-${state}-${k}`);
     }
   }
 }
-const ARBITRARY_STATES = /* @__PURE__ */ new Set([
-  "hover",
-  "focus",
-  "focus-visible",
-  "focus-within",
-  "active",
-  "disabled",
-  "checked",
-  "group-hover"
-]);
+const ARBITRARY_STATES = new Set(INTERACTION_STATES);
 function collectArbitraryStateClasses(sx, classes) {
   const groups = [];
   const consider = (state, value) => {
@@ -4475,27 +4525,21 @@ function resolveStateDecls(obj) {
   push("background", bg(obj.bg));
   push("color", color(obj.color));
   push("border-color", color(obj.borderColor));
-  if (obj.shadow != null) {
-    const s = asString(obj.shadow).trim();
-    if (s in SHADOW) push("box-shadow", SHADOW[s]);
-  }
-  if (obj.radius != null) {
-    const r = asString(obj.radius).trim();
-    push("border-radius", r in RADIUS ? RADIUS[r] : sanitiseCssLength(r, "") || null);
-  }
+  if (obj.shadow != null) push("box-shadow", lookup(SHADOW, asString(obj.shadow).trim()));
+  if (obj.radius != null) push("border-radius", radius(obj.radius));
   const op = num(obj.opacity);
   if (op) push("opacity", op);
   const cur = asString(obj.cursor).trim();
   if (CURSOR.has(cur)) push("cursor", cur);
   if (obj.textDecoration != null) {
     const td = asString(obj.textDecoration).trim();
-    if (["underline", "none", "line-through", "overline"].includes(td)) push("text-decoration", td);
+    if (TEXT_DECORATION.has(td)) push("text-decoration", td);
   }
   const scale = num(obj.scale);
   if (scale) transforms.push(`scale(${scale})`);
-  const ty = sanitiseCssLength(asString(obj.translateY), "");
+  const ty = length(obj.translateY);
   if (ty) transforms.push(`translateY(${ty})`);
-  const tx = sanitiseCssLength(asString(obj.translateX), "");
+  const tx = length(obj.translateX);
   if (tx) transforms.push(`translateX(${tx})`);
   if (obj.rotate != null) {
     const deg = asNumber(obj.rotate);
@@ -4524,6 +4568,7 @@ const ANIMATE_PRESETS = /* @__PURE__ */ new Set([
   "ping",
   "wiggle"
 ]);
+const ANIMATE_NONE = "none";
 function resolveAnimate(raw) {
   const classes = [];
   const decls = [];
@@ -4541,7 +4586,7 @@ function resolveAnimate(raw) {
     if (o.duration != null) duration = asNumber(o.duration);
     repeat = o.repeat;
   }
-  if (!ANIMATE_PRESETS.has(preset)) return { classes, style: "" };
+  if (preset === ANIMATE_NONE || !ANIMATE_PRESETS.has(preset)) return { classes, style: "" };
   classes.push("ak-anim", `ak-anim-${preset}`);
   if (delay != null && delay >= 0 && delay <= 2e4) decls.push(`animation-delay:${Math.round(delay)}ms`);
   if (duration != null && duration > 0 && duration <= 2e4) decls.push(`animation-duration:${Math.round(duration)}ms`);
@@ -5917,7 +5962,7 @@ const utilMembers = [
   method("startsWith", "startsWith(text, prefix)", "True when the text starts with the prefix."),
   method("endsWith", "endsWith(text, suffix)", "True when the text ends with the suffix."),
   method("contains", "contains(text, needle)", "True when the text contains the needle."),
-  method("match", "match(text, pattern)", "Test the text against a regular-expression pattern."),
+  method("match", "match(text, pattern)", 'Test the text against a regular expression given as a SOURCE string (`"^a.+z$"`). A RegExp value stringifies with its slashes and does not match as meant.'),
   // Math
   method("round", "round(value, decimals?)", "Round to n decimal places."),
   method("floor", "floor(value)", "Round down to an integer."),
@@ -5945,8 +5990,8 @@ const utilMembers = [
   method("derived", "derived(fn)", "Computed reactive value — recomputes from the atoms the lambda reads."),
   method("onError", "onError(fn)", "Program-level error sink — fires with { error, source } when an action throws."),
   method("onNavigate", "onNavigate(fn)", "Navigation guard: return false to block, a path string to redirect, anything else to allow."),
-  method("onRequest", "onRequest(fn)", "HTTP request interceptor — a partial return merges over every outgoing request."),
-  method("onResponse", "onResponse(fn)", "HTTP response interceptor — replace the response, or `return retry()` to re-issue once (the client awaits what you return; `await` inside the body does not suspend)."),
+  method("onRequest", "onRequest(fn)", "HTTP request interceptor — a partial return merges over every outgoing request (headers shallow-merged), or mutate the request and return nothing. Runs synchronously: a returned Promise is ignored."),
+  method("onResponse", "onResponse(fn)", "HTTP response interceptor — return a full replacement response (it replaces, it does not merge), `return retry()` to re-issue once, or nothing to pass it through (the client awaits what you return; `await` inside the body does not suspend)."),
   method("invalidate", "invalidate(keys)", "Refetch every cached $query whose key contains one of the substrings."),
   // Reactive environment (listeners attach lazily on first read)
   prop("scroll", 'Reactive scroll: .x / .y / .progress (0–1) / .direction ("up"|"down").'),
@@ -5980,7 +6025,7 @@ const utilMembers = [
   method("rules.max", "rules.max(n, message?)", "Number ≤ n."),
   method("rules.minLength", "rules.minLength(n, message?)", "String length ≥ n."),
   method("rules.maxLength", "rules.maxLength(n, message?)", "String length ≤ n."),
-  method("rules.pattern", "rules.pattern(re, message?)", "Match a regular expression."),
+  method("rules.pattern", "rules.pattern(re, message?)", "Match a regular expression (a RegExp or its source string). A RegExp's flags are ignored: `/x/i` matches case-sensitively."),
   method("rules.oneOf", "rules.oneOf(options, message?)", "Value is in the allowed list."),
   method("rules.integer", "rules.integer(message?)", "A whole number — min/max bound the magnitude but not the step."),
   method("rules.range", "rules.range(lo, hi, message?)", "Inclusive numeric range — min + max in one rule, so the message names both ends."),
@@ -6005,7 +6050,7 @@ const utilMembers = [
   method("geolocate", "geolocate(options?)", "Resolve { lat, lng, accuracy } via the Geolocation API."),
   method("isOnline", "isOnline()", "Current navigator.onLine flag."),
   method("deviceType", "deviceType()", '"mobile" | "tablet" | "desktop" heuristic.'),
-  method("worker", "worker(fn, ...args)", "Run a closure-free function in a Web Worker; resolves its return value."),
+  method("worker", "worker(fn, ...args)", "Run a closure-free HOST JavaScript function in a Web Worker; resolves its return value. `fn` is serialised with `toString()`, so an Aktion lambda (the runtime's closure) cannot run there — only the no-Worker fallback runs it."),
   method("registerServiceWorker", "registerServiceWorker(url, scope?)", "Register a service worker for PWA/offline."),
   method("webManifest", "webManifest(config)", "Build a sanitised web-app manifest (name, icons, themeColor…)."),
   method("nativeShell", "nativeShell()", 'Detect the wrapper: capacitor/cordova/tauri/electron/react-native or "web".'),
@@ -6050,7 +6095,7 @@ const toastMembers = [
 const domMembers = [
   method("onResize", "onResize(node, callback)", "Observe element size with a ResizeObserver; callback gets { width, height, entry }. Returns a disposer; auto-disposed on replan."),
   method("onIntersect", "onIntersect(node, callback, options?)", "Observe viewport intersection with an IntersectionObserver; callback gets the entry. Options: { root?, rootMargin?, threshold? }."),
-  method("onMutation", "onMutation(node, callback, options?)", "Observe DOM mutations with a MutationObserver. Options: { childList?, attributes?, subtree?, characterData? }."),
+  method("onMutation", "onMutation(node, callback, options?)", "Observe DOM mutations with a MutationObserver; callback gets the records. Options: { childList?, attributes?, subtree?, characterData? } — childList and attributes default to TRUE, subtree and characterData to false."),
   method("measure", "measure(node)", "One-shot read → { rect, scroll, viewport } (getBoundingClientRect + scroll offsets + window size).")
 ];
 const namespaceCatalog = [
@@ -6076,7 +6121,8 @@ const httpResourceMembers = [
   prop("onDone", "Settable callback fired each time the request settles (success or error).")
 ];
 const queryResourceMembers = [
-  ...httpResourceMembers,
+  ...httpResourceMembers.filter((m) => m.name !== "onDone"),
+  prop("onDone", "Settable callback fired each time the request settles (success or error). Never fired in infinite mode — chain `.loadMore().then(…)` instead."),
   method("loadMore", "loadMore()", "Fetch the next page (infinite mode)."),
   prop("hasMore", "`true` while more pages are available (infinite mode)."),
   prop("loadingMore", "`true` while a `loadMore()` page is in flight."),
@@ -6098,7 +6144,7 @@ const socketResourceMembers = [
   prop("last", "Most recent message (JSON auto-parsed), or null."),
   prop("messages", "Buffered messages, newest last (capped to bufferSize)."),
   prop("attempts", "Reconnect attempts in the current streak (resets on success)."),
-  prop("error", "Last socket error event, if any."),
+  prop("error", "The last error: the socket `error` event, the error a bad URL threw, or `{ message }` when WebSocket is unavailable; `undefined` once open."),
   method("send", "send(data)", "Send a message (objects JSON-stringified). Queues while connecting; flushes on open."),
   method("close", "close()", "Close for good — disables auto-reconnect.")
 ];
@@ -6107,7 +6153,7 @@ const sseResourceMembers = [
   prop("connected", "`true` while the stream is open."),
   prop("last", "Most recent event payload (JSON auto-parsed)."),
   prop("messages", "Buffered events, newest last (capped to bufferSize)."),
-  prop("error", "Last stream error, if any."),
+  prop("error", "The last error: the EventSource `error` event, the error a bad URL threw, or `{ message }` when EventSource is unavailable; `undefined` once open."),
   method("close", "close()", "Close the stream.")
 ];
 const formResourceMembers = [
@@ -6124,7 +6170,7 @@ const formResourceMembers = [
   method("setValues", "setValues(values)", "Merge several field values at once."),
   method("validate", "validate()", "Validate every field → boolean (a Promise when async rules exist)."),
   method("validateField", "validateField(name)", "Validate one field → message | null (Promise for async rules)."),
-  method("submit", "submit()", "Touch all → validate → onSubmit(values) when valid. Alias: handleSubmit()."),
+  method("submit", "submit()", "Touch every field that has rules → validate → onSubmit(values) when valid. Returns false when invalid, true after a synchronous onSubmit, and a Promise when a rule or onSubmit is async. Alias: handleSubmit()."),
   method("handleSubmit", "handleSubmit()", "Alias of submit()."),
   method("reset", "reset()", "Restore initial values; clears errors/touched/dirty.")
 ];
@@ -6211,7 +6257,7 @@ const httpConfigKeys = [
 ];
 const queryConfigKeys = [
   ...httpConfigKeys,
-  cfg("key", "string", "Cache key — identical keys share one in-flight request + cached bag."),
+  cfg("key", "string | number", "Cache key — identical keys share one in-flight request + cached bag."),
   cfg("ttl", "number", "Milliseconds before cached data is considered stale and auto-refetched."),
   cfg("refetchInterval", "number", "Poll interval in ms (live dashboards)."),
   cfg("refetchOnFocus", "boolean", "Refetch when the tab regains focus."),
@@ -6224,7 +6270,10 @@ const mutationConfigKeys = [
   cfg("body", "object", "Default body; shallow-merged with `.mutate(overrides)`."),
   cfg("headers", "object", "Request headers as a plain object."),
   cfg("query", "object", "Object serialised into the URL querystring."),
-  cfg("optimistic", "(vars) => void", "Runs synchronously before the request; auto-rolled-back on failure."),
+  cfg("credentials", 'enum: "omit" | "same-origin" | "include"', 'Fetch credentials mode (e.g. "include" for cookie-authenticated writes).'),
+  cfg("mode", 'enum: "cors" | "no-cors" | "same-origin"', "Fetch request mode."),
+  cfg("cache", 'enum: "default" | "no-store" | "reload" | "no-cache" | "force-cache"', "Fetch cache mode."),
+  cfg("optimistic", "(vars) => void", "Runs synchronously before the request with the object passed to `.mutate(overrides)` (or `{}`); state it changes is rolled back on failure. Its return value is ignored and a throw is swallowed."),
   cfg("invalidates", "string[]", "Refetch every cached $query whose key contains a listed substring on success."),
   cfg("gql", "string", "GraphQL mutation document."),
   cfg("variables", "object", "GraphQL variables paired with `gql`.")
@@ -6233,7 +6282,7 @@ const socketConfigKeys = [
   cfg("url", "string", "WebSocket URL (ws:// or wss://)."),
   cfg("protocols", "string | string[]", "Optional sub-protocol(s)."),
   cfg("bufferSize", "number", "Max buffered messages kept in `.messages`."),
-  cfg("onMessage", "(msg) => void", "Callback fired for each received message."),
+  cfg("onMessage", "(msg) => void", "Callback fired for each received message — JSON-parsed when it parses, else the raw string (the same value `.last` holds). A throw is swallowed."),
   cfg("reconnect", "boolean | number", "Retry dropped connections (true, or a max-attempt count) with backoff.")
 ];
 const sseConfigKeys = [
@@ -6241,13 +6290,13 @@ const sseConfigKeys = [
   cfg("event", "string", "Named event to listen for (defaults to message)."),
   cfg("withCredentials", "boolean", "Send credentials with the EventSource request."),
   cfg("bufferSize", "number", "Max buffered events kept in `.messages`."),
-  cfg("onMessage", "(msg) => void", "Callback fired for each received event payload (JSON auto-parsed).")
+  cfg("onMessage", "(msg) => void", "Callback fired for each received event payload — JSON-parsed when it parses, else the raw string (the same value `.last` holds). A throw is swallowed.")
 ];
 const scriptConfigKeys = [
   cfg("src", "string", "URL of the script (or stylesheet) to load. De-duplicated per src."),
   cfg("global", "string", 'Name of the window global the script defines — read into `.value` once ready (e.g. "Stripe").'),
   cfg("type", "string", 'Script type attribute (e.g. "module" for ESM).'),
-  cfg("as", 'enum: "script" | "style"', "Force the resource kind. Inferred from a `.css` src otherwise."),
+  cfg("as", 'enum: "script" | "style" | "stylesheet" | "css"', "Force the resource kind (the last three all mean a stylesheet). Inferred from a `.css` src otherwise."),
   cfg("attributes", "object", "Extra attributes to set on the injected <script>/<link> (e.g. crossorigin, integrity).")
 ];
 const headConfigKeys = [
@@ -6256,14 +6305,14 @@ const headConfigKeys = [
   cfg("meta", "object", 'Named meta tags: { description, "theme-color", keywords, … } → <meta name content>.'),
   cfg("og", "object", 'Open Graph tags: { title, image, type, … } → <meta property="og:KEY">.'),
   cfg("twitter", "object", 'Twitter card tags: { card, site, … } → <meta name="twitter:KEY">.'),
-  cfg("link", "object[]", 'Array of <link> descriptors, e.g. [{ rel: "canonical", href }].'),
+  cfg("link", "object | object[]", 'A <link> descriptor or an array of them, e.g. [{ rel: "canonical", href }]. Only metadata / resource-hint rels are kept (no "stylesheet" or "preload"), and a link without a safe href is dropped.'),
   cfg("jsonLd", "object | object[]", 'JSON-LD structured data → <script type="application/ld+json">. @context defaults to schema.org.'),
-  cfg("base", "string | object", "<base href> for the document."),
+  cfg("base", "string | object", "<base href> for the document (a string, or { href }): a same-origin relative path only — an absolute or protocol-relative one is dropped."),
   cfg("htmlAttrs", "object", 'Attributes for the <html> element, e.g. { lang: "en", dir: "ltr" }.')
 ];
 const formConfigKeys = [
   cfg("values", "object", "Initial field values — the clean snapshot."),
-  cfg("rules", "object", "Per-field validator arrays: { field: [$util.rules.required(), …] }."),
+  cfg("rules", "object", "Per-field validator arrays: { field: [$util.rules.required(), …] }. Each field's validators receive that field's value."),
   cfg("onSubmit", "(values) => void", "Called with the values once validation passes.")
 ];
 const storeConfigKeys = [
@@ -6273,16 +6322,16 @@ const storeConfigKeys = [
 ];
 const themeConfigKeys = [
   cfg("name", "string", 'Selects a built-in base theme ("light", "dark", "shadcn"/"-light"/"-dark", "mui"/"-light"/"-dark", "heroui"/"-light"/"-dark", "signal"/"-light"/"-dark", "soft").'),
-  cfg("direction", 'enum: "ltr" | "rtl"', "Reading direction (metadata)."),
-  cfg("colors", "object", "CSS color tokens: bg, surface, border, text, primary, accent, success, warning, danger, info, …."),
+  cfg("direction", 'enum: "ltr" | "rtl"', "Accepted but has no effect (metadata only): set `dir` on <aktion-app> for a right-to-left layout."),
+  cfg("colors", "object", "CSS color tokens, camelCase: bg, bgSubtle, surface, border, text, textMuted, primary, accent, success, warning, danger, info, …. Unknown keys are ignored."),
   cfg("radius", "object", "Border-radius tokens: xs, sm, md, lg, pill, button, input."),
   cfg("font", "object", "Font tokens: family, familyHeading, familyMono, sizeBase, weightBody, …."),
-  cfg("spacing", "object", "Spacing scale tokens."),
-  cfg("shadows", "object", "Box-shadow tokens."),
-  cfg("gradients", "object", "Gradient color-stop arrays — referenced as gradient.<name>."),
+  cfg("spacing", "object", "Spacing scale tokens: 3xs, 2xs, xs, s, m, l, xl, 2xl, 3xl (sm / md / lg are the same as s / m / l)."),
+  cfg("shadows", "object", "Box-shadow tokens: sm, md, lg."),
+  cfg("gradients", "object", 'Gradients referenced as sx `bg: "gradient.<name>"`: an array of at least two colour stops, `{ stops, angle }`, or a linear-/radial-/conic-gradient(…) string. A plain colour is ignored.'),
   cfg("zIndex", "object", "Layer tokens (modal, toast, …) → sx.zIndex / --rui-z-*."),
   cfg("motion", "object", "Motion tokens: { fast, base, slow, ease } → --rui-motion-*."),
-  cfg("fonts", "object", 'Web-font import: { import: ["Inter:400,700"] }.'),
+  cfg("fonts", "object", 'Web-font import: { import: ["Inter:400,700"] } (one shorthand string or an array).'),
   cfg("icons", "object", "Custom inline-SVG icons by name, usable anywhere an icon name is.")
 ];
 const i18nConfigKeys = [
@@ -6749,7 +6798,7 @@ const StackItem = {
     if (basis === "auto" || basis === "0") {
       attrs["data-basis"] = basis;
     } else if (basis) {
-      styleParts.push(`flex-basis:${sanitiseCssLength(basis, "auto")}`);
+      styleParts.push(`flex-basis:${sanitiseCssLength(props.basis, "auto")}`);
     }
     const alignSelf = asString(props.alignSelf);
     if (alignSelf) attrs["data-align-self"] = alignSelf;
@@ -6758,10 +6807,8 @@ const StackItem = {
       attrs["data-order"] = String(order);
       styleParts.push(`order:${order}`);
     }
-    const minWidth = asString(props.minWidth);
-    if (minWidth) styleParts.push(`min-width:${sanitiseCssLength(minWidth, "0")}`);
-    const maxWidth = asString(props.maxWidth);
-    if (maxWidth) styleParts.push(`max-width:${sanitiseCssLength(maxWidth, "none")}`);
+    if (asString(props.minWidth)) styleParts.push(`min-width:${sanitiseCssLength(props.minWidth, "0")}`);
+    if (asString(props.maxWidth)) styleParts.push(`max-width:${sanitiseCssLength(props.maxWidth, "none")}`);
     if (styleParts.length > 0) attrs.style = styleParts.join(";");
     const root = el("div", attrs);
     root.append(helpers.renderNode(props.child));
@@ -6925,8 +6972,7 @@ const Center = {
     const padding = normalizeSpacingToken(props.padding, asString(props.padding));
     if (padding) attrs["data-padding"] = padding;
     const styleParts = [];
-    const minHeight = asString(props.minHeight);
-    if (minHeight) styleParts.push(`min-height:${sanitiseCssLength(minHeight, "auto")}`);
+    if (asString(props.minHeight)) styleParts.push(`min-height:${sanitiseCssLength(props.minHeight, "auto")}`);
     if (styleParts.length > 0) attrs.style = styleParts.join(";");
     const root = el("div", attrs);
     for (const child of asArray(props.children)) root.append(helpers.renderNode(child));
@@ -7102,7 +7148,7 @@ const renderStepLi = (title, details, status = "pending") => {
 };
 const Steps = {
   name: "Steps",
-  description: 'Numbered step-by-step guide. Pass items as `{title, details?, active?, status?}` objects. `active` marks the current step; `status` (`pending|active|complete|error`) additionally distinguishes finished and failed steps. `orientation: "horizontal"` lays the steps across the top of a wizard instead of down the page.',
+  description: 'Numbered step-by-step guide. Pass items as `{title, details?, active?, complete?, status?}` objects (a string is a title-only step, a component node is rendered as-is, and `null`/`false` items are skipped). `active` marks the current step and `complete` a finished one; `status` (`pending|active|complete|error`) wins over both and also marks failed steps. `orientation: "horizontal"` lays the steps across the top of a wizard instead of down the page.',
   props: [
     { name: "items", type: "object[]" },
     { name: "orientation", type: "string", optional: true, enum: ["vertical", "horizontal"], description: "Layout direction (default `vertical`)" }
@@ -7113,7 +7159,8 @@ const Steps = {
       "data-orientation": asString(props.orientation, "vertical")
     });
     for (const item of asArray(props.items)) {
-      if (item && typeof item === "object" && item.__kind === "Component") {
+      if (item === null || item === void 0 || item === false) continue;
+      if (isComponentNode(item)) {
         root.append(el("li", { class: "rui-steps-item", "data-bare": "true" }, [helpers.renderNode(item)]));
         continue;
       }
@@ -7207,7 +7254,14 @@ const Tabs = {
       "aria-orientation": orientation
     });
     const panels = el("div", { class: "rui-tab-panels" });
-    const entries = items.map((item, idx) => readTabEntry(item, idx, helpers));
+    const entries = [];
+    for (const item of items) {
+      if (item === null || item === void 0 || item === false) {
+        helpers.renderNode(null);
+        continue;
+      }
+      entries.push(readTabEntry(item, entries.length, helpers));
+    }
     const idSlot = helpers.useInstanceState("rui-tabs-id", "");
     if (!idSlot.get()) idSlot.set(`rui-tabs-${tabsIdSeq += 1}`);
     const idPrefix = idSlot.get();
@@ -7429,6 +7483,8 @@ const Accordion = {
         item.ontoggle = (event) => {
           const live = event.currentTarget ?? event.target;
           if (prior) prior.call(live, event);
+          const asserted = live.getAttribute("data-rui-open");
+          if (asserted !== null && asserted === String(live.open)) return;
           const title = live.querySelector(".rui-accordion-title")?.textContent ?? "";
           helpers.invoke(props.onChange, title, live.open);
         };
@@ -7454,7 +7510,7 @@ function resolveSpan(span) {
   return clampGridColumns(asNumber(span, 12));
 }
 function gridMinChildWidth(props) {
-  return sanitiseCssLength(asString(props.minChildWidth) || "220px", "220px");
+  return sanitiseCssLength(props.minChildWidth, "220px");
 }
 const GridItem = {
   name: "GridItem",
@@ -7532,17 +7588,16 @@ const Box = {
     const margin = readResponsiveProp(props.margin);
     const border = asString(props.border, "none");
     const background = asString(props.background, "none");
-    const radius = asString(props.radius) || (background !== "none" && border === "none" ? "md" : "");
+    const radius2 = asString(props.radius) || (background !== "none" && border === "none" ? "md" : "");
     const attrs = {
       class: "rui-box",
       "data-border": border,
       "data-background": background,
-      "data-radius": radius || null
+      "data-radius": radius2 || null
     };
     const styleParts = [];
-    if (radius && BOX_RADIUS[radius]) styleParts.push(`border-radius:${BOX_RADIUS[radius]}`);
-    const maxWidth = asString(props.maxWidth);
-    if (maxWidth) styleParts.push(`max-width:${sanitiseCssLength(maxWidth, "none")}`);
+    if (radius2 && BOX_RADIUS[radius2]) styleParts.push(`border-radius:${BOX_RADIUS[radius2]}`);
+    if (asString(props.maxWidth)) styleParts.push(`max-width:${sanitiseCssLength(props.maxWidth, "none")}`);
     if (padding.kind === "single") {
       const pad3 = padding.value ? normalizeSpacingToken(padding.value, String(padding.value)) : null;
       if (pad3) attrs["data-padding"] = pad3;
@@ -7593,7 +7648,8 @@ const Grid = {
   ],
   render: (_node, props, helpers) => {
     const children = asArray(props.children);
-    const hasGridItems = children.some((child) => isComponentNamed(child, "GridItem"));
+    const rendered = children.map((child) => helpers.renderNode(child));
+    const hasGridItems = children.some((child) => isComponentNamed(child, "GridItem")) || rendered.some(containsGridItem);
     const columns = readResponsiveProp(props.columns);
     const gap = readResponsiveProp(props.gap);
     const rowGap = readResponsiveProp(props.rowGap);
@@ -7618,7 +7674,7 @@ const Grid = {
         const minChild = asString(props.minChildWidth);
         if (minChild) {
           attrs["data-min-child-width"] = "true";
-          styleParts.push(`--rui-grid-min-child:${sanitiseCssLength(minChild, "220px")}`);
+          styleParts.push(`--rui-grid-min-child:${sanitiseCssLength(props.minChildWidth, "220px")}`);
         }
       } else {
         styleParts.push(`--rui-grid-min-item:${gridMinChildWidth(props)}`);
@@ -7633,7 +7689,7 @@ const Grid = {
       const minChild = asString(props.minChildWidth);
       if (minChild) {
         attrs["data-min-child-width"] = "true";
-        styleParts.push(`--rui-grid-min-child:${sanitiseCssLength(minChild, "220px")}`);
+        styleParts.push(`--rui-grid-min-child:${sanitiseCssLength(props.minChildWidth, "220px")}`);
       }
     }
     if (hasGridItems && !explicitNonTwelve && !responsiveCols) twelveColMode = true;
@@ -7666,19 +7722,26 @@ const Grid = {
     if (asBoolean(props.dense)) attrs["data-dense"] = "true";
     if (styleParts.length > 0) attrs.style = styleParts.join(";");
     const root = el("div", attrs);
-    for (const child of children) root.append(helpers.renderNode(child));
+    for (const node of rendered) root.append(node);
     return root;
   }
 };
+function containsGridItem(rendered) {
+  if (rendered instanceof HTMLElement) return rendered.classList.contains("rui-grid-item");
+  if (rendered instanceof DocumentFragment) {
+    return Array.from(rendered.children).some((child) => child.classList.contains("rui-grid-item"));
+  }
+  return false;
+}
 const AspectRatio = {
   name: "AspectRatio",
   description: 'Container that constrains its child to a fixed aspect ratio (e.g. 16:9 for video embeds, 1:1 for thumbnails). The FIRST child fills the box; any further children are overlays positioned on top of it (a "LIVE" badge over a thumbnail), not stacked below.',
   props: [
-    { name: "ratio", type: "string", description: "`width:height` (e.g. `16:9`, `4:3`) or a decimal like `1.78`" },
+    { name: "ratio", type: "string", description: "`width:height` or `width/height` (e.g. `16:9`, `4/3`) or a decimal like `1.78`; anything else falls back to 16:9" },
     { name: "children", aliases: ["child"], type: "Node[]" }
   ],
   render: (_node, props, helpers) => {
-    const ratio = parseRatio$1(asString(props.ratio, "16:9"));
+    const ratio = parseAspectRatio(props.ratio) ?? "16 / 9";
     const children = asArray(props.children);
     const root = el("div", {
       class: "rui-aspect-ratio",
@@ -7692,15 +7755,17 @@ const AspectRatio = {
     return root;
   }
 };
-function parseRatio$1(input) {
-  if (input.includes(":")) {
-    const [w, h] = input.split(":");
-    const num2 = Number(w);
-    const den = Number(h);
-    if (Number.isFinite(num2) && num2 > 0 && Number.isFinite(den) && den > 0) return `${num2} / ${den}`;
+function parseAspectRatio(raw) {
+  const input = asString(raw).trim();
+  if (!input) return null;
+  const pair2 = /^([^:/]+)[:/]([^:/]+)$/.exec(input);
+  if (pair2) {
+    const num2 = Number(pair2[1].trim());
+    const den = Number(pair2[2].trim());
+    return Number.isFinite(num2) && num2 > 0 && Number.isFinite(den) && den > 0 ? `${num2} / ${den}` : null;
   }
   const n = Number(input);
-  return Number.isFinite(n) && n > 0 ? `${n} / 1` : "16 / 9";
+  return Number.isFinite(n) && n > 0 ? `${n} / 1` : null;
 }
 const SCROLL_PINNED = /* @__PURE__ */ new WeakMap();
 const STICK_THRESHOLD_PX = 24;
@@ -7716,9 +7781,8 @@ const ScrollArea = {
     { name: "stickToBottom", type: "boolean", optional: true, description: "Auto-scroll to the newest content (logs / chat), until the user scrolls up" }
   ],
   render: (_node, props, helpers) => {
-    const height = asString(props.height);
     const styleParts = [`max-height:${sanitiseCssLength(props.maxHeight, "320px")}`];
-    if (height) styleParts.push(`height:${sanitiseCssLength(height, "auto")}`);
+    if (asString(props.height)) styleParts.push(`height:${sanitiseCssLength(props.height, "auto")}`);
     const stick = asBoolean(props.stickToBottom);
     const root = el("div", {
       class: "rui-scroll-area",
@@ -8315,7 +8379,7 @@ function appendHighlightedLine(container, lineText, lang, state) {
     else container.append(document.createTextNode(tok.text));
   }
 }
-const ICON_VARIANTS = ["solid", "regular", "brands"];
+const ICON_VARIANTS = [...SUPPORTED_VARIANTS];
 const SIZE_ENUM = ["xs", "sm", "md", "lg", "xl"];
 const TONE_ENUM = ["default", "neutral", "primary", "success", "warning", "danger", "info"];
 function normaliseSize(value, fallback = "md") {
@@ -8460,7 +8524,7 @@ const Image$1 = {
     { name: "src", type: "string" },
     { name: "alt", type: "string", optional: true },
     { name: "caption", type: "string", optional: true },
-    { name: "ratio", type: "string", optional: true, description: "Aspect ratio shorthand (e.g. `16:9`, `1:1`, `4:3`)" },
+    { name: "ratio", type: "string", optional: true, description: "Aspect ratio shorthand (e.g. `16:9`, `1:1`, `4/3`, or a decimal like `1.5`); anything else reserves no ratio" },
     { name: "fit", type: "string", optional: true, enum: IMAGE_FIT, description: "object-fit value (default `cover`)" },
     { name: "fallback", type: "string", optional: true, description: "Text label or Font Awesome icon shown when src is missing/unsafe/errored" },
     { name: "placeholder", type: "string", optional: true, enum: ["blur", "none"], description: "`blur` fades the image in on load" },
@@ -8470,7 +8534,7 @@ const Image$1 = {
     { name: "onClick", type: "callable", optional: true, aliases: ["onclick", "action"], description: "Makes the image activatable (gallery thumbnail, clickable avatar) — adds button semantics and keyboard activation" }
   ],
   render: (_node, props, helpers) => {
-    const ratio = props.ratio ? parseImageRatio(asString(props.ratio)) : "";
+    const ratio = parseAspectRatio(props.ratio) ?? "";
     const clickable = props.onClick !== void 0 && props.onClick !== null;
     const alt = asString(props.alt);
     const wrapperStyle2 = [
@@ -8560,17 +8624,6 @@ const Image$1 = {
     return wrapper;
   }
 };
-function parseImageRatio(input) {
-  if (!input) return "auto";
-  if (input.includes(":")) {
-    const [w, h] = input.split(":");
-    const num2 = Number(w);
-    const den = Number(h);
-    if (Number.isFinite(num2) && Number.isFinite(den) && den > 0) return `${num2} / ${den}`;
-  }
-  const n = Number(input);
-  return Number.isFinite(n) && n > 0 ? `${n} / 1` : "auto";
-}
 const BADGE_VARIANTS = ["neutral", "primary", "success", "warning", "danger", "info"];
 function renderBadgePill(label, tone, size2, icon) {
   const root = el("span", {
@@ -8659,20 +8712,21 @@ const BadgeList = {
     const tones = asArray(props.tones);
     const icons = asArray(props.icons);
     const root = el("div", { class: "rui-badge-list" });
-    const labels = asArray(props.labels).map((raw) => asString(raw)).filter((label) => label !== "");
+    const labels = asArray(props.labels).map((raw, index) => ({ label: asString(raw), index })).filter((entry) => entry.label !== "");
     const rawMax = Number(props.max);
     const max = Number.isFinite(rawMax) && rawMax > 0 ? Math.floor(rawMax) : labels.length;
     const shown = labels.slice(0, max);
-    shown.forEach((label, i) => {
-      const itemTone = asString(tones[i]) || variant;
-      root.append(renderBadgePill(label, itemTone, size2, icons[i]));
-    });
+    for (const { label, index } of shown) {
+      const itemTone = asString(tones[index]) || variant;
+      root.append(renderBadgePill(label, itemTone, size2, icons[index]));
+    }
     const hidden = labels.length - shown.length;
     if (hidden > 0) {
+      const rest = labels.slice(max).map((entry) => entry.label).join(", ");
       const overflow = renderBadgePill(`+${hidden}`, variant, size2);
       overflow.setAttribute("data-overflow", "true");
-      overflow.setAttribute("title", labels.slice(max).join(", "));
-      overflow.setAttribute("aria-label", `${hidden} more: ${labels.slice(max).join(", ")}`);
+      overflow.setAttribute("title", rest);
+      overflow.setAttribute("aria-label", `${hidden} more: ${rest}`);
       root.append(overflow);
     }
     return root;
@@ -8686,7 +8740,7 @@ const Callout = {
     { name: "tone", type: "string", optional: true, enum: CALLOUT_VARIANTS, aliases: ["variant"] },
     { name: "title", type: "string", positional: true, required: true },
     { name: "description", type: "string", optional: true, aliases: ["text"], description: "Body text" },
-    { name: "icon", type: "string", optional: true, description: "Optional Font Awesome icon name" },
+    { name: "icon", type: "string | false", optional: true, description: "Font Awesome icon name (default: the tone's icon); `false` hides it, like `hideIcon`" },
     { name: "compact", type: "boolean", optional: true, description: "Render with the dense, one-line note shape." },
     {
       name: "actions",
@@ -9624,14 +9678,14 @@ function dicebearUrlFor(name, style = "shapes") {
 function withFieldShell(control, props, options = {}) {
   if (asBoolean(props.disabled)) control.setAttribute("disabled", "");
   const fieldName = asString(props.name);
-  if (fieldName) control.setAttribute("name", fieldName);
+  if (fieldName && !options.ownsName) control.setAttribute("name", fieldName);
   const label = asString(props.label);
   const hint = asString(props.hint);
   const error = asString(props.error);
   const warning = asString(props.warning);
   const description = asString(props.description);
   const required = asBoolean(props.required);
-  const optionalText = required ? "" : props.optional === true ? "(optional)" : asString(props.optional);
+  const optionalText = optionalMarkText(props);
   const invalid = asBoolean(props.invalid) || Boolean(error);
   if (invalid) control.setAttribute("aria-invalid", "true");
   const authorDescribedBy = asString(props.describedBy).split(/\s+/).filter(Boolean);
@@ -9646,7 +9700,7 @@ function withFieldShell(control, props, options = {}) {
     "data-warning": !invalid && warning ? "true" : null
   });
   const requiredMark = () => el("span", { class: "rui-field-required", "aria-hidden": "true" }, ["*"]);
-  const optionalMark = () => el("span", { class: "rui-field-optional" }, [optionalText]);
+  const optionalMark = () => optionalMarkNode(optionalText);
   const labelHidden = asBoolean(props.labelHidden);
   const labelClass = labelHidden ? "rui-field-label rui-visually-hidden" : "rui-field-label";
   const implicitLabel = !!label && !id;
@@ -9679,6 +9733,14 @@ function withFieldShell(control, props, options = {}) {
   }
   return root;
 }
+function optionalMarkText(props) {
+  if (asBoolean(props.required)) return "";
+  if (props.optional === true) return "(optional)";
+  return typeof props.optional === "string" ? props.optional : "";
+}
+function optionalMarkNode(text) {
+  return el("span", { class: "rui-field-optional" }, [text]);
+}
 function mergeDescribedBy(control, ids) {
   const existing = (control.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
   const merged = [.../* @__PURE__ */ new Set([...existing, ...ids])];
@@ -9696,7 +9758,7 @@ const FIELD_SHELL_PROPS = [
   { name: "invalid", type: "boolean", optional: true, aliases: ["ariaInvalid"], description: "Mark the control invalid without supplying a message — for a field whose explanation lives outside it, e.g. in a `RequirementList` or a form-level summary" },
   { name: "describedBy", type: "string", optional: true, aliases: ["ariaDescribedBy"], description: "Space-separated ids of elements that describe this control, merged into its `aria-describedby` alongside the shell's own message" },
   { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves the control (validate-on-blur, `form.touch`)" },
-  { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
+  { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called with the current value (the same value `onBlur` receives) when the control gains focus" },
   { name: "name", type: "string", optional: true, description: "Form field name submitted to the server (defaults to `id`)" },
   { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context" }
 ];
@@ -9711,6 +9773,22 @@ function fieldShellExtraProps(exclude = []) {
   return FIELD_SHELL_PROPS.filter(
     (prop2) => SHELL_LATER_PROP_NAMES.includes(prop2.name) && !exclude.includes(prop2.name)
   );
+}
+function bindChangeHandler(element, props, helpers, options) {
+  composeHandler(element, `on${options.event}`, (event) => {
+    const handler = props[options.prop ?? "onChange"];
+    if (handler == null) return;
+    const live = event.currentTarget ?? event.target ?? element;
+    helpers.invoke(handler, options.getValue(live));
+  });
+}
+function composeHandler(element, propKey, extra) {
+  const record = element;
+  const previous = record[propKey];
+  record[propKey] = (event) => {
+    previous?.call(element, event);
+    extra(event);
+  };
 }
 function attachFocusHandlers(control, props, helpers, getValue = (node) => node.value) {
   const chain = (key, handler) => {
@@ -9780,50 +9858,72 @@ const INPUT_TYPES = [
   "datetime-local"
 ];
 function normaliseButtonSize(value) {
-  const v = asString(value).trim().toLowerCase();
+  const v = canonicalSizeToken(asString(value).toLowerCase());
   if (v === "xs" || v === "extra-small") return "xs";
-  if (v === "sm" || v === "small") return "sm";
-  if (v === "lg" || v === "large") return "lg";
+  if (v === "sm") return "sm";
+  if (v === "lg") return "lg";
   if (v === "xl" || v === "extra-large") return "xl";
   return "md";
-}
-function bindChangeHandler(element, props, helpers, options) {
-  composeHandler(element, `on${options.event}`, (event) => {
-    const handler = props[options.prop ?? "onChange"];
-    if (handler == null) return;
-    const live = event.currentTarget ?? event.target ?? element;
-    helpers.invoke(handler, options.getValue(live));
-  });
-}
-function composeHandler(element, propKey, extra) {
-  const record = element;
-  const previous = record[propKey];
-  record[propKey] = (event) => {
-    previous?.call(element, event);
-    extra(event);
-  };
 }
 function relocateControlAria(wrapper, control) {
   const supportsRequired = control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement;
   const supportsDisabled = supportsRequired || control instanceof HTMLButtonElement;
-  for (const attr of ["disabled", "required", "aria-invalid", "aria-describedby"]) {
+  for (const attr of ["disabled", "required", "aria-invalid", "aria-describedby", "name"]) {
     const value = wrapper.getAttribute(attr);
     if (value === null) continue;
     wrapper.removeAttribute(attr);
+    if (attr === "name") {
+      if (supportsRequired) control.setAttribute("name", value);
+      continue;
+    }
     if (attr === "required" && !supportsRequired) {
       control.setAttribute("aria-required", "true");
       continue;
     }
-    if (attr === "disabled" && !supportsDisabled) {
-      control.setAttribute("aria-disabled", "true");
+    if (attr === "disabled") {
+      if (supportsDisabled) control.setAttribute("disabled", value);
+      else control.setAttribute("aria-disabled", "true");
+      lockPicker(control);
       continue;
     }
     control.setAttribute(attr, value);
   }
 }
+function lockPicker(trigger) {
+  if (!trigger.matches(PICKER_TRIGGER_SELECTOR)) return;
+  const picker = trigger.closest(".rui-combobox, .rui-multiselect") ?? trigger;
+  picker.setAttribute("data-disabled", "true");
+  if (!(trigger instanceof HTMLButtonElement)) {
+    trigger.removeAttribute("tabindex");
+    trigger.onclick = null;
+    trigger.onkeydown = null;
+  }
+  for (const button of picker.querySelectorAll("button")) {
+    button.setAttribute("disabled", "");
+    button.onclick = null;
+  }
+}
+const PICKER_TRIGGER_SELECTOR = ".rui-combobox-trigger, .rui-multiselect-trigger";
+function findFieldControl(scope) {
+  for (const node of scope.querySelectorAll(`input, select, textarea, ${PICKER_TRIGGER_SELECTOR}`)) {
+    if (!node.closest(`${COMBOBOX_PANEL}, ${MULTISELECT_PANEL}`)) return node;
+  }
+  return null;
+}
+function fieldControlValue(node) {
+  if (node.classList.contains("rui-combobox-trigger")) return node.getAttribute("data-value") ?? "";
+  if (node.classList.contains("rui-multiselect-trigger")) {
+    return [...node.querySelectorAll(".rui-multiselect-chip[data-value]")].map((chip) => chip.getAttribute("data-value") ?? "");
+  }
+  return node.value;
+}
 function fallbackFieldId(prefix, label) {
   const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return slug ? `${prefix}-${slug}` : "";
+}
+function appendOptionalMark(label, props) {
+  const text = optionalMarkText(props);
+  if (text && (label.textContent ?? "") !== "") label.append(optionalMarkNode(text));
 }
 function localeTag$1(value) {
   const tag = asString(value).trim();
@@ -10033,7 +10133,11 @@ const ButtonGroup = {
     { name: "items", type: "Button[]", positional: true },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"], description: "Size token applied to every button in the group" },
     { name: "fullWidth", type: "boolean", optional: true, aliases: ["full"], description: "Stretch the group to fill its container, dividing width evenly" },
-    { name: "ariaLabel", type: "string", optional: true, aliases: ["ariaLabelledBy", "label"], description: 'Accessible name for the group (e.g. "Time range") — the group role is anonymous without it' }
+    { name: "ariaLabel", type: "string", optional: true, aliases: ["label"], description: 'Accessible name for the group (e.g. "Time range") — the group role is anonymous without it' },
+    // Its own slot, not an alias of `ariaLabel`: as an alias the id an author
+    // passed was rendered as the name TEXT (`aria-label="range-heading"`), so a
+    // group labelled by a visible heading was announced as "range-heading".
+    { name: "ariaLabelledBy", type: "string", optional: true, description: "Space-separated id(s) of the element(s) that name the group (a visible heading) — rendered as `aria-labelledby`, which takes precedence over `ariaLabel`" }
   ],
   render: (_node, props, helpers) => {
     const size2 = asString(props.size);
@@ -10042,7 +10146,8 @@ const ButtonGroup = {
       "data-size": size2 || "md",
       "data-full-width": asBoolean(props.fullWidth) ? "true" : null,
       role: "group",
-      "aria-label": asString(props.ariaLabel) || null
+      "aria-label": asString(props.ariaLabel) || null,
+      "aria-labelledby": asString(props.ariaLabelledBy).trim() || null
     });
     const items = asArray(props.items);
     items.forEach((child, i) => {
@@ -10109,12 +10214,10 @@ const InputGroup = {
       act.append(helpers.renderNode(props.action));
       root.append(act);
     }
-    const control = root.querySelector(
-      ".rui-input-group-field input, .rui-input-group-field select, .rui-input-group-field textarea, .rui-input-group-field .rui-combobox-trigger"
-    );
+    const fieldSlot = root.querySelector(".rui-input-group-field");
+    const control = fieldSlot ? findFieldControl(fieldSlot) : null;
     if (control) {
-      if (disabled) control.setAttribute("disabled", "");
-      attachFocusHandlers(control, props, helpers);
+      attachFocusHandlers(control, props, helpers, fieldControlValue);
       const controlId = control.getAttribute("id");
       if (controlId) root.setAttribute("id", `${controlId}-group`);
     }
@@ -10135,7 +10238,7 @@ const Input = {
     { name: "id", type: "string", description: "Input identifier" },
     { name: "placeholder", type: "string", optional: true },
     { name: "type", type: "string", optional: true, enum: INPUT_TYPES },
-    { name: "validations", type: "any", optional: true, description: "Array or object of validation hints (`required`, `minLength:n`, `maxLength:n`, `pattern:re`, `email`)" },
+    { name: "validations", type: "any", optional: true, description: 'Validation hints: an array (`["required", "minLength:3", "email"]`) or an object (`{ required: true, minLength: 3, email: true }`). Hints are `required`, `email`, `minLength`, `maxLength`, `pattern`, `min`, `max`; in the object form a flag is on when `true` and a `false`/`null` entry is ignored' },
     { name: "value", type: "any", optional: true, description: "Bound value (typically $variable)" },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the current value on every keystroke" },
     ...FIELD_SHELL_PROPS,
@@ -10258,7 +10361,7 @@ const Select = {
     { name: "required", type: "boolean", optional: true, description: "Mark the field required" },
     { name: "disabled", type: "boolean", optional: true, description: "Disable the control (non-editable, skipped by tab order)" },
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves the control (validate-on-blur)" },
-    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
+    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called with the current value when the control gains focus" },
     { name: "loading", type: "boolean", optional: true, description: "Options are still being fetched — disables the control and shows a loading option instead of an empty list" },
     { name: "onSearch", type: "callable", optional: true, description: "Called with the query ~200ms after typing stops, for server-side search (implies `searchable`; supply the matches as `items`)" },
     { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
@@ -10398,6 +10501,7 @@ const Checkbox = {
     const labelSpan = el("span", {
       class: asBoolean(props.labelHidden) ? "rui-checkbox-label rui-visually-hidden" : "rui-checkbox-label"
     }, [asString(props.label)]);
+    appendOptionalMark(labelSpan, props);
     if (description) {
       const stack = el("span", { class: "rui-checkbox-item-text" });
       stack.append(labelSpan, el("span", { class: "rui-checkbox-item-description" }, [description]));
@@ -10419,7 +10523,7 @@ const CheckBoxItem = {
     { name: "description", type: "string", optional: true },
     { name: "defaultChecked", type: "boolean", optional: true, aliases: ["checked"] },
     { name: "disabled", type: "boolean", optional: true, description: "Lock this option (greyed out, not togglable)" },
-    { name: "value", type: "string", optional: true, description: "Submitted value for this option (defaults to `name`) — use when the group maps to an array of ids" }
+    { name: "value", type: "string", optional: true, description: "The native checkbox's submitted `value` for a native form post (defaults to `name`). The group's own `value` / `onChange` stay keyed by `name` either way" }
   ],
   render: (_node, props) => {
     const itemName = asString(props.name);
@@ -10674,18 +10778,18 @@ const FormControl = {
     const description = descriptionNode ? "" : asString(props.description);
     const required = asBoolean(props.required);
     const invalid = asBoolean(props.invalid) || Boolean(error);
-    const optionalText = required ? "" : props.optional === true ? "(optional)" : asString(props.optional);
+    const optionalText = optionalMarkText(props);
     const root = el("div", {
       class: "rui-form-control",
       "data-invalid": invalid ? "true" : null,
       "data-warning": !invalid && warning ? "true" : null
     });
     const fieldEl = helpers.renderNode(props.field);
-    const control = fieldEl instanceof HTMLElement ? fieldEl.matches("input, select, textarea") ? fieldEl : fieldEl.querySelector("input, select, textarea, .rui-combobox-trigger, .rui-multiselect-trigger") : null;
+    const control = fieldEl instanceof HTMLElement ? fieldEl.matches("input, select, textarea") ? fieldEl : findFieldControl(fieldEl) : null;
     const controlId = asString(props.for) || control?.getAttribute("id") || "";
     const labelEl = el("label", { class: "rui-form-label", for: controlId || null }, [labelText]);
     if (required) labelEl.append(el("span", { class: "rui-field-required", "aria-hidden": "true" }, ["*"]));
-    else if (optionalText) labelEl.append(el("span", { class: "rui-field-optional" }, [optionalText]));
+    else if (optionalText) labelEl.append(optionalMarkNode(optionalText));
     root.append(labelEl);
     const describedByIds = [];
     if (description || descriptionNode) {
@@ -10900,7 +11004,11 @@ const Slider = {
     const showValue = asBoolean(props.showValue);
     if (label || showValue) {
       const head = el("div", { class: "rui-slider-head" });
-      if (label) head.append(el("label", { class: "rui-slider-label", for: id || null }, [label]));
+      if (label) {
+        const labelEl = el("label", { class: "rui-slider-label", for: id || null }, [label]);
+        appendOptionalMark(labelEl, props);
+        head.append(labelEl);
+      }
       if (showValue) head.append(el("span", { class: "rui-slider-value" }, [display(value)]));
       root.append(head);
     }
@@ -11174,7 +11282,7 @@ const DatePicker = {
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the field required" },
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves the control (validate-on-blur)" },
-    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
+    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called with the current value when the control gains focus" },
     { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) the selected date is echoed in beneath the field, and the language the value is announced in. Same `locale` channel as `Table`/`Col`, so a filter and the report it filters read alike. Bound values stay ISO `YYYY-MM-DD`." },
     ...fieldShellExtraProps()
   ],
@@ -11185,7 +11293,11 @@ const DatePicker = {
     const id = explicitId || fallbackFieldId("rui-date", label || placeholder);
     const locale = localeTag$1(props.locale);
     const root = el("div", { class: "rui-date-picker" });
-    if (label) root.append(el("label", { class: "rui-date-picker-label", for: id || null }, [label]));
+    if (label) {
+      const labelEl = el("label", { class: "rui-date-picker-label", for: id || null }, [label]);
+      appendOptionalMark(labelEl, props);
+      root.append(labelEl);
+    }
     const input = el("input", {
       type: "date",
       class: "rui-date-picker-input",
@@ -11235,7 +11347,7 @@ const FileUpload = {
     { name: "hint", type: "string", optional: true, description: "Secondary helper text" },
     { name: "accept", type: "string", optional: true, description: "Comma-separated MIME types or extensions" },
     { name: "multiple", type: "boolean", optional: true },
-    { name: "onSelect", type: "callable", optional: true, aliases: ["action", "onChange"], description: "Callable fired with the accepted files when files are picked" },
+    { name: "onSelect", type: "callable", optional: true, aliases: ["action", "onChange"], description: "Called with the selected files as an array of `File`s — when files are picked or dropped (only the ones `maxSize` accepted), and again with the remaining files after the user removes one from the preview" },
     { name: "icon", type: "string", optional: true, description: 'Font Awesome icon (default "cloud-arrow-up")' },
     { name: "disabled", type: "boolean", optional: true },
     { name: "maxSize", type: "number", optional: true, description: "Maximum accepted file size in bytes — larger files are rejected client-side and never reach `onSelect`" },
@@ -11365,7 +11477,7 @@ const FileUpload = {
           const remaining = Array.from(liveInput?.files ?? list).filter((f) => f !== file);
           writeFiles(liveInput, remaining);
           helpers.invoke(props.onRemove, file);
-          helpers.invoke(props.onSelect, liveInput?.files ?? remaining);
+          helpers.invoke(props.onSelect, remaining);
           if (liveRoot) showPreview(liveRoot, remaining);
         };
         row.append(removeBtn);
@@ -11384,7 +11496,7 @@ const FileUpload = {
       const uploadRoot = origin.closest(".rui-file-upload");
       const liveInput = uploadRoot?.querySelector(".rui-file-upload-input") ?? null;
       if (rejected.length > 0) writeFiles(liveInput, accepted);
-      helpers.invoke(props.onSelect, rejected.length > 0 ? accepted : files);
+      helpers.invoke(props.onSelect, accepted);
       if (uploadRoot) showPreview(uploadRoot, accepted, rejected);
     };
     input.onchange = (event) => {
@@ -11487,10 +11599,10 @@ const Combobox = {
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the control (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark the field required (adds a `*` and the `required` attribute)" },
     { name: "loading", type: "boolean", optional: true, description: 'Matches are being fetched — shows "Loading…" instead of the (lying) empty label' },
-    { name: "onSearch", type: "callable", optional: true, description: "Called with the query on every keystroke for server-side search; disables local filtering" },
+    { name: "onSearch", type: "callable", optional: true, description: "Called with the query ~200ms after typing stops, for server-side search; disables local filtering" },
     { name: "clearable", type: "boolean", optional: true, description: "Show a clear (×) control so the selection can be reset to the placeholder" },
     { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the selected value when focus leaves the control (validate-on-blur)" },
-    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when the control gains focus" },
+    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called with the selected value when the control gains focus" },
     { name: "creatable", type: "boolean", optional: true, description: 'Offer the typed text itself as an option when it matches nothing ("Create «acme-corp»") so a value outside `items` can be selected' },
     { name: "labelHidden", type: "boolean", optional: true, description: "Keep the label in the accessibility tree but hide it visually — for a field whose purpose is already clear from context (a picker under a section heading that names it, a control in a table cell whose column header is the label)" },
     ...fieldShellExtraProps()
@@ -11530,7 +11642,11 @@ const Combobox = {
       "aria-haspopup": "listbox",
       "aria-expanded": isOpen ? "true" : "false",
       "aria-controls": panelId2,
-      disabled: disabled ? "" : null
+      disabled: disabled ? "" : null,
+      // The selected value, readable off the LIVE trigger: a `<button>`'s own
+      // `.value` is `""`, so a wrapper that reports the control's value on
+      // blur (InputGroup's `onBlur`) has nothing else to read.
+      "data-value": currentValue
     });
     triggerBtn.append(el("span", {
       class: "rui-combobox-value",
@@ -12165,8 +12281,8 @@ const DateRangePicker = {
     { name: "hint", type: "string", optional: true, description: "Helper text rendered below the pair" },
     { name: "error", type: "string", optional: true, description: "Validation error rendered below the pair (marks it invalid)" },
     { name: "required", type: "boolean", optional: true, description: "Mark both endpoints required" },
-    { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with the current value when focus leaves an endpoint (validate-on-blur)" },
-    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called when an endpoint gains focus" },
+    { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Called with that endpoint's current value (an ISO date) when focus leaves it (validate-on-blur)" },
+    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Called with that endpoint's current value (an ISO date) when an endpoint gains focus" },
     { name: "locale", type: "string", optional: true, description: "BCP-47 tag (`de-DE`, `en-GB`) the chosen period is echoed in beneath the pair, and the language both endpoints are announced in. Same `locale` channel as `Table`/`Col`. Bound values stay ISO `YYYY-MM-DD`." },
     ...fieldShellExtraProps()
   ],
@@ -12190,11 +12306,13 @@ const DateRangePicker = {
       "aria-label": label || null
     });
     if (label) {
-      root.append(el("label", {
+      const labelEl = el("label", {
         class: "rui-date-range-picker-label",
         id: `${id}-label`,
         for: fromId
-      }, [label]));
+      }, [label]);
+      appendOptionalMark(labelEl, props);
+      root.append(labelEl);
       root.setAttribute("aria-labelledby", `${id}-label`);
       root.removeAttribute("aria-label");
     }
@@ -12329,7 +12447,16 @@ function renderSearchableSelect(node, props, helpers) {
       onFocus: props.onFocus,
       // Same class of bug as the five above: a label the author had hidden
       // reappeared the moment the Select became searchable.
-      labelHidden: props.labelHidden
+      labelHidden: props.labelHidden,
+      // …and again for the five later field-shell props, which Select declares
+      // through `fieldShellExtraProps()`: the warning, description and
+      // "(optional)" marker vanished and the trigger lost `aria-invalid` and the
+      // author's `aria-describedby` as soon as `searchable: true` was added.
+      warning: props.warning,
+      description: props.description,
+      optional: props.optional,
+      invalid: props.invalid,
+      describedBy: props.describedBy
     },
     helpers
   );
@@ -12349,9 +12476,17 @@ function bindToStateAtArg(element, node, argIndex, helpers) {
   }
   helpers.bindState(element, stateName);
 }
+function objectValidationHints(rules) {
+  const out = [];
+  for (const [key, value] of Object.entries(rules)) {
+    if (value === false || value === null || value === void 0) continue;
+    out.push(value === true ? key : `${key}:${String(value)}`);
+  }
+  return out;
+}
 function applyValidations(input, validations, hasExplicitType = false) {
   if (!validations) return;
-  const list = Array.isArray(validations) ? validations.map((v) => String(v)) : typeof validations === "object" ? Object.entries(validations).map(([k, v]) => v ? `${k}:${v}` : k) : [];
+  const list = Array.isArray(validations) ? validations.map((v) => String(v)) : typeof validations === "object" ? objectValidationHints(validations) : [];
   const positiveInt = (raw, hint) => {
     const n = Number(raw);
     if (!Number.isFinite(n) || n <= 0) {
@@ -12475,7 +12610,7 @@ const Hero = {
     const align = asString(props.align, "start");
     if (layout === "cover") {
       const safeImageSrc = sanitiseCssUrl(asString(props.imageSrc));
-      const safeHeight = sanitiseCssLength(asString(props.height), "280px");
+      const safeHeight = sanitiseCssLength(props.height, "280px");
       const overlay = resolveOverlay(props.overlay);
       const layers = [];
       if (overlay > 0) {
@@ -12571,7 +12706,7 @@ const PageHeader = {
   props: [
     { name: "title", type: "string" },
     { name: "subtitle", type: "string", optional: true },
-    { name: "breadcrumbs", type: "string[] | {label, to}[] | Breadcrumb | false", optional: true, description: "Array of strings or `{label, to}` objects (a `to` path renders a router link), a Breadcrumb(...) node, or `false` to suppress the auto-derived trail" },
+    { name: "breadcrumbs", type: "string[] | {label, to}[] | Breadcrumb | false", optional: true, description: "Array of strings or `{label, to}` objects (a `to` path renders a router link; `href` and `path` are read as the same ROUTER path, not an external URL, and `title` as the label), a Breadcrumb(...) node, or `false` to suppress the auto-derived trail" },
     { name: "actions", type: "Node[]", optional: true, description: "Buttons / NavLinks shown on the right" },
     { name: "status", type: "Badge", optional: true, aliases: ["badge"], description: "Optional Badge(...) rendered next to the title" },
     { name: "onCrumbClick", type: "callable", optional: true, description: "Called with (label, index) when a breadcrumb is clicked — makes string crumbs interactive" }
@@ -12784,7 +12919,7 @@ const FeatureGrid = {
   description: "Responsive grid of FeatureItem tiles (typically 2–3 columns). Use to highlight product capabilities or page categories.",
   props: [
     { name: "items", type: "FeatureItem[]" },
-    { name: "columns", type: "number", optional: true, description: "Preferred column count (default auto)" }
+    { name: "columns", type: "number", optional: true, description: "Preferred column count, 1–4 — larger values clamp to 4 (default auto)" }
   ],
   render: (_node, props, helpers) => {
     const requested = props.columns == null ? 0 : Math.floor(asNumber(props.columns, 0));
@@ -12929,13 +13064,14 @@ const Banner = {
     { name: "dismissible", type: "boolean", optional: true, aliases: ["closable"], description: "Show a close button that hides the banner" },
     { name: "onDismiss", type: "callable", optional: true, aliases: ["onClose"], description: "Called when the banner is dismissed (implies `dismissible`)" },
     { name: "href", type: "string", optional: true, description: "Make the whole banner a link (release notes → changelog)" },
-    { name: "onClick", type: "callable", optional: true, aliases: ["onclick"], description: "Called when the banner itself is clicked" }
+    { name: "onClick", type: "callable", optional: true, aliases: ["onclick"], description: "Called when the banner itself is clicked — also when `href` is set (track the click, the link still navigates)" }
   ],
   render: (_node, props, helpers) => {
     const tone = asString(props.tone, "primary");
     const isAlert = tone === "danger" || tone === "warning";
     const href = asString(props.href) ? sanitiseHref(props.href) : "";
-    const clickable = !href && typeof props.onClick === "function";
+    const hasOnClick = typeof props.onClick === "function";
+    const clickable = !href && hasOnClick;
     const dismissible = asBoolean(props.dismissible) || props.onDismiss != null;
     const dismissed = helpers.useInstanceState("dismissed", false);
     const tag = href ? "a" : "aside";
@@ -12958,10 +13094,10 @@ const Banner = {
       "aria-live": isAlert ? "assertive" : "polite",
       tabindex: clickable ? "0" : null
     });
-    if (clickable) {
+    if (hasOnClick) {
       const fire = () => helpers.invoke(props.onClick);
       root.onclick = fire;
-      root.onkeydown = activateOnKey(fire);
+      if (clickable) root.onkeydown = activateOnKey(fire);
     }
     const iconName = asString(props.icon) || pickIconForTone(tone) || "";
     const iconNode = renderIcon(iconName, { className: "rui-banner-icon" });
@@ -13166,12 +13302,12 @@ const KanbanBoard = {
 };
 const SectionHeader = {
   name: "SectionHeader",
-  description: "Compact section header for the top of a Card or panel. Renders a small eyebrow, a title, an optional subtitle, an optional status Tag/Badge, and a right-aligned actions row. Use this inside a Card to introduce a section instead of a bare `CardHeader`.",
+  description: "Compact section header for the top of a Card or panel. Renders a small eyebrow, a title, an optional subtitle, an optional status Badge/Pill/StatusDot, and a right-aligned actions row. Use this inside a Card to introduce a section instead of a bare `CardHeader`.",
   props: [
     { name: "title", type: "string" },
     { name: "subtitle", type: "string", optional: true, aliases: ["description"] },
     { name: "eyebrow", type: "string", optional: true, description: "Short uppercase label above the title" },
-    { name: "status", type: "Badge | Tag", optional: true, aliases: ["badge"] },
+    { name: "status", type: "Badge | Pill | StatusDot", optional: true, aliases: ["badge"], description: "Status node rendered next to the title — a Badge(...), Pill(...) or StatusDot(...)" },
     { name: "actions", type: "Node[]", optional: true, description: "Buttons / Links shown on the right" }
   ],
   render: (_node, props, helpers) => {
@@ -13499,7 +13635,7 @@ const SplitView = {
     { name: "showDetail", type: "boolean", optional: true, description: "Which pane wins on narrow viewports: true = detail, false = list. Omit to keep both stacked." }
   ],
   render: (_node, props, helpers) => {
-    const width = sanitiseCssLength(asString(props.primaryWidth), "320px");
+    const width = sanitiseCssLength(props.primaryWidth, "320px");
     const mobilePane = props.showDetail === void 0 || props.showDetail === null ? null : asBoolean(props.showDetail) ? "detail" : "primary";
     const root = el("div", {
       class: "rui-split-view",
@@ -13700,7 +13836,7 @@ const PricingTable = {
   description: "Responsive grid of PricingCard tiers. Items size uniformly across a row and wrap onto multiple rows on narrow viewports. Use as the centerpiece of any pricing or upgrade page.",
   props: [
     { name: "tiers", type: "PricingCard[]" },
-    { name: "columns", type: "number", optional: true, description: "Preferred column count (default auto)" }
+    { name: "columns", type: "number", optional: true, description: "Preferred column count, 1–4 — larger values clamp to 4 (default auto)" }
   ],
   render: (_node, props, helpers) => {
     const requested = props.columns == null ? 0 : Math.floor(asNumber(props.columns, 0));
@@ -13851,11 +13987,27 @@ function renderInlineSparkline(values, tone = "primary") {
   svg.appendChild(line);
   return svg;
 }
+function renderStatsItem(raw) {
+  const item = raw ?? {};
+  const tone = asString(item.tone, "default");
+  const block = el("div", { class: "rui-stats-item", "data-tone": tone });
+  block.append(el("div", { class: "rui-stats-label" }, [asString(item.label)]));
+  const valueRow = el("div", { class: "rui-stats-value-row" });
+  valueRow.append(el("div", { class: "rui-stats-value" }, [asString(item.value)]));
+  const sparkValues = asArray(item.spark).map((v) => Number(v)).filter((n) => Number.isFinite(n));
+  if (sparkValues.length > 1) {
+    valueRow.append(renderInlineSparkline(sparkValues, tone));
+  }
+  block.append(valueRow);
+  const hint = asString(item.hint);
+  if (hint) block.append(el("div", { class: "rui-stats-hint" }, [hint]));
+  return block;
+}
 const Stats = {
   name: "Stats",
-  description: 'KPI strip or grid. Pass `items` as `{label, value, hint?, tone?, spark?}` objects for strip layout, or as `StatCard(...)` nodes when `layout="grid"`.',
+  description: 'KPI strip or grid. Pass `items` as `{label, value, hint?, tone?, spark?}` objects (strip layout by default) and/or `StatCard(...)` nodes; any StatCard item, or `layout="grid"`, lays them out as a responsive grid.',
   props: [
-    { name: "items", type: "object[] | StatCard[]", description: "Stat objects or StatCard nodes when layout=grid" },
+    { name: "items", type: "(object | StatCard)[]", description: "Stat objects and/or StatCard nodes (a StatCard switches to grid layout)" },
     { name: "layout", type: "string", optional: true, enum: ["strip", "grid"], description: "strip = horizontal row; grid = responsive Grid" },
     { name: "columns", type: "number", optional: true, description: "Preferred column count for grid layout (1–6)" },
     { name: "align", type: "string", optional: true, enum: ["start", "center", "end"], description: "Strip alignment (layout=strip only)" }
@@ -13866,6 +14018,10 @@ const Stats = {
     const layout = hasComponentItems ? "grid" : asString(props.layout, "strip");
     if (layout === "grid") {
       const columns = props.columns ? Math.max(1, Math.min(6, Math.floor(asNumber(props.columns)))) : 0;
+      const gridHelpers = {
+        ...helpers,
+        renderNode: (child) => asRecord$1(child) ? renderStatsItem(child) : helpers.renderNode(child)
+      };
       const gridNode = Grid.render(
         { __kind: "Component", name: "Grid", args: [], argMeta: [] },
         {
@@ -13873,29 +14029,14 @@ const Stats = {
           columns: columns > 0 ? columns : "auto",
           gap: "m"
         },
-        helpers
+        gridHelpers
       );
       gridNode.classList.add("rui-metric-grid");
       return gridNode;
     }
     const align = asString(props.align, "start");
     const root = el("div", { class: "rui-stats", "data-align": align });
-    for (const raw of items) {
-      const item = raw ?? {};
-      const tone = asString(item.tone, "default");
-      const block = el("div", { class: "rui-stats-item", "data-tone": tone });
-      block.append(el("div", { class: "rui-stats-label" }, [asString(item.label)]));
-      const valueRow = el("div", { class: "rui-stats-value-row" });
-      valueRow.append(el("div", { class: "rui-stats-value" }, [asString(item.value)]));
-      const sparkValues = asArray(item.spark).map((v) => Number(v)).filter((n) => Number.isFinite(n));
-      if (sparkValues.length > 1) {
-        valueRow.append(renderInlineSparkline(sparkValues, tone));
-      }
-      block.append(valueRow);
-      const hint = asString(item.hint);
-      if (hint) block.append(el("div", { class: "rui-stats-hint" }, [hint]));
-      root.append(block);
-    }
+    for (const raw of items) root.append(renderStatsItem(raw));
     return root;
   }
 };
@@ -14099,7 +14240,7 @@ const COL_ALIGN$1 = ["left", "center", "right"];
 const SURFACE_TONES = ["default", "primary", "success", "warning", "danger", "info"];
 const Col = {
   name: "Col",
-  description: 'Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu column that needs no visible header, use `headerHidden: true` — NOT `header: ""`, which loses the accessible name and (in DataGrid) the persistence key derived from `header`.',
+  description: 'Single column inside a Table or DataGrid. Use `align` for per-column text alignment, `format` for cell rendering (`text|number|currency|date`), `currency` for the money code used by `format: "currency"`, `locale` for the BCP-47 tag those formats are rendered in, and `width`/`wrap` to stop one long column from forcing the whole table into horizontal scroll. `values` may be plain values OR an array of component nodes — e.g. `Col("Status", rows.map(r => Badge(r.status)))` or `Col("Actions", rows.map(r => Button("Edit")))` — each component renders directly in its cell. Pass `render: (value, index, row) => …` for the same effect when you prefer to keep `values` as the raw row data (return a component, string, or array). `row` is the whole row (header-keyed) and stays correct even when DataGrid sorts — prefer `row.otherColumn` over indexing a sibling array. A column whose header is empty or repeats an earlier column\'s header is keyed `col-<index>` instead, so two `Col("Price", …)` never overwrite each other. Pass `onClick: (value, index, row) => …` to make the whole cell clickable (pointer + keyboard). `sortable` and `filterable` only take effect inside `DataGrid` (Table ignores them). For an actions/kebab-menu column that needs no visible header, use `headerHidden: true` — NOT `header: ""`, which loses the accessible name and (in DataGrid) the persistence key derived from `header`.',
   props: [
     { name: "header", type: "string" },
     { name: "values", type: "any[]", description: "Column values. Plain values are formatted as text; component nodes (e.g. `rows.map(r => Badge(r.status))`) render directly. You can also pass the full row array and map each cell with `render`." },
@@ -14114,15 +14255,17 @@ const Col = {
     { name: "width", type: "string", optional: true, description: "CSS width for the column (`240px`, `30%`). Caps the column instead of letting one long value stretch the table." },
     { name: "wrap", type: "boolean", optional: true, description: "Let long cell text wrap onto several lines instead of pushing the table into horizontal scroll." },
     { name: "headerTooltip", type: "string", optional: true, aliases: ["hint"], description: "Explanation shown on hover/focus of the header cell — e.g. `MRR = monthly recurring revenue`." },
-    { name: "locale", type: "string", optional: true, description: 'BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: "number"|"currency"|"date"` for separators, digit grouping and date order. Defaults to the Table\'s `locale`, then the viewer\'s browser.' },
+    { name: "locale", type: "string", optional: true, description: 'BCP-47 tag (`de-DE`, `en-GB`, `fr-CH`) used by `format: "number"|"currency"|"date"` for separators, digit grouping and date order, in a Table and a DataGrid alike. Defaults to the Table\'s `locale` (a DataGrid has none), then the viewer\'s browser.' },
     // Slots 13–17: DataGrid advanced features. Table ignores these.
     { name: "initiallyHidden", type: "boolean", optional: true, aliases: ["colHidden"], description: "DataGrid: initially hide this column. The user can reveal it from the column settings panel." },
-    { name: "pinned", type: "string", optional: true, enum: ["left", "right"], description: "DataGrid: pin this column to the left (or right) edge so it stays visible during horizontal scrolling." },
+    // No "right": DataGrid only ever pinned to the left edge, so `"right"` was
+    // offered here and silently did nothing.
+    { name: "pinned", type: "string", optional: true, enum: ["left", "none"], description: 'DataGrid: `"left"` pins this column to the left edge so it stays visible during horizontal scrolling (pinned columns move to the front of the table); `"none"`, the default, leaves it unpinned. There is no right-edge pinning.' },
     { name: "resizable", type: "boolean", optional: true, description: "DataGrid: per-column override for resizing. Takes precedence over the grid-level `resizable` prop." },
-    { name: "minWidth", type: "string", optional: true, description: "DataGrid: minimum width when the column is resized (`80px`, `5rem`)." },
-    { name: "maxWidth", type: "string", optional: true, description: "DataGrid: maximum width when the column is resized (`400px`, `50%`)." },
+    { name: "minWidth", type: "string", optional: true, description: "DataGrid: minimum width when the column is resized (`80px`, `5rem`, or a number of px; default 50px). A `%` is a share of the grid's visible width." },
+    { name: "maxWidth", type: "string", optional: true, description: "DataGrid: maximum width when the column is resized (`400px`, `50%`, or a number of px; default 2000px). A `%` is a share of the grid's visible width." },
     // Slot 18. Appended at the end, like every prior addition — see the note above.
-    { name: "headerHidden", type: "boolean", optional: true, description: "Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: \"\"` for this — that drops the accessible name, blanks the column-settings row, and collides with any other column that also passed an empty header, since the persistence key is the header string. A sortable column keeps working: the sort button's accessible name still comes from the hidden label." }
+    { name: "headerHidden", type: "boolean", optional: true, description: "Render the header cell visually empty (an actions/kebab-menu column needs no visible header) while `header` keeps naming the column everywhere else that reads it: the `<th>`'s accessible name, the column-settings panel row, and (DataGrid) the persistence key. Do NOT use `header: \"\"` for this — that drops the accessible name, blanks the column-settings row, and leaves the column keyed by its position (`col-<index>`), so a saved layout follows whichever column lands at that index after columns are added or reordered. A sortable column keeps working: the sort button's accessible name still comes from the hidden label." }
   ],
   // Cols are read positionally inside Table.render — this render is a fallback.
   render: (_node, props) => {
@@ -14223,7 +14366,7 @@ const Table = {
     const formatters = cols.map((col) => colFormatter(col.args, tableLocale));
     const rowCount = Math.max(0, ...columnValues.map((c) => c.length));
     const onRowClick = props.onRowClick;
-    const headers = cols.map((col, c) => asString(col.args?.[0]) || `col-${c}`);
+    const headers = columnKeys(cols.map((col) => asString(col.args?.[0])));
     for (let r = 0; r < rowCount; r += 1) {
       const tr = el("tr");
       const rowObj = {};
@@ -15017,6 +15160,15 @@ function applyRovingTabindex(root) {
   const focusTarget = items.find((item) => item.getAttribute("aria-selected") === "true") ?? items[0];
   for (const item of items) item.tabIndex = item === focusTarget ? 0 : -1;
 }
+function columnKeys(headers) {
+  const seen = /* @__PURE__ */ new Set();
+  return headers.map((header, idx) => {
+    let key = header && !seen.has(header) ? header : `col-${idx}`;
+    for (let n = 2; seen.has(key); n += 1) key = `col-${idx}-${n}`;
+    seen.add(key);
+    return key;
+  });
+}
 function currencyCode(value) {
   const code = asString(value).trim().toUpperCase();
   return /^[A-Z]{3}$/.test(code) ? code : "USD";
@@ -15091,21 +15243,27 @@ const Series = {
     { name: "name", type: "string" },
     {
       name: "values",
-      type: "number[]",
+      // No `{`, `object`, `any` or `Record` here, although ScatterChart takes
+      // `{x, y, label?}` objects in this slot: `propExpectsObject` reads the
+      // hint, and an object-shaped one makes `chooseNamedBagIndex` bind an
+      // all-unknown-keys object (`{ valeus: [1] }`) as this payload instead of
+      // reporting it as a misspelt prop. The description names the object
+      // form; the curated declaration (component-types/charts.ts) types it.
+      type: "number[] | [number, number, string?][]",
       optional: true,
-      description: "One value per x-axis label (ScatterChart also accepts its {x, y} points here)"
+      description: "One number per x-axis label — or, for ScatterChart, its points as `{x, y, label?}` objects or `[x, y, label?]` tuples"
     },
     {
       name: "color",
       type: "string",
       optional: true,
-      description: "Override the palette colour for this series (any CSS colour or var())"
+      description: "Override the palette colour for this series (any CSS colour, `var()` or `color-mix()`; a value carrying anything else — a `;`, quotes, `url()`, a comment — falls back to the palette slot)"
     },
     {
       name: "points",
-      type: "{x: number, y: number, label?: string}[]",
+      type: "{x: number, y: number, label?: string}[] | [number, number, string?][]",
       optional: true,
-      description: "XY points for ScatterChart — the explicit alternative to passing them as `values`"
+      description: "XY points for ScatterChart (`{x, y, label?}` objects or `[x, y, label?]` tuples) — the explicit alternative to passing them as `values`"
     }
   ],
   render: (_node, props) => {
@@ -15120,11 +15278,11 @@ const readSeries = (raw) => {
     const node = s;
     const name = asString(node.args?.[0], `Series ${i + 1}`);
     const values = asArray(node.args?.[1]).map((v) => asNumber(v));
-    const color2 = asString(node.args?.[2]).trim();
+    const color2 = sanitiseCssColor(node.args?.[2]);
     return color2 ? { name, values, color: color2 } : { name, values };
   });
 };
-const seriesColor = (series, index) => series.color || colorAt(index);
+const seriesColor = (series, index) => sanitiseCssColor(series.color) || colorAt(index);
 const BarChart = {
   name: "BarChart",
   description: "Bar chart. `labels` define the category axis, `series` define the bars. Pass `stacked: true` to stack the series instead of grouping them, `horizontal: true` when the category names are too long for a vertical axis, and `onBarClick(label, value, seriesName)` for drill-down.",
@@ -15358,7 +15516,7 @@ const LineChart = {
   props: [
     { name: "labels", type: "string[]", optional: true },
     { name: "series", type: "Series[]", optional: true },
-    { name: "data", type: "{x: string, [key: string]: number}[]", optional: true, description: "Row-shaped data — labels and series are auto-derived" },
+    { name: "data", type: "{x: string | number, label?: string, [key: string]: number | string | null}[]", optional: true, description: "Row-shaped data — labels and series are auto-derived: `x` (or `label` when `x` is absent) is the row's x-axis label, every other key whose value is a number or numeric string is one line, and text columns are skipped; a null or missing value leaves a gap" },
     { name: "title", type: "string", optional: true },
     { name: "filled", type: "boolean", optional: true, description: "Fill the area beneath each line (area-chart style)" },
     { name: "stacked", type: "boolean", optional: true, description: "Stack series when filled=true" },
@@ -15370,7 +15528,7 @@ const LineChart = {
     { name: "height", type: "number", optional: true, description: "Plot height in px (default 240)" },
     { name: "loading", type: "boolean", optional: true, description: "Render a loading placeholder instead of the plot" },
     { name: "emptyText", type: "string", optional: true, description: 'Message shown when there is no data (default "No data")' },
-    { name: "onPointClick", type: "callable", optional: true, description: "(label, value, seriesName) => void, fired when a data point is activated" },
+    { name: "onPointClick", type: "callable", optional: true, description: "(label, value, seriesName) => void, fired when a data point is activated (a gap has no point, so `value` is always a number)" },
     ...CHART_A11Y_PROPS
   ],
   render: (_node, props, helpers) => {
@@ -15475,6 +15633,7 @@ const LineChart = {
         if (!point) continue;
         const [x, y, i] = point;
         const raw = s.values[i];
+        if (raw === null || raw === void 0) continue;
         const dot = svgEl$1("circle", {
           cx: x.toFixed(1),
           cy: y.toFixed(1),
@@ -15678,9 +15837,9 @@ function arcPath(cx, cy, r, innerR, from, to, large) {
   return `M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${large} 1 ${x2.toFixed(1)},${y2.toFixed(1)} L${ix1.toFixed(1)},${iy1.toFixed(1)} A${innerR.toFixed(1)},${innerR.toFixed(1)} 0 ${large} 0 ${ix2.toFixed(1)},${iy2.toFixed(1)} Z`;
 }
 function fullCirclePath(cx, cy, r, innerR) {
-  const ring = (radius, sweep) => {
-    const left = (cx - radius).toFixed(1), right = (cx + radius).toFixed(1);
-    const y = cy.toFixed(1), rad = radius.toFixed(1);
+  const ring = (radius2, sweep) => {
+    const left = (cx - radius2).toFixed(1), right = (cx + radius2).toFixed(1);
+    const y = cy.toFixed(1), rad = radius2.toFixed(1);
     return `M${left},${y} A${rad},${rad} 0 1 ${sweep} ${right},${y} A${rad},${rad} 0 1 ${sweep} ${left},${y} Z`;
   };
   return innerR > 0 ? `${ring(r, 1)} ${ring(innerR, 0)}` : ring(r, 1);
@@ -16000,7 +16159,7 @@ const ListBlock = {
 let followUpIdSeq = 0;
 const FollowUpBlock = {
   name: "FollowUpBlock",
-  description: 'Suggested follow-up prompts shown as buttons. Each item dispatches its label as an assistant message (equivalent to `emit "assistant-message" { message }`) unless `onSelect` is supplied, which receives `(message, label)` instead. `disabled` makes the row inert while the assistant is responding; `layout: "stack"` puts one suggestion per line.',
+  description: 'Suggested follow-up prompts shown as buttons. Each item dispatches its `message` — which defaults to its label — as an assistant message (equivalent to `emit "assistant-message" { message }`) unless `onSelect` is supplied, which receives `(message, label)` instead. `disabled` makes the row inert while the assistant is responding; `layout: "stack"` puts one suggestion per line.',
   props: [
     { name: "items", type: "FollowUpItem[]", description: "Array of FollowUpItem(label, message?), {label, message, disabled?} objects, or plain strings" },
     { name: "title", type: "string", optional: true },
@@ -16223,9 +16382,9 @@ const Avatar = {
 };
 const AvatarGroup = {
   name: "AvatarGroup",
-  description: 'Stack of overlapping avatars with a `+N` chip when the list overflows. Pass either Avatar(...) nodes or plain {name, src, status?, fallback?} objects. Set `total` when the list is only a page of a larger set (5 avatars out of 200 members renders `+195`), and `fallback: "initials"` to keep the whole pile offline (the default DiceBear illustration is a network request per member).',
+  description: 'Stack of overlapping avatars with a `+N` chip when the list overflows. Pass Avatar(...) nodes, plain {name, src, status?, fallback?} objects, or bare name strings. Set `total` when the list is only a page of a larger set (5 avatars out of 200 members renders `+195`), and `fallback: "initials"` to keep the whole pile offline (the default DiceBear illustration is a network request per member).',
   props: [
-    { name: "items", type: "Avatar[]", description: "Avatar(...) nodes or {name, src, status?, fallback?} objects" },
+    { name: "items", type: "Avatar[]", description: "Avatar(...) nodes, {name, src, status?, fallback?} objects, or name strings" },
     { name: "max", type: "number", optional: true, description: "Maximum avatars to show (default 4)" },
     { name: "size", type: "string", optional: true, enum: AVATAR_SIZES },
     { name: "total", type: "number", optional: true, description: "Total member count when `items` is only a page of it — drives the `+N` chip" },
@@ -16451,10 +16610,10 @@ const Switch = {
 const TOGGLE_VARIANTS = ["default", "outline", "ghost"];
 const ToggleGroup = {
   name: "ToggleGroup",
-  description: "Group of Toggle-style buttons. Items are `[value, label]` arrays, `{value, label, icon?, disabled?}` objects, or plain strings (used for both value and label). Single-select by default — pass `multiple: true` for an independently toggleable set (a bold/italic/underline toolbar), which reads and writes an ARRAY of values. Pass a `$variable` as `value` for two-way binding; item values keep their original type, so numeric items write numbers back. `onChange(value)` fires with the new selection. Left/Right arrows move between items; give the group a `label` so screen readers can tell two groups apart.",
+  description: 'Group of Toggle-style buttons. Items are `[value, label]` arrays, `{value, label, icon?, disabled?}` objects, or plain strings (used for both value and label). Single-select by default — pass `multiple: true` for an independently toggleable set (a bold/italic/underline toolbar), which reads and writes an ARRAY of values. Pass a `$variable` as `value` for two-way binding; item values keep their original type, so numeric items write numbers back. `onChange(value)` fires with the new selection. Left/Right arrows move between items; give the group a `label` so screen readers can tell two groups apart. The item list may also be the only positional argument: `ToggleGroup(["Day", "Week"])`.',
   props: [
-    { name: "id", type: "string" },
-    { name: "items", type: "any[]" },
+    { name: "id", type: "string", optional: true, description: "DOM id of the group — or the item list itself, when it is the only positional argument" },
+    { name: "items", type: "any[]", optional: true, description: "The items; required unless they are passed in the first slot" },
     { name: "value", type: "any", optional: true },
     { name: "variant", aliases: ["tone"], type: "string", optional: true, enum: TOGGLE_VARIANTS },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
@@ -17520,7 +17679,7 @@ const Toast = {
     { name: "icon", type: "string", optional: true, description: "Font Awesome icon name (default picked from tone)" },
     { name: "duration", type: "number", optional: true, description: "Auto-dismiss after N milliseconds (e.g. 4000). Omit to keep the toast until the user closes it." },
     { name: "action", type: "Button", optional: true, description: "Optional inline `Button` action shown above the message" },
-    { name: "onClose", type: "callable", optional: true, description: "Callable invoked when the toast is dismissed (× button, auto-dismiss, or programmatic)" },
+    { name: "onClose", type: "callable", optional: true, description: "Callable invoked when the toast dismisses itself (× button or auto-dismiss) — wire it to remove the toast from your list (`$toast.dismiss(t.id)`). Removing the toast yourself does not call it" },
     { name: "position", type: "string", optional: true, enum: TOASTS_POSITIONS, description: "Pin a standalone Toast to a viewport corner without wrapping it in `Stack(...)`" },
     { name: "pauseOnHover", type: "boolean", optional: true, description: "Pause the auto-dismiss countdown while the pointer is over the toast" }
   ],
@@ -17718,8 +17877,19 @@ function derivedPath(labels, index) {
 }
 function asCrumbRecord(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  if (value.__kind === "Component") return null;
+  if (isComponentNode(value)) return null;
   return value;
+}
+function wireNodeCrumbClick(crumbEl, report) {
+  const links = crumbEl.matches(".rui-breadcrumb-link") ? [crumbEl] : [...crumbEl.querySelectorAll(".rui-breadcrumb-link")];
+  for (const link of links) {
+    const own = link.onclick;
+    link.onclick = function onCrumbLinkClick(event) {
+      const anchor = (event.currentTarget ?? link).tagName === "A";
+      if (!anchor || !event.defaultPrevented && isPlainClick(event)) report();
+      return own?.call(this, event);
+    };
+  }
 }
 function prependCrumbIcon(crumbEl, icon) {
   if (crumbEl.querySelector(".rui-breadcrumb-icon")) return;
@@ -17811,7 +17981,7 @@ const Breadcrumb = {
     { name: "items", type: "BreadcrumbItem[] | string[] | {label, to}[]" },
     { name: "separator", type: "string", optional: true, description: "Default `/`" },
     { name: "maxItems", type: "number", optional: true, description: "Collapse the middle of the trail to an ellipsis once there are more items than this (keeps the first crumb and the tail)" },
-    { name: "onItemClick", type: "callable", optional: true, description: "Called with (index, label) when a crumb is clicked — fires alongside any navigation" },
+    { name: "onItemClick", type: "callable", optional: true, description: "Called with (index, label) when a crumb is clicked — before the crumb navigates (and before a BreadcrumbItem's own `onClick`), whatever form the crumb takes" },
     { name: "homeIcon", type: "boolean | string", optional: true, description: "Leading icon on the FIRST crumb — `true` (default) uses `house`, `false` removes it, a string picks another Font Awesome name" },
     { name: "autoLink", type: "boolean", optional: true, description: "Derive a cumulative route from plain-string labels so they navigate (default `true`). Set `false` for a trail that is pure text unless an item names its own `to`/`href`" }
   ],
@@ -17824,6 +17994,7 @@ const Breadcrumb = {
     const homeIconProp = props.homeIcon;
     const homeIconName = homeIconProp === false || homeIconProp === "false" ? "" : typeof homeIconProp === "string" && homeIconProp.trim() !== "" ? homeIconProp.trim() : DEFAULT_HOME_ICON;
     const labels = items.map((item) => {
+      if (isComponentNode(item)) return "";
       const record = asCrumbRecord(item);
       if (record) return asString(record.label ?? record.title);
       return asString(item);
@@ -17853,10 +18024,14 @@ const Breadcrumb = {
       const item = items[index];
       const isLast = index === items.length - 1;
       const isFirst = index === 0;
-      if (item && typeof item === "object" && item.__kind === "Component") {
+      if (isComponentNode(item)) {
         const rendered = helpers.renderNode(item);
-        if (isFirst && homeIconName && rendered instanceof HTMLElement) {
-          prependCrumbIcon(rendered, homeIconName);
+        if (rendered instanceof HTMLElement) {
+          if (isFirst && homeIconName) prependCrumbIcon(rendered, homeIconName);
+          if (onItemClick) {
+            const label2 = rendered.querySelector(".rui-breadcrumb-label")?.textContent ?? "";
+            wireNodeCrumbClick(rendered, () => helpers.invoke(onItemClick, index, label2));
+          }
         }
         list.append(rendered);
         return;
@@ -18331,8 +18506,8 @@ function objectMenuItem(raw) {
   const label = asString(r.label ?? r.title ?? r.text);
   if (!label) return null;
   return {
-    view: menuItemView({ ...r, label }),
-    action: r.onClick ?? r.action
+    view: menuItemView({ ...r, label, variant: r.variant ?? r.tone }),
+    action: r.onClick ?? r.action ?? r.onclick
   };
 }
 function wireMenuItem(rendered, ctl) {
@@ -18349,18 +18524,21 @@ function wireMenuItem(rendered, ctl) {
     inner?.call(item, event);
   };
 }
-function flattenItems(raw, depth = 4) {
-  const out = [];
+function flattenItems(raw, open = /* @__PURE__ */ new Set([raw]), out = []) {
   for (const entry of asArray(raw)) {
-    if (Array.isArray(entry) && depth > 0) out.push(...flattenItems(entry, depth - 1));
-    else out.push(entry);
+    if (!Array.isArray(entry)) out.push(entry);
+    else if (!open.has(entry)) {
+      open.add(entry);
+      flattenItems(entry, open, out);
+      open.delete(entry);
+    }
   }
   return out;
 }
 let menuIdSeq = 0;
 const DropdownMenu = {
   name: "DropdownMenu",
-  description: "Click-triggered dropdown menu. Click the trigger to toggle, click a MenuItem to run its action and close, click outside or press Escape to close without acting; ArrowUp/ArrowDown/Home/End and typeahead move between items. Items may be MenuItem / MenuSeparator / MenuLabel nodes, nested arrays of them, or plain `{label, onClick, icon?, shortcut?, disabled?, checked?, separator?}` objects. Bind a `$variable` to `open` for two-way control, or watch `onOpenChange(isOpen)`.",
+  description: "Click-triggered dropdown menu. Click the trigger to toggle, click a MenuItem to run its action and close, click outside or press Escape to close without acting; ArrowUp/ArrowDown/Home/End and typeahead move between items. Items may be MenuItem / MenuSeparator / MenuLabel nodes, nested arrays of them, or plain objects with MenuItem's fields (`{label, onClick, icon?, shortcut?, variant?, disabled?, checked?, role?, keepOpen?}`; `{separator: true}` for a rule). Bind a `$variable` to `open` for two-way control, or watch `onOpenChange(isOpen)`.",
   props: [
     { name: "trigger", type: "Node", description: "Clickable trigger element (typically a Button or Avatar)" },
     { name: "items", type: "(MenuItem | MenuSeparator | MenuLabel)[]" },
@@ -18465,13 +18643,13 @@ const DropdownMenu = {
     flattenItems(props.items).forEach((raw, index) => {
       if (isMenuChild(raw, "MenuItem")) {
         const itemProps = mapPositionalArgs(MenuItem, raw.args ?? []);
-        const rendered = MenuItem.render(raw, itemProps, helpers);
-        if (raw.universal) applyUniversal(rendered, raw.universal);
-        if (raw.explicitKey != null && rendered instanceof Element && !rendered.hasAttribute("data-rui-key")) {
-          rendered.setAttribute("data-rui-key", String(raw.explicitKey));
+        const rendered2 = MenuItem.render(raw, itemProps, helpers);
+        if (raw.universal) applyUniversal(rendered2, raw.universal);
+        if (raw.explicitKey != null && rendered2 instanceof Element && !rendered2.hasAttribute("data-rui-key")) {
+          rendered2.setAttribute("data-rui-key", String(raw.explicitKey));
         }
-        wireMenuItem(rendered, ctl);
-        target().append(rendered);
+        wireMenuItem(rendered2, ctl);
+        target().append(rendered2);
         return;
       }
       if (isMenuChild(raw, "MenuSeparator")) {
@@ -18512,8 +18690,14 @@ const DropdownMenu = {
         target().append(btn);
         return;
       }
+      const rendered = helpers.renderNode(raw);
+      if (rendered instanceof HTMLElement && rendered.classList.contains("rui-menu-item")) {
+        wireMenuItem(rendered, ctl);
+        target().append(rendered);
+        return;
+      }
       const custom = el("div", { class: "rui-menu-custom", role: "none", style: "display:contents" });
-      custom.append(helpers.renderNode(raw));
+      custom.append(rendered);
       target().append(custom);
     });
     content.onkeydown = (event) => {
@@ -18626,10 +18810,11 @@ const MenuLabel = {
 const COL_ALIGN = ["left", "center", "right"];
 const SR_ONLY = "position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0";
 function readDataGridCols(raw) {
-  return asColumnNodes(raw).map((node, idx) => {
+  const nodes = asColumnNodes(raw);
+  const keys = columnKeys(nodes.map((node) => asString(node.args?.[0])));
+  return nodes.map((node, idx) => {
     const args = node.args ?? [];
     const header = asString(args[0]);
-    const currency = currencyCode(args[8]);
     const rawWrap = args[10];
     const rawResizable = args[15];
     return {
@@ -18641,13 +18826,13 @@ function readDataGridCols(raw) {
       filterable: asBoolean(args[5]),
       render: args[6],
       onClick: args[7],
-      key: header || `col-${idx}`,
+      key: keys[idx],
       width: sanitiseCssLength(args[9], ""),
       wrap: rawWrap === void 0 || rawWrap === null ? null : asBoolean(rawWrap) ? "true" : "false",
       headerTooltip: asString(args[11]),
       // Filtering, sorting and the CSV export all read through this, so a money
       // column exports and sorts on exactly the string the user can see.
-      fmt: (value, format) => formatCell(value, format, currency),
+      fmt: colFormatter(args),
       initiallyHidden: asBoolean(args[13]),
       pinned: asString(args[14]) === "left" ? "left" : "",
       resizable: rawResizable === void 0 || rawResizable === null ? void 0 : asBoolean(rawResizable),
@@ -18735,7 +18920,7 @@ function initColumnConfig(cols, persisted) {
   if (!persisted) return config;
   if (persisted.order) {
     const colKeys = new Set(defaultOrder);
-    const validOrder = persisted.order.filter((k) => colKeys.has(k));
+    const validOrder = [...new Set(persisted.order)].filter((k) => colKeys.has(k));
     const missing = defaultOrder.filter((k) => !validOrder.includes(k));
     config.order = [...validOrder, ...missing];
   }
@@ -18759,7 +18944,7 @@ function normalizeOrder(order, pinned) {
 function reconcileColumnConfig(cols, config) {
   const keys = cols.map((c) => c.key);
   const known = new Set(keys);
-  const kept = config.order.filter((k) => known.has(k));
+  const kept = [...new Set(config.order)].filter((k) => known.has(k));
   const added = keys.filter((k) => !kept.includes(k));
   if (added.length === 0 && kept.length === config.order.length) return config;
   const prune = (set) => new Set([...set].filter((k) => known.has(k)));
@@ -18825,7 +19010,7 @@ const DataGrid = {
     { name: "loading", type: "boolean", optional: true, description: "Show a loading row instead of the empty message while rows are in flight" },
     { name: "error", type: "string", optional: true, description: "Failure message shown instead of the rows (takes precedence over `loading`)" },
     { name: "loadingLabel", type: "string", optional: true, description: "Label for the loading row (default `Loading…`)" },
-    { name: "maxHeight", type: "string", optional: true, description: "Scroll-area height cap, e.g. `70vh` / `480px`. Applied when `stickyHeader` is on (default `70vh`) — without it the header has no scrollport to stick to." },
+    { name: "maxHeight", type: "string", optional: true, description: "Scroll-area height cap, e.g. `70vh` / `480px`. Applies whenever `allowOverflow` is off. Defaults to `70vh` while `stickyHeader` is on — without a cap the header has no scrollport to stick to — and to no cap otherwise." },
     { name: "allowOverflow", type: "boolean", optional: true, description: "Let cell content (menus, popovers) escape the scroll box instead of clipping it. Disables the sticky header." },
     { name: "onSort", type: "callable", optional: true, description: "Callable fired with (columnKey, direction) when a header is activated — use for server-side sorting" },
     { name: "onSelectionChange", type: "callable", optional: true, description: "Callable fired with the array of selected row ids" },
@@ -19107,8 +19292,13 @@ const DataGrid = {
       }
       if (isColResizable(col)) {
         const colKey = col.key;
-        const minW = parsePx(col.minWidth) || 50;
-        const maxW = parsePx(col.maxWidth) || 2e3;
+        const bounds = (handleEl) => {
+          const view = handleEl.closest(".rui-data-grid-viewport") ?? liveScope(handleEl);
+          return {
+            min: lengthToPx(col.minWidth, view) || 50,
+            max: lengthToPx(col.maxWidth, view) || 2e3
+          };
+        };
         const handle = el("div", {
           class: "rui-data-grid-resize-handle",
           "data-resize-col": colKey,
@@ -19120,10 +19310,11 @@ const DataGrid = {
         const currentWidth = (handleEl) => {
           freezeColumnWidths(liveScope(handleEl));
           const liveTh = handleEl.parentElement;
-          return liveTh ? liveTh.getBoundingClientRect().width : minW;
+          return liveTh ? liveTh.getBoundingClientRect().width : bounds(handleEl).min;
         };
-        const setWidth = (handleEl, next) => {
-          const px = `${Math.round(Math.max(minW, Math.min(maxW, next)))}px`;
+        const setWidth = (handleEl, next, limits = bounds(handleEl)) => {
+          const { min, max } = limits;
+          const px = `${Math.round(Math.max(min, Math.min(max, next)))}px`;
           const colEl = liveColEl(liveScope(handleEl), colKey);
           if (colEl) colEl.style.width = px;
           return px;
@@ -19147,6 +19338,7 @@ const DataGrid = {
           const liveHandle = event.currentTarget;
           const startX = event.clientX;
           const startW = currentWidth(liveHandle);
+          const limits = bounds(liveHandle);
           const pointerId = event.pointerId;
           liveHandle.classList.add("rui-data-grid-resize-active");
           try {
@@ -19155,7 +19347,7 @@ const DataGrid = {
           }
           let last = `${Math.round(startW)}px`;
           const onMove = (ev) => {
-            last = setWidth(liveHandle, startW + (ev.clientX - startX));
+            last = setWidth(liveHandle, startW + (ev.clientX - startX), limits);
           };
           const onUp = () => {
             liveHandle.classList.remove("rui-data-grid-resize-active");
@@ -20293,10 +20485,21 @@ const DataGrid = {
     return wrapper;
   }
 };
-function parsePx(value) {
-  if (!value) return 0;
-  const match = /^(\d+(?:\.\d+)?)px$/i.exec(value.trim());
-  return match ? Number(match[1]) : 0;
+const LENGTH_PROBE = "position:absolute;visibility:hidden;pointer-events:none;height:0;margin:0;padding:0;border:0";
+function lengthToPx(length2, context) {
+  const trimmed = length2.trim();
+  if (!trimmed) return 0;
+  const direct = /^(\d+(?:\.\d+)?)(?:px)?$/i.exec(trimmed);
+  if (direct) return Number(direct[1]);
+  if (!context || typeof document === "undefined") return 0;
+  const probe = document.createElement("div");
+  probe.style.cssText = LENGTH_PROBE;
+  probe.style.width = trimmed;
+  if (!probe.style.width) return 0;
+  context.append(probe);
+  const measured = probe.offsetWidth;
+  probe.remove();
+  return Number.isFinite(measured) && measured > 0 ? measured : 0;
 }
 function readCalendarEvents(raw) {
   const out = [];
@@ -20312,7 +20515,8 @@ function readCalendarEvents(raw) {
       date,
       title: asString(e.title),
       tone: asString(e.tone, "primary"),
-      time: asString(e.time)
+      time: asString(e.time),
+      source: entry
     });
   });
   return out;
@@ -20357,10 +20561,10 @@ const CalendarView = {
     { name: "month", type: "string", optional: true, description: "Visible month — ISO date or YYYY-MM. Bind a $variable to follow the prev/next controls (defaults to `value`, else today)" },
     { name: "events", type: "object[]", optional: true, description: "Array of {date, title, tone?, time?, id?} objects" },
     { name: "view", type: "string", optional: true, enum: ["month", "week"] },
-    { name: "firstDay", type: "number", optional: true, description: "0=Sunday, 1=Monday (default 1)" },
+    { name: "firstDay", type: "number", optional: true, description: "0=Sunday, 1=Monday … 6=Saturday (default 1); other numbers are floored and wrapped into that range" },
     { name: "onSelect", type: "callable", optional: true, description: "Callable fired when a day is clicked; receives the ISO date string" },
     { name: "onMonthChange", type: "callable", optional: true, aliases: ["onNavigate"], description: "Callable fired when the prev/next/today controls move the grid; receives the new anchor ISO date" },
-    { name: "onEventClick", type: "callable", optional: true, description: "Callable fired with (eventId, event) when an event chip is clicked; makes the chips real buttons" },
+    { name: "onEventClick", type: "callable", optional: true, description: "Callable fired with (eventId, event) when an event chip is clicked, where `event` is the object you passed in `events` (every field intact) and `eventId` its `id` as a string, or `<date>#<index>` when it has none; makes the chips real buttons" },
     { name: "maxEventsPerDay", type: "number", optional: true, description: "Event chips per day before a `+N more` toggle (default 3)" },
     { name: "min", type: "string", optional: true, description: "Earliest selectable ISO date" },
     { name: "max", type: "string", optional: true, description: "Latest selectable ISO date" },
@@ -20372,7 +20576,7 @@ const CalendarView = {
     const events = readCalendarEvents(props.events);
     const today = /* @__PURE__ */ new Date();
     const todayIso = formatIsoDate(today);
-    const weekStartsOn = (asNumber(props.firstDay, 1) % 7 + 7) % 7;
+    const weekStartsOn = (Math.floor(asNumber(props.firstDay, 1)) % 7 + 7) % 7;
     const maxEvents = Math.max(1, Math.floor(asNumber(props.maxEventsPerDay, 3)));
     const valueStateName = node.argMeta?.[0]?.stateRef;
     const monthStateName = node.argMeta?.[1]?.stateRef;
@@ -20483,13 +20687,7 @@ const CalendarView = {
         const chip = el("button", { ...attrs, type: "button", style: CAL_EVENT_BUTTON }, [evt.title]);
         chip.onclick = (event) => {
           event.stopPropagation();
-          helpers.invoke(props.onEventClick, evt.id, {
-            id: evt.id,
-            date: evt.date,
-            title: evt.title,
-            time: evt.time,
-            tone: evt.tone
-          });
+          helpers.invoke(props.onEventClick, evt.id, evt.source);
         };
         container.append(chip);
       }
@@ -20654,8 +20852,8 @@ const CalendarView = {
 };
 function readFeedEntries(raw) {
   const out = [];
-  for (const entry of asArray(raw)) {
-    if (!entry || typeof entry !== "object") continue;
+  asArray(raw).forEach((entry, index) => {
+    if (!entry || typeof entry !== "object") return;
     const e = entry;
     out.push({
       title: asString(e.title),
@@ -20666,16 +20864,18 @@ function readFeedEntries(raw) {
       time: asString(e.time),
       icon: asString(e.icon),
       tone: asString(e.tone, "default"),
-      meta: asString(e.meta)
+      meta: asString(e.meta),
+      index,
+      source: entry
     });
-  }
+  });
   return out;
 }
 const FEED_TITLE_BUTTON = "border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left";
 function renderFeed(klass, items, opts) {
   const root = el("ol", { class: klass, "data-variant": opts.variant });
   const clickable = typeof opts.onItemClick === "function";
-  items.forEach((entry, idx) => {
+  items.forEach((entry) => {
     const li = el("li", {
       class: `${klass}-item`,
       "data-tone": entry.tone,
@@ -20704,7 +20904,7 @@ function renderFeed(klass, items, opts) {
         class: `${klass}-title`,
         style: FEED_TITLE_BUTTON
       }, [entry.title]);
-      btn.onclick = () => opts.helpers.invoke(opts.onItemClick, idx, entry);
+      btn.onclick = () => opts.helpers.invoke(opts.onItemClick, entry.index, entry.source);
       head.append(btn);
     } else {
       head.append(el("span", { class: `${klass}-title` }, [entry.title]));
@@ -20734,14 +20934,14 @@ function renderFeed(klass, items, opts) {
 }
 const ActivityLog = {
   name: "ActivityLog",
-  description: 'Purpose-built feed of user/system activity. Each entry has `actor`, `title`, `description?`, `time?`, `icon?`, `avatarSrc?`, `tone?`, `href?`, and optional `meta` (IP, browser, request id). An entry\'s `href` renders its title as a link; `onItemClick` makes every title a button. Use `variant="audit"` to render `meta` in monospace for security/admin trails. Pass items as `{actor, title, description, time, icon, tone, avatarSrc, href, meta}` objects.',
+  description: 'Purpose-built feed of user/system activity. Each entry has `actor`, `title`, `description?`, `time?`, `icon?`, `avatarSrc?`, `tone?`, `href?`, and optional `meta` (IP, browser, request id). An entry\'s `href` renders its title as a link, and `onItemClick` makes every other title a button (a link never fires it). Use `variant="audit"` to render `meta` in monospace for security/admin trails. Pass items as `{actor, title, description, time, icon, tone, avatarSrc, href, meta}` objects.',
   props: [
     { name: "items", type: "object[]" },
     // Kept to what the stylesheet actually does: it used to promise a whole
     // "monospace voice with meta column" and delivered a monospace meta chip.
     { name: "variant", aliases: ["tone"], type: "string", optional: true, enum: ["default", "audit"], description: "audit = monospace `meta` styling for security/admin trails" },
     { name: "emptyLabel", type: "string", optional: true, description: "Message shown when `items` is empty (default `No activity yet`)" },
-    { name: "onItemClick", type: "callable", optional: true, description: "Callable fired with (index, item) when an entry title is activated" },
+    { name: "onItemClick", type: "callable", optional: true, description: "Callable fired with (index, item) when the title of an entry without an `href` is activated. `item` is the object you passed in `items`, every field intact (e.g. its `id`), and `index` its position in that array" },
     { name: "loading", type: "boolean", optional: true, description: "Append a loading row while older activity is being fetched" },
     { name: "loaderLabel", type: "string", optional: true, description: "Label for the loading row (default `Loading activity…`)" }
   ],
@@ -20767,8 +20967,12 @@ const ComparisonTable = {
     { name: "rows", type: "object[]", description: "Array of {label, values, hint?, group?} entries" },
     { name: "highlightColumn", type: "number", optional: true, description: "0-indexed column to visually emphasise" },
     { name: "featureLabel", type: "string", optional: true, description: "Header of the first (row-label) column — default `Feature`" },
-    { name: "caption", type: "string", optional: true, aliases: ["ariaLabel"], description: "Table caption; also its accessible name" },
-    { name: "stickyFirstColumn", type: "boolean", optional: true, description: "Keep the feature labels visible while the plan columns scroll horizontally" }
+    { name: "caption", type: "string", optional: true, description: "Visible table caption; also its accessible name" },
+    { name: "stickyFirstColumn", type: "boolean", optional: true, description: "Keep the feature labels visible while the plan columns scroll horizontally" },
+    // Appended, never inserted: positional args bind by slot index. It used to
+    // be an ALIAS of `caption`, so `ariaLabel` rendered a visible `<caption>` —
+    // the one thing a prop with that name exists to avoid.
+    { name: "ariaLabel", type: "string", optional: true, aliases: ["arialabel"], description: "Accessible name for a table whose visible name is already a heading beside it — a `<caption>` there would be a visible duplicate. Ignored when `caption` is set, which already names the table." }
   ],
   render: (_node, props, helpers) => {
     const columns = asArray(props.columns).map((c) => asString(c));
@@ -20790,6 +20994,8 @@ const ComparisonTable = {
     root.style.overflowX = "auto";
     const table = el("table");
     const caption = asString(props.caption);
+    const ariaLabel = asString(props.ariaLabel);
+    if (!caption && ariaLabel) table.setAttribute("aria-label", ariaLabel);
     if (caption) table.append(el("caption", { class: "rui-comparison-table-caption" }, [caption]));
     const thead = el("thead");
     const headRow = el("tr");
@@ -20850,6 +21056,20 @@ const ComparisonTable = {
     return root;
   }
 };
+const ROOT_MARGIN_LENGTH = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?(?:px|%)$/i;
+const ROOT_MARGIN_NUMBER = /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?$/i;
+function observerRootMargin(raw, fallback) {
+  if (typeof raw === "number") return Number.isFinite(raw) ? `${raw}px` : fallback;
+  const parts = asString(raw).trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0 || parts.length > 4) return fallback;
+  const out = [];
+  for (const part of parts) {
+    if (ROOT_MARGIN_LENGTH.test(part)) out.push(part);
+    else if (ROOT_MARGIN_NUMBER.test(part)) out.push(`${part}px`);
+    else return fallback;
+  }
+  return out.join(" ");
+}
 const InfiniteList = {
   name: "InfiniteList",
   description: "Vertical list that fires `onLoadMore` when the user scrolls near the bottom. Pass already-rendered child nodes as `items`; wire `onLoadMore` to an `action` that awaits a `$mutation` or `$query` (e.g. `await loadMore.invoke()`) and appends to the bound state. Use `loading=true` to show the spinner row, `hasMore=false` to suppress further loads, and `error` + `onRetry` when a page fails.",
@@ -20862,7 +21082,7 @@ const InfiniteList = {
     { name: "error", type: "string", optional: true, description: "Failure message shown instead of the loader, with a Retry button" },
     { name: "onRetry", type: "callable", optional: true, description: "Callable fired by the Retry button (defaults to `onLoadMore`)" },
     { name: "emptyLabel", type: "string", optional: true, description: "Message shown when there are no items (default `No results`)" },
-    { name: "rootMargin", type: "string", optional: true, description: "Prefetch distance for the scroll sentinel (default `200px`)" },
+    { name: "rootMargin", type: "string", optional: true, description: "Prefetch distance for the scroll sentinel: one to four `px` / `%` lengths in CSS margin order, or a number of px (default `200px`). Other units are not supported by the browser's IntersectionObserver and fall back to the default." },
     { name: "threshold", type: "number", optional: true, description: "Fraction of the sentinel that must be visible, 0–1 (default 0)" },
     { name: "retryLabel", type: "string", optional: true, description: "Label for the retry button (default `Retry`)" }
   ],
@@ -20880,7 +21100,7 @@ const InfiniteList = {
     if (items.length === 0 && !loading && !errorText) {
       root.append(el("div", { class: "rui-infinite-list-empty" }, [asString(props.emptyLabel, "No results")]));
     }
-    const rootMargin = sanitiseCssLength(props.rootMargin, "200px");
+    const rootMargin = observerRootMargin(props.rootMargin, "200px");
     const threshold = Math.min(1, Math.max(0, asNumber(props.threshold, 0)));
     const watchSlot = helpers.useInstanceState("sentinel-watch", {
       node: null,
@@ -20946,14 +21166,20 @@ const InfiniteList = {
         }
         if (watch.observer && watch.node === live && watch.key === key) return;
         watch.observer?.disconnect();
-        const observer = new IntersectionObserver((entries) => {
-          for (const entry of entries) {
-            if (entry.isIntersecting) {
-              helpers.invoke(callback);
-              break;
+        let observer;
+        try {
+          observer = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                helpers.invoke(callback);
+                break;
+              }
             }
-          }
-        }, { rootMargin, threshold });
+          }, { rootMargin, threshold });
+        } catch {
+          watchSlot.set({ node: live, observer: null, key: "" });
+          return;
+        }
         observer.observe(live);
         watchSlot.set({ node: live, observer, key });
         helpers.registerDisposer(() => observer.disconnect(), "infinite-observer");
@@ -21025,7 +21251,7 @@ function renderPlayToggle(className, playing, style) {
 }
 const VideoPlayer = {
   name: "VideoPlayer",
-  description: "Themed native `<video>` wrapper. Pass a `src` URL (or `sources` array for multi-codec fallback) and optional `poster`. Standard controls are visible by default; `controls=false` swaps them for a single play/pause button (click the video too). `autoplay` only works alongside `muted` — browsers block unmuted autoplay. Add `tracks` for captions/subtitles (required for prerecorded video, WCAG 1.2.2). `onEnded` fires on completion; a missing, unsafe, or failing source shows `fallback` and calls `onError`. Use for product demos, tutorials, and any inline video.",
+  description: "Themed native `<video>` wrapper. Pass a `src` URL (or `sources` array for multi-codec fallback) and optional `poster`. Standard controls are visible by default; `controls=false` swaps them for a single play/pause button (click the video too). `autoplay` only works alongside `muted` — browsers block unmuted autoplay. Add `tracks` for captions/subtitles (required for prerecorded video, WCAG 1.2.2). `onEnded` fires on completion. A missing or unsafe source shows `fallback`; a source that fails to load (with `sources`, once every entry has failed) shows it and calls `onError`. Use for product demos, tutorials, and any inline video.",
   props: [
     { name: "src", type: "string", optional: true, description: "Video URL (mp4 / webm / etc.)" },
     { name: "sources", type: "object[]", optional: true, description: "Array of {src, type} entries for multi-codec fallback" },
@@ -21039,7 +21265,7 @@ const VideoPlayer = {
     { name: "tracks", type: "object[]", optional: true, description: "Caption/subtitle tracks: {src, label?, srclang?, kind?, default?} (kind: subtitles|captions|descriptions|chapters|metadata)" },
     { name: "onEnded", type: "callable", optional: true, aliases: ["onended"], description: "Callable invoked when playback reaches the end" },
     { name: "fallback", type: "string", optional: true, description: "Message shown when the source is missing/unsafe or fails to load" },
-    { name: "onError", type: "callable", optional: true, aliases: ["onerror"], description: "Callable invoked when the video fails to load" }
+    { name: "onError", type: "callable", optional: true, aliases: ["onerror"], description: "Callable invoked when the video fails to load (`src`, or every `sources` entry). A missing or unsafe source only shows `fallback`" }
   ],
   render: (_node, props, helpers) => {
     const root = el("figure", { class: "rui-video-player" });
@@ -21064,18 +21290,26 @@ const VideoPlayer = {
       video.defaultMuted = true;
     }
     const sources = asArray(props.sources);
+    let lastSource = null;
+    const tried = [];
     if (sources.length > 0) {
       for (const raw of sources) {
         if (!raw || typeof raw !== "object") continue;
         const s = raw;
         const safeSrc = sanitiseMediaSrc(s.src);
         if (!safeSrc) continue;
-        video.append(el("source", { src: safeSrc, type: asString(s.type) || null }));
+        lastSource = el("source", { src: safeSrc, type: asString(s.type) || null });
+        video.append(lastSource);
+        tried.push(safeSrc);
       }
     } else {
       const safeSrc = sanitiseMediaSrc(props.src);
-      if (safeSrc) video.setAttribute("src", safeSrc);
+      if (safeSrc) {
+        video.setAttribute("src", safeSrc);
+        tried.push(safeSrc);
+      }
     }
+    const sourceKey = tried.join("\n");
     for (const raw of asArray(props.tracks)) {
       if (!raw || typeof raw !== "object") continue;
       const t = raw;
@@ -21102,24 +21336,30 @@ const VideoPlayer = {
       helpers
     );
     const fallbackText = asString(props.fallback);
+    const loadFailedText = fallbackText || "This video could not be loaded.";
+    const failedSlot = helpers.useInstanceState("video-failed-sources", "");
     const hasSource = video.hasAttribute("src") || video.querySelector("source") !== null;
     if (!hasSource) {
       playerWrap.append(renderMediaFallback(fallbackText || "No video source — check `src`."));
     }
-    video.onerror = (event) => {
+    const reportLoadFailure = (event) => {
+      failedSlot.set(sourceKey);
       const live = event.currentTarget ?? event.target;
       const frame = live?.closest(".rui-video-player-frame");
       if (frame && !frame.querySelector(".rui-video-player-empty")) {
-        frame.append(renderMediaFallback(fallbackText || "This video could not be loaded."));
+        frame.append(renderMediaFallback(loadFailedText));
       }
       helpers.invoke(props.onError);
     };
+    video.onerror = reportLoadFailure;
+    if (lastSource) lastSource.onerror = reportLoadFailure;
     if (!showControls) {
       const playBtn = renderPlayToggle("rui-video-player-play", playing.get(), MEDIA_PLAY_BUTTON_STYLE);
       playBtn.onclick = (event) => toggleMediaPlayback(event, ".rui-video-player-frame");
       video.onclick = (event) => toggleMediaPlayback(event, ".rui-video-player-frame");
       playerWrap.append(playBtn);
     }
+    if (hasSource && failedSlot.get() === sourceKey) playerWrap.append(renderMediaFallback(loadFailedText));
     root.append(playerWrap);
     const caption = asString(props.caption);
     if (caption) root.append(el("figcaption", { class: "rui-video-player-caption" }, [caption]));
@@ -21537,7 +21777,7 @@ const Lightbox = {
     { name: "items", type: "any[]" },
     { name: "open", type: "boolean", optional: true, description: "Open/closed; bind a $variable to control externally" },
     { name: "index", type: "number", optional: true, description: "0-indexed current image; typically a $variable" },
-    { name: "onClose", type: "callable", optional: true, aliases: ["onclose"], description: "Callable invoked whenever the viewer closes" },
+    { name: "onClose", type: "callable", optional: true, aliases: ["onclose"], description: "Callable invoked when the viewer closes itself (backdrop, ×, Escape) — not when your program sets a bound `open` to false" },
     { name: "showThumbnail", type: "boolean", optional: true, description: "Render the clickable thumbnail (default: only when `open` is not bound)" }
   ],
   render: (node, props, helpers) => {
@@ -21923,587 +22163,6 @@ function parseRatio(input) {
   const n = Number(input);
   return Number.isFinite(n) && n > 0 ? `${n} / 1` : "16 / 9";
 }
-function renderChildAsNode(helpers, child) {
-  if (child == null) return document.createTextNode("");
-  if (Array.isArray(child)) {
-    const wrap = el("span", { class: "rui-wrapper-fragment", style: "display: contents;" });
-    for (const c of child) {
-      if (c == null) continue;
-      wrap.append(typeof c === "string" ? document.createTextNode(c) : helpers.renderNode(c));
-    }
-    return wrap;
-  }
-  if (typeof child === "string") return document.createTextNode(child);
-  return helpers.renderNode(child);
-}
-const BOXED_UNIVERSALS = ["sx", "style", "animate", "className", "class"];
-function wrapperStyle(universal, transparent) {
-  if (!universal) return transparent;
-  if (universal.hidden === true) return "display: none;";
-  const needsBox = BOXED_UNIVERSALS.some((key) => universal[key] != null);
-  return needsBox ? "display: block;" : transparent;
-}
-function transparentWrapper(className, universal, extraAttrs) {
-  return el("span", {
-    class: `rui-wrapper ${className}`,
-    style: wrapperStyle(universal, "display: contents;"),
-    ...extraAttrs ?? {}
-  });
-}
-function useLiveBox(helpers, key, initial) {
-  const box = helpers.useInstanceState(key, initial).get();
-  box.props = initial.props;
-  return box;
-}
-function useLiveWrapper(helpers, wrapper, key) {
-  const slot = helpers.useInstanceState(key, wrapper);
-  const remembered = slot.get();
-  if (remembered === wrapper || remembered.isConnected) return remembered;
-  slot.set(wrapper);
-  return wrapper;
-}
-function installOnce(helpers, key, target, install) {
-  const slot = helpers.useInstanceState(key, null);
-  if (slot.get() === target) return;
-  slot.set(target);
-  install(target);
-}
-const SELF_ACTING_CHILD = [
-  "a",
-  "button",
-  "input",
-  "select",
-  "textarea",
-  "label",
-  "summary",
-  '[contenteditable="true"]',
-  '[role="button"]',
-  '[role="link"]',
-  '[role="checkbox"]',
-  '[role="switch"]',
-  '[role="menuitem"]',
-  '[role="option"]',
-  '[role="tab"]',
-  '[role="textbox"]'
-].join(",");
-function fromSelfActingChild(wrapper, event) {
-  const target = event.target;
-  if (!target || target === wrapper || typeof target.closest !== "function") return false;
-  const owner = target.closest(SELF_ACTING_CHILD);
-  return owner != null && owner !== wrapper && wrapper.contains(owner);
-}
-function sanitiseInlineStyle(input) {
-  const raw = asString(input).trim();
-  if (!raw) return "";
-  if (/[<>]/.test(raw)) return "";
-  if (/\bexpression\s*\(|\bjavascript\s*:|\bbehavior\s*:|@import\b/i.test(raw)) return "";
-  return raw;
-}
-const CLASS_TOKEN_RE = /^[A-Za-z_][A-Za-z0-9_\-:/]*$/;
-function sanitiseClassList(input) {
-  const tokens = Array.isArray(input) ? input.map((value) => asString(value)) : asString(input).split(/\s+/);
-  return tokens.map((token) => token.trim()).filter((token) => token.length > 0 && token.length <= 64 && CLASS_TOKEN_RE.test(token));
-}
-const OnClick = {
-  name: "OnClick",
-  description: "Make any component clickable. Wraps the child in a transparent span and dispatches `onClick(event)` when the user clicks or taps it. Clicks that land on a self-acting child (a Button, Link, or form control) are left to that child, so nesting is safe. Enter / Space activate it too unless `keyboard: false`. Use to attach click behaviour to components that do not expose an `action` / `onClick` prop (cards, list rows, media tiles, custom layouts).",
-  props: [
-    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"], description: "Component (or array of components) to wrap" },
-    { name: "onClick", type: "callable", required: true, aliases: ["action", "onclick"], description: "Callable invoked on click / tap. Receives the native MouseEvent." },
-    { name: "disabled", type: "boolean", optional: true, description: "Skip firing the handler while truthy (also sets aria-disabled and leaves the tab order)" },
-    { name: "stopPropagation", type: "boolean", optional: true, description: "Call event.stopPropagation() after invoking the handler (default false)" },
-    { name: "role", type: "string", optional: true, description: 'ARIA role for the wrapper (default "button"). Pass "none" when the wrapped element is a list row / table cell whose container owns the semantics.' },
-    { name: "keyboard", type: "boolean", optional: true, description: "Activate on Enter / Space and expose a tab stop (default true). Pass false when the child is already focusable — e.g. a card containing inputs." }
-  ],
-  render: (node, props, helpers) => {
-    const disabled = asBoolean(props.disabled);
-    const keyboard = props.keyboard === void 0 ? true : asBoolean(props.keyboard);
-    const role = asString(props.role, keyboard ? "button" : "");
-    const wrapper = transparentWrapper("rui-on-click", node.universal, {
-      role: role || null,
-      // Only claim a tab stop while we actually handle keys. A disabled wrapper
-      // leaves the tab order but stays announced as a disabled control.
-      tabindex: keyboard ? disabled ? "-1" : "0" : null,
-      "aria-disabled": disabled ? "true" : null,
-      "data-disabled": disabled ? "true" : null
-    });
-    wrapper.append(renderChildAsNode(helpers, props.child));
-    if (!disabled) wrapper.style.cursor = "pointer";
-    const stopProp = asBoolean(props.stopPropagation);
-    const fire = (event) => {
-      if (disabled) return false;
-      const self = event.currentTarget ?? event.target;
-      if (fromSelfActingChild(self, event)) return false;
-      if (stopProp) event.stopPropagation();
-      helpers.invoke(props.onClick, event);
-      return true;
-    };
-    wrapper.onclick = (event) => {
-      fire(event);
-    };
-    wrapper.onkeydown = keyboard ? (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      if (fire(event)) event.preventDefault();
-    } : null;
-    return wrapper;
-  }
-};
-const MOUSE_EVENT_MAP = [
-  { prop: "enter", handler: "onmouseenter" },
-  { prop: "leave", handler: "onmouseleave" },
-  { prop: "hover", handler: "onmouseover" },
-  { prop: "move", handler: "onmousemove" },
-  { prop: "down", handler: "onmousedown" },
-  { prop: "up", handler: "onmouseup" },
-  { prop: "click", handler: "onclick" },
-  { prop: "doubleClick", handler: "ondblclick" },
-  { prop: "contextMenu", handler: "oncontextmenu" },
-  { prop: "wheel", handler: "onwheel" },
-  { prop: "pointerDown", handler: "onpointerdown" },
-  { prop: "pointerMove", handler: "onpointermove" },
-  { prop: "pointerUp", handler: "onpointerup" },
-  { prop: "drag", handler: "ondrag" },
-  { prop: "drop", handler: "ondrop" },
-  { prop: "dragStart", handler: "ondragstart" },
-  { prop: "dragEnd", handler: "ondragend" },
-  { prop: "dragEnter", handler: "ondragenter" },
-  { prop: "dragLeave", handler: "ondragleave" },
-  { prop: "dragOver", handler: "ondragover" }
-];
-const OnMouse = {
-  name: "OnMouse",
-  description: "Attach any combination of mouse / pointer / drag listeners to a component. Pass only the props you need — unused events install no handler so the wrapper is essentially free. Each handler receives the native MouseEvent / PointerEvent / DragEvent / WheelEvent. Use for hover tracking, custom drag-and-drop, context menus, scroll-aware UIs.",
-  props: [
-    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"], description: "Component to wrap" },
-    { name: "enter", type: "callable", optional: true, description: "Fired when the pointer enters the element (mouseenter)" },
-    { name: "leave", type: "callable", optional: true, description: "Fired when the pointer leaves the element (mouseleave)" },
-    { name: "hover", type: "callable", optional: true, description: "Fired on every mouseover inside the element" },
-    { name: "move", type: "callable", optional: true, description: "Fired on every mousemove inside the element" },
-    { name: "down", type: "callable", optional: true, description: "Fired on mousedown" },
-    { name: "up", type: "callable", optional: true, description: "Fired on mouseup" },
-    { name: "click", type: "callable", optional: true, description: "Fired on click / tap" },
-    { name: "doubleClick", type: "callable", optional: true, description: "Fired on double-click" },
-    { name: "contextMenu", type: "callable", optional: true, description: "Fired on right-click (contextmenu)" },
-    { name: "scroll", type: "callable", optional: true, description: "Fired when an inner element scrolls (observed on the capture phase, since scroll does not bubble)" },
-    { name: "wheel", type: "callable", optional: true, description: "Fired on mouse-wheel / trackpad scroll. Not passive, so `event.preventDefault()` works (custom zoom)." },
-    { name: "pointerDown", type: "callable", optional: true, description: "Fired on pointerdown — use instead of `down` for touch / pen drags (gives `pointerId`, pressure, setPointerCapture)" },
-    { name: "pointerMove", type: "callable", optional: true, description: "Fired on pointermove" },
-    { name: "pointerUp", type: "callable", optional: true, description: "Fired on pointerup" },
-    { name: "drag", type: "callable", optional: true, description: "Fired while the element is being dragged" },
-    { name: "drop", type: "callable", optional: true, description: "Fired when something is dropped onto the element" },
-    { name: "dragStart", type: "callable", optional: true, description: "Fired when a drag begins" },
-    { name: "dragEnd", type: "callable", optional: true, description: "Fired when a drag ends" },
-    { name: "dragEnter", type: "callable", optional: true, description: "Fired when a drag enters the element" },
-    { name: "dragLeave", type: "callable", optional: true, description: "Fired when a drag leaves the element" },
-    { name: "dragOver", type: "callable", optional: true, description: "Fired while something is dragged over the element. Call `event.preventDefault()` to make the element a valid drop target." },
-    { name: "draggable", type: "boolean", optional: true, description: 'Make the wrapper itself draggable (sets `draggable="true"`)' },
-    { name: "passiveScroll", type: "boolean", optional: true, description: "Register the `scroll` listener as passive (default true, for scroll performance). Read on the first render." }
-  ],
-  render: (node, props, helpers) => {
-    const wrapper = transparentWrapper("rui-on-mouse", node.universal, {
-      draggable: asBoolean(props.draggable) ? "true" : null
-    });
-    wrapper.append(renderChildAsNode(helpers, props.child));
-    for (const { prop: prop2, handler } of MOUSE_EVENT_MAP) {
-      const callback = props[prop2];
-      if (callback == null) continue;
-      wrapper[handler] = (event) => {
-        helpers.invoke(callback, event);
-      };
-    }
-    const box = useLiveBox(helpers, "rui-on-mouse", { props, wantsScroll: false });
-    if (props.scroll != null) box.wantsScroll = true;
-    if (box.wantsScroll) {
-      const passive = props.passiveScroll === void 0 ? true : asBoolean(props.passiveScroll);
-      const live = useLiveWrapper(helpers, wrapper, "rui-on-mouse-node");
-      installOnce(helpers, "rui-on-mouse-scroll", live, (target) => {
-        target.addEventListener("scroll", (event) => {
-          helpers.invoke(box.props.scroll, event);
-        }, { capture: true, passive });
-      });
-    }
-    return wrapper;
-  }
-};
-const KEYBOARD_EVENT_MAP = [
-  { prop: "onKeyDown", event: "keydown", handler: "onkeydown" },
-  { prop: "onKeyUp", event: "keyup", handler: "onkeyup" },
-  { prop: "onKeyPress", event: "keypress", handler: "onkeypress" }
-];
-const OnKeyboard = {
-  name: "OnKeyboard",
-  description: 'Attach keyboard listeners to a component. Pass any combination of `onKeyDown`, `onKeyUp`, and `onKeyPress`; each handler receives the native KeyboardEvent. Use for navigation and custom focusable widgets. The wrapper is focusable by default (tabindex="0") so it can be reached via Tab; pass `focusable=false` when the child is already focusable. For an app-wide shortcut (Cmd+K, `?`) pass `global: true`, which listens on the window instead so the keys fire wherever focus is.',
-  props: [
-    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
-    { name: "onKeyDown", type: "callable", optional: true, aliases: ["onkeydown"], description: "Fired on keydown" },
-    { name: "onKeyUp", type: "callable", optional: true, aliases: ["onkeyup"], description: "Fired on keyup" },
-    { name: "onKeyPress", type: "callable", optional: true, aliases: ["onkeypress"], description: "Fired on keypress" },
-    { name: "focusable", type: "boolean", optional: true, description: "Make the wrapper focusable via Tab (default true, or false when `global`)" },
-    { name: "global", type: "boolean", optional: true, description: "Listen on the window rather than the wrapper, so the shortcut fires regardless of focus (command palettes, help overlays). Removed when the component leaves the tree." }
-  ],
-  render: (node, props, helpers) => {
-    const isGlobal = asBoolean(props.global);
-    const focusable = props.focusable === void 0 ? !isGlobal : asBoolean(props.focusable);
-    const wrapper = transparentWrapper(
-      "rui-on-keyboard",
-      node.universal,
-      focusable ? { tabindex: "0" } : {}
-    );
-    wrapper.append(renderChildAsNode(helpers, props.child));
-    const box = useLiveBox(helpers, "rui-on-keyboard", {
-      props,
-      detachGlobal: null,
-      disposerInstalled: false
-    });
-    if (!isGlobal) {
-      for (const { prop: prop2, handler } of KEYBOARD_EVENT_MAP) {
-        const callback = props[prop2];
-        if (callback == null) continue;
-        wrapper[handler] = (event) => {
-          helpers.invoke(callback, event);
-        };
-      }
-    }
-    if (isGlobal && box.detachGlobal == null && typeof window !== "undefined") {
-      const bound = KEYBOARD_EVENT_MAP.map(({ prop: prop2, event }) => {
-        const listener = (ev) => {
-          helpers.invoke(box.props[prop2], ev);
-        };
-        window.addEventListener(event, listener);
-        return { event, listener };
-      });
-      box.detachGlobal = () => {
-        for (const { event, listener } of bound) window.removeEventListener(event, listener);
-      };
-      if (!box.disposerInstalled) {
-        box.disposerInstalled = true;
-        helpers.registerDisposer(() => {
-          box.detachGlobal?.();
-          box.detachGlobal = null;
-        }, "rui-on-keyboard-global");
-      }
-    } else if (!isGlobal && box.detachGlobal != null) {
-      box.detachGlobal();
-      box.detachGlobal = null;
-    }
-    return wrapper;
-  }
-};
-const OnFocus = {
-  name: "OnFocus",
-  description: "Attach focus / blur listeners to a component. Use to track input focus rings, custom focus indicators, or autosave-on-blur flows. Listens for the bubbling `focusin` / `focusout` events, so focus entering or leaving any descendant is observed.",
-  props: [
-    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
-    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Fired when focus enters the element or any descendant" },
-    { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Fired when focus leaves the element and all descendants" }
-  ],
-  render: (node, props, helpers) => {
-    const wrapper = transparentWrapper("rui-on-focus", node.universal);
-    wrapper.append(renderChildAsNode(helpers, props.child));
-    const box = useLiveBox(helpers, "rui-on-focus", { props });
-    const live = useLiveWrapper(helpers, wrapper, "rui-on-focus-node");
-    installOnce(helpers, "rui-on-focus-listeners", live, (target) => {
-      target.addEventListener("focusin", (event) => {
-        helpers.invoke(box.props.onFocus, event);
-      });
-      target.addEventListener("focusout", (event) => {
-        helpers.invoke(box.props.onBlur, event);
-      });
-    });
-    return wrapper;
-  }
-};
-const ROOT_MARGIN_TOKEN = /^[+-]?(?:\d+|\d*\.\d+)(?:px|%)$|^[+-]?0$/;
-function sanitiseRootMargin(raw) {
-  const value = asString(raw).trim();
-  if (!value) return "";
-  const tokens = value.split(/\s+/);
-  if (tokens.length > 4) return "";
-  return tokens.every((token) => ROOT_MARGIN_TOKEN.test(token)) ? value : "";
-}
-function resolveObserverRoot(target, selector) {
-  try {
-    const ancestor = target.closest(selector);
-    if (ancestor && ancestor !== target) return ancestor;
-    const root = target.getRootNode();
-    if (root instanceof Document || root instanceof ShadowRoot) {
-      return root.querySelector(selector);
-    }
-  } catch {
-  }
-  return null;
-}
-const OnIntersect = {
-  name: "OnIntersect",
-  description: "Observe whether a component is visible in the viewport (or a scroll container passed as `root`) using IntersectionObserver. Fires `onEnter` the first time the wrapped element becomes visible, `onLeave` when it leaves, and `onChange({visible, ratio})` for every transition. Use for lazy-load sentinels, infinite-scroll triggers, impression analytics, and reveal-on-scroll animations. Set `disabled: true` once there is nothing left to load.",
-  props: [
-    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
-    { name: "onEnter", type: "callable", optional: true, description: "Fired when the element enters the viewport" },
-    { name: "onLeave", type: "callable", optional: true, description: "Fired when the element leaves the viewport" },
-    { name: "onChange", type: "callable", optional: true, description: "Fired with `{visible, ratio}` on every transition" },
-    { name: "threshold", type: "number", optional: true, description: "Visible-ratio threshold 0–1 (default 0.05)" },
-    { name: "rootMargin", type: "string", optional: true, description: 'Root margin as 1–4 px / % lengths (e.g. "0px 0px -64px 0px"). Unit-less values are ignored.' },
-    { name: "root", type: "string", optional: true, description: 'CSS selector for the scroll container to observe inside (e.g. ".rui-scroll-area"). Defaults to the viewport.' },
-    { name: "once", type: "boolean", optional: true, description: "Disconnect after the first entry (default false)" },
-    { name: "disabled", type: "boolean", optional: true, description: "Stop firing the callbacks while truthy — use it when the last page of an infinite list has loaded" }
-  ],
-  render: (node, props, helpers) => {
-    const wrapper = el("span", {
-      class: "rui-wrapper rui-on-intersect",
-      style: wrapperStyle(node.universal, "display: block;")
-    });
-    wrapper.append(renderChildAsNode(helpers, props.child));
-    const ObserverCtor = typeof IntersectionObserver !== "undefined" ? IntersectionObserver : void 0;
-    if (!ObserverCtor) return wrapper;
-    const box = useLiveBox(helpers, "rui-on-intersect", {
-      props,
-      observer: null,
-      node: null,
-      optionsKey: "",
-      lastVisible: null
-    });
-    const rawThreshold = asNumber(props.threshold, 0.05);
-    const threshold = Number.isFinite(rawThreshold) ? Math.max(0, Math.min(1, rawThreshold)) : 0.05;
-    const rootMargin = sanitiseRootMargin(props.rootMargin);
-    const rootSelector = asString(props.root).trim();
-    const optionsKey = `${threshold}|${rootMargin}|${rootSelector}`;
-    const install = (target) => {
-      if (box.observer && box.node === target && box.optionsKey === optionsKey) return;
-      box.observer?.disconnect();
-      box.observer = null;
-      const root = rootSelector ? resolveObserverRoot(target, rootSelector) : null;
-      let observer;
-      try {
-        observer = new ObserverCtor((entries) => {
-          const current = box.props;
-          if (asBoolean(current.disabled)) return;
-          for (const entry of entries) {
-            const visible = entry.isIntersecting;
-            if (visible !== box.lastVisible) {
-              if (visible && current.onEnter != null) helpers.invoke(current.onEnter, entry);
-              if (!visible && box.lastVisible === true && current.onLeave != null) {
-                helpers.invoke(current.onLeave, entry);
-              }
-              box.lastVisible = visible;
-            }
-            if (current.onChange != null) {
-              helpers.invoke(current.onChange, { visible, ratio: entry.intersectionRatio });
-            }
-            if (asBoolean(current.once) && visible) {
-              box.observer?.disconnect();
-              return;
-            }
-          }
-        }, {
-          threshold,
-          ...rootMargin ? { rootMargin } : {},
-          ...root ? { root } : {}
-        });
-      } catch {
-        return;
-      }
-      observer.observe(target);
-      box.observer = observer;
-      box.node = target;
-      box.optionsKey = optionsKey;
-      helpers.registerDisposer(() => observer.disconnect(), "rui-onintersect-io");
-    };
-    const live = useLiveWrapper(helpers, wrapper, "rui-on-intersect-node");
-    if (rootSelector && !live.isConnected) {
-      deferToPaint(() => {
-        if (live.isConnected) install(live);
-      });
-    } else {
-      install(live);
-    }
-    return wrapper;
-  }
-};
-function serialiseDeps(deps) {
-  if (deps == null) return null;
-  const list = Array.isArray(deps) ? deps : [deps];
-  return list.map((value) => {
-    if (value == null) return String(value);
-    const kind = typeof value;
-    if (kind === "object" || kind === "function") {
-      try {
-        return JSON.stringify(value) ?? "[unserialisable]";
-      } catch {
-        return "[unserialisable]";
-      }
-    }
-    return `${kind}:${String(value)}`;
-  }).join("|");
-}
-const runSoon = (fn) => {
-  if (typeof queueMicrotask === "function") queueMicrotask(fn);
-  else void Promise.resolve().then(fn);
-};
-function runUnmount(box, helpers) {
-  if (!box.mounted) return;
-  box.mounted = false;
-  const target = box.live;
-  const callback = box.props.onUnmount;
-  if (target == null || callback == null) return;
-  runSoon(() => helpers.invoke(callback, target));
-}
-const OnMount = {
-  name: "OnMount",
-  description: "Run imperative code against the wrapped component's rendered DOM node. `onMount(node)` fires once, on a microtask after the child is attached to the DOM — the Aktion way to get a DOM ref (measure an element, focus it, or hand it to an imperative library such as a chart / map / editor). `onUnmount(node)` fires when the component leaves the tree. Pass `deps` to tear down and re-run the pair when the values in it change. Pair with `$ref(...)` to stash the node across renders.",
-  props: [
-    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
-    { name: "onMount", type: "callable", optional: true, description: "`(node) => void` — fired once after the wrapped element is attached." },
-    { name: "onUnmount", type: "callable", optional: true, description: "`(node) => void` — fired when the wrapped element leaves the tree." },
-    { name: "deps", type: "any[]", optional: true, description: "Re-run `onUnmount` + `onMount` whenever a value in this list changes (e.g. `deps: [$docId]` to rebind an editor to another document)." }
-  ],
-  render: (node, props, helpers) => {
-    const wrapper = el("span", {
-      class: "rui-wrapper rui-on-mount",
-      style: wrapperStyle(node.universal, "display: contents;")
-    });
-    wrapper.append(renderChildAsNode(helpers, props.child));
-    const box = useLiveBox(helpers, "rui-on-mount", {
-      props,
-      live: null,
-      mounted: false,
-      depsKey: null,
-      disposer: null
-    });
-    const depsKey = serialiseDeps(props.deps);
-    if (box.mounted && depsKey !== box.depsKey) runUnmount(box, helpers);
-    if (!box.mounted) {
-      box.depsKey = depsKey;
-      const fire = () => {
-        if (box.mounted) return;
-        const fresh = wrapper.firstElementChild ?? wrapper;
-        const target = fresh.isConnected ? fresh : box.live?.isConnected ? box.live : null;
-        if (!target) return;
-        box.mounted = true;
-        box.live = target;
-        helpers.invoke(box.props.onMount, target);
-      };
-      runSoon(fire);
-    }
-    if (!box.disposer) box.disposer = () => {
-      runUnmount(box, helpers);
-    };
-    helpers.registerDisposer(box.disposer, "rui-on-mount-unmount");
-    return wrapper;
-  }
-};
-function renderLinkChildren(helpers, child) {
-  if (child == null) return [];
-  if (typeof child === "string") return [document.createTextNode(child)];
-  if (Array.isArray(child)) {
-    return child.filter((c) => c != null).map((c) => typeof c === "string" ? document.createTextNode(c) : helpers.renderNode(c));
-  }
-  return [helpers.renderNode(child)];
-}
-const ABSOLUTE_URL_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:|^\/\//;
-const DOWNLOAD_NAME_RE = /^[A-Za-z0-9._ ()-]{1,128}$/;
-function routerHref(helpers, to) {
-  if (to.startsWith("#")) return to;
-  const path = to.startsWith("/") ? to : `/${to}`;
-  const mode = typeof helpers.router?.getMode === "function" ? helpers.router.getMode() : "hash";
-  return mode === "history" ? path : `#${path}`;
-}
-const Link = {
-  name: "Link",
-  description: 'Anchor link. Accepts either a plain string label or a wrapped component as its positional child. Pass `to` for client-side router navigation (no page reload) or `href` for a regular anchor. `external: true` opens the link in a new tab with `rel="noopener noreferrer"`. `disabled: true` renders a non-navigating link (pagination edges, gated steps). Use to make any component clickable as a link — cards, icons, badges, list rows.',
-  props: [
-    { name: "label", type: "string | Node", positional: true, required: true, aliases: ["child", "children"], description: "Visible text OR a wrapped component" },
-    { name: "to", type: "string", optional: true, description: "Router path (preferred). Navigates via the runtime router on click." },
-    { name: "href", type: "string", optional: true, description: "Standard anchor href. Used when `to` is omitted." },
-    { name: "external", type: "boolean", optional: true, description: 'Open in a new tab (`target="_blank"`, `rel="noopener noreferrer"`)' },
-    { name: "variant", aliases: ["tone"], type: "string", optional: true, enum: ["default", "subtle"] },
-    { name: "disabled", type: "boolean", optional: true, description: "Render as a non-navigating link: no href, out of the tab order, announced as disabled" },
-    { name: "onClick", type: "callable", optional: true, aliases: ["onclick"], description: "Ran before navigation (analytics, closing a drawer). Call `event.preventDefault()` inside it to cancel the navigation." },
-    { name: "download", type: "boolean | string", optional: true, description: "Download the target instead of navigating. Pass a string to suggest a filename." }
-  ],
-  render: (_node, props, helpers) => {
-    const to = asString(props.to).trim();
-    const external = asBoolean(props.external);
-    const disabled = asBoolean(props.disabled);
-    const isRoute = to !== "" && !ABSOLUTE_URL_RE.test(to);
-    const safeHref = disabled ? null : isRoute ? routerHref(helpers, to) : sanitiseHref(to || props.href, "#");
-    const download = props.download;
-    const downloadName = typeof download === "string" ? download.trim() : "";
-    const downloadAttr = download === true || downloadName === "true" ? "" : downloadName !== "" && downloadName !== "false" && DOWNLOAD_NAME_RE.test(downloadName) ? downloadName : null;
-    const variant = asString(props.variant, "default");
-    const anchor = el("a", {
-      class: "rui-link",
-      "data-variant": variant,
-      href: safeHref,
-      // A disabled link keeps its place in the layout but is not activatable:
-      // no href (so Enter does nothing), no tab stop, announced as disabled.
-      role: disabled ? "link" : null,
-      "aria-disabled": disabled ? "true" : null,
-      "data-disabled": disabled ? "true" : null,
-      tabindex: disabled ? "-1" : null,
-      target: external && !disabled ? "_blank" : null,
-      rel: external && !disabled ? "noopener noreferrer" : null,
-      download: downloadAttr
-    });
-    for (const node of renderLinkChildren(helpers, props.label)) anchor.append(node);
-    if (external && !disabled) {
-      anchor.append(el("span", { class: "rui-visually-hidden" }, [" (opens in new tab)"]));
-    }
-    anchor.onclick = (event) => {
-      if (disabled) {
-        event.preventDefault();
-        return;
-      }
-      helpers.invoke(props.onClick, event);
-      if (!isRoute || external || downloadAttr != null) return;
-      if (event.defaultPrevented) return;
-      if (event.button !== 0) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      event.preventDefault();
-      helpers.router.navigate(to);
-    };
-    return anchor;
-  }
-};
-function applyCss(target, classes, style) {
-  for (const token of classes) target.classList.add(token);
-  if (!style) return;
-  const existing = target.getAttribute("style");
-  target.setAttribute("style", existing ? `${existing};${style}` : style);
-}
-const Css = {
-  name: "Css",
-  description: "Apply raw CSS class names and / or an inline style string to a wrapped component. The styling is merged onto the rendered child's DOM element — no extra wrapper element is added when the child renders as one element (including an `Svg` root). Several children are each styled individually; a plain-text child gets a wrapping span to carry the styling. Reach for `Css` only when the component's own props cannot express the styling (use `Box`/`Stack`/`Grid` props for layout, `Theme` for tokens, `Styles` + selector classes for sweeping changes).",
-  props: [
-    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
-    { name: "style", type: "string", optional: true, description: 'Inline CSS declarations (e.g. "padding: 16px; background: #eef;")' },
-    { name: "class", type: "string | string[]", optional: true, aliases: ["className", "classes"], description: "Class name (space-separated string or array). Tokens must match `[A-Za-z_][A-Za-z0-9_-:/]*`." }
-  ],
-  render: (_node, props, helpers) => {
-    const safeClasses = sanitiseClassList(props.class);
-    const safeStyle = sanitiseInlineStyle(props.style);
-    if (Array.isArray(props.child)) {
-      const fragment = renderChildAsNode(helpers, props.child);
-      for (const child of Array.from(fragment.children)) applyCss(child, safeClasses, safeStyle);
-      return fragment;
-    }
-    const rendered = renderChildAsNode(helpers, props.child);
-    if (rendered instanceof Element) {
-      applyCss(rendered, safeClasses, safeStyle);
-      return rendered;
-    }
-    const span = el("span", { class: "rui-css" });
-    span.append(rendered);
-    applyCss(span, safeClasses, safeStyle);
-    return span;
-  }
-};
-function attachOnChange(element, callback, helpers, options) {
-  if (callback === null || callback === void 0) return;
-  const eventName = options.event ?? "change";
-  element.addEventListener(eventName, () => {
-    helpers.invoke(callback, options.getValue(element));
-  });
-}
 const DEFAULT_RTE_TOOLS = [
   { key: "bold", command: "bold", icon: "bold", label: "Bold" },
   { key: "italic", command: "italic", icon: "italic", label: "Italic" },
@@ -22654,7 +22313,8 @@ const RichTextEditor = {
     const liveSlot = helpers.useInstanceState("live", null);
     const assertedSlot = helpers.useInstanceState("asserted", null);
     const emptyNow = asserts ? isEmpty(initial) : emptySlot.get() ?? isEmpty(initial);
-    const heightStyle = `min-height:${asString(props.minHeight, "160px")};` + (asString(props.maxHeight) ? `max-height:${asString(props.maxHeight)};` : "");
+    const maxHeight = sanitiseCssLength(props.maxHeight, "");
+    const heightStyle = `min-height:${sanitiseCssLength(props.minHeight, "160px")};` + (maxHeight ? `max-height:${maxHeight};` : "");
     const editor = el("div", {
       class: "rui-rich-text-content",
       id,
@@ -22728,12 +22388,9 @@ const RichTextEditor = {
     };
     editor.onkeyup = (event) => syncRteToolStates(event.currentTarget ?? event.target);
     editor.onmouseup = (event) => syncRteToolStates(event.currentTarget ?? event.target);
-    attachOnChange(editor, props.onChange, helpers, {
-      event: "input",
-      getValue: (n) => readSanitisedHtml(n)
-    });
+    bindChangeHandler(editor, props, helpers, { event: "input", getValue: readSanitisedHtml });
     root.append(editor);
-    return withFieldShell(root, props, { idKey: "id" });
+    return withFieldShell(root, props, { idKey: "id", ownsName: true });
   }
 };
 const CODE_LANGUAGES = ["text", "javascript", "typescript", "json", "html", "css", "bash", "python", "sql", "markdown"];
@@ -22823,8 +22480,8 @@ const CodeEditor = {
     const readonly = asBoolean(props.readonly);
     const disabled = asBoolean(props.disabled);
     const inert = readonly || disabled;
-    const minHeight = asString(props.minHeight, "200px");
-    const maxHeight = asString(props.maxHeight);
+    const minHeight = sanitiseCssLength(props.minHeight, "200px");
+    const maxHeight = sanitiseCssLength(props.maxHeight, "");
     const sourceSlot = helpers.useInstanceState("source", null);
     const asserts = props.value !== void 0 && props.value !== null;
     const source = asserts ? asString(props.value) : sourceSlot.get() ?? "";
@@ -22934,54 +22591,62 @@ const CodeEditor = {
       reindent(target, e.shiftKey, " ".repeat(tabSize));
     };
     if (!inert) {
-      attachOnChange(textarea, props.onChange, helpers, {
-        event: "input",
-        getValue: readSource
-      });
+      bindChangeHandler(textarea, props, helpers, { event: "input", getValue: (live) => live.value });
     }
     body.append(textarea);
     root.append(body);
-    return withFieldShell(root, props, { idKey: "id" });
+    return withFieldShell(root, props, { idKey: "id", ownsName: true });
   }
 };
 const CONTEXT_TRIGGERS = ["contextmenu", "click", "longpress"];
 const CONTEXT_PLACEMENTS = ["bottom", "top", "left", "right"];
 const LONG_PRESS_MS = 500;
 const LONG_PRESS_SLOP = 10;
+const CONTEXT_ITEM_ROLES = MenuItem.props.find((p) => p.name === "role")?.enum ?? ["menuitem"];
+const CONTEXT_ROW = "[role^=menuitem]";
+const CONTEXT_SEPARATOR = {
+  label: "",
+  action: null,
+  icon: "",
+  shortcut: "",
+  variant: "default",
+  disabled: false,
+  separator: true,
+  checked: null,
+  role: "menuitem",
+  keepOpen: false
+};
+function contextRow(source) {
+  const role = asString(source.role, "menuitem");
+  return {
+    label: asString(source.label),
+    action: source.action,
+    icon: asString(source.icon),
+    shortcut: asString(source.shortcut),
+    variant: asString(source.variant, "default"),
+    disabled: asBoolean(source.disabled),
+    separator: false,
+    checked: source.checked === void 0 || source.checked === null ? null : asBoolean(source.checked),
+    role: CONTEXT_ITEM_ROLES.includes(role) ? role : "menuitem",
+    keepOpen: asBoolean(source.keepOpen)
+  };
+}
 function extractContextItem(raw) {
-  if (!raw) return null;
-  if (typeof raw === "object") {
-    const node = raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const node = raw;
+  if (node.__kind !== void 0) {
     if (node.__kind === "Component" && node.name === "MenuItem" && Array.isArray(node.args)) {
-      const args = node.args;
-      return {
-        label: asString(args[0]),
-        action: args[1],
-        icon: asString(args[2]),
-        shortcut: asString(args[3]),
-        variant: asString(args[4], "default"),
-        disabled: asBoolean(args[5]),
-        separator: false
-      };
+      const [label2, action, icon, shortcut, variant, disabled, checked, role, keepOpen] = node.args;
+      return contextRow({ label: label2, action, icon, shortcut, variant, disabled, checked, role, keepOpen });
     }
-    if (node.__kind === "Component" && node.name === "MenuSeparator") {
-      return { label: "", action: null, icon: "", shortcut: "", variant: "default", disabled: false, separator: true };
-    }
-    const r = raw;
-    if (r.separator) {
-      return { label: "", action: null, icon: "", shortcut: "", variant: "default", disabled: false, separator: true };
-    }
-    return {
-      label: asString(r.label),
-      action: r.action,
-      icon: asString(r.icon),
-      shortcut: asString(r.shortcut),
-      variant: asString(r.variant, "default"),
-      disabled: asBoolean(r.disabled),
-      separator: false
-    };
+    if (node.__kind === "Component" && node.name === "MenuSeparator") return CONTEXT_SEPARATOR;
+    return null;
   }
-  return null;
+  const r = raw;
+  if (r.separator) return CONTEXT_SEPARATOR;
+  const label = asString(r.label);
+  if (!label) return null;
+  return contextRow({ ...r, label, action: r.onClick ?? r.action, variant: r.variant ?? r.tone });
 }
 const POINTER_MENUS = /* @__PURE__ */ new WeakMap();
 const LONG_PRESSES = /* @__PURE__ */ new WeakMap();
@@ -23094,8 +22759,8 @@ const openMenuAt = (origin, anchor, ctx) => {
     }
   });
   host.addEventListener("contextmenu", onContextElsewhere, true);
-  const rows = panel.querySelectorAll("[role=menuitem]");
-  (panel.querySelector("[role=menuitem]:not([aria-disabled='true'])") ?? rows[0])?.focus();
+  const rows = panel.querySelectorAll(CONTEXT_ROW);
+  (panel.querySelector(`${CONTEXT_ROW}:not([aria-disabled='true'])`) ?? rows[0])?.focus();
 };
 const setMenuOpen = (origin, next, anchor, ctx) => {
   ctx.openSlot.set(next);
@@ -23106,10 +22771,10 @@ const setMenuOpen = (origin, next, anchor, ctx) => {
 };
 const ContextMenu = {
   name: "ContextMenu",
-  description: 'Right-click (or long-press on touch) menu that attaches to a child node. Wraps `target` and shows the menu at the pointer. Items are `MenuItem(...)` nodes, `MenuSeparator()` entries, or `{label, action, icon?, shortcut?, variant?, disabled?, separator?}` objects. Set `trigger: "click"` for the overflow-menu pattern, `disabled` to suppress it on locked rows, and pass a `$variable` as `open` to observe or drive the open state. Shift+F10 (or the ContextMenu key) opens it from the keyboard, and ArrowUp/ArrowDown/Home/End plus typeahead move between items while Escape closes it and returns focus to the target. Use on table rows, tree nodes, kanban cards, file browser entries.',
+  description: 'Right-click (or long-press on touch) menu that attaches to a child node. Wraps `target` and shows the menu at the pointer. Items are `MenuItem(...)` nodes (including `checked` / `role` / `keepOpen` rows), `MenuSeparator()` entries, or `{label, onClick (or action), icon?, shortcut?, variant (or tone)?, disabled?, checked?, role?, keepOpen?}` / `{separator: true}` objects; anything else is ignored. Set `trigger: "click"` for the overflow-menu pattern, `disabled` to suppress it on locked rows, and pass a `$variable` as `open` to observe or drive the open state. Shift+F10 (or the ContextMenu key) opens it from the keyboard, and ArrowUp/ArrowDown/Home/End plus typeahead move between items while Escape closes it and returns focus to the target. Use on table rows, tree nodes, kanban cards, file browser entries.',
   props: [
     { name: "target", type: "Node", description: "Child node the menu is bound to" },
-    { name: "items", type: "any[]", description: "MenuItem nodes or {label, action} objects" },
+    { name: "items", type: "any[]", description: "MenuItem / MenuSeparator nodes or {label, onClick} objects; other values are ignored" },
     { name: "label", type: "string", optional: true, description: "ARIA label for the menu" },
     { name: "trigger", type: "string", optional: true, enum: CONTEXT_TRIGGERS, description: "What opens the menu (default `contextmenu`)" },
     { name: "disabled", type: "boolean", optional: true, description: "Never open the menu (locked / read-only rows)" },
@@ -23170,25 +22835,41 @@ const ContextMenu = {
         menu.append(el("div", { class: "rui-menu-separator", role: "separator" }));
         continue;
       }
+      const role = item.role !== "menuitem" ? item.role : item.checked !== null ? "menuitemcheckbox" : "menuitem";
+      const checkable = role !== "menuitem";
       const btn = el("button", {
         type: "button",
         class: "rui-menu-item",
-        role: "menuitem",
+        role,
         "data-variant": item.variant,
         // `aria-disabled`, not the native attribute: a `role="menu"` row must
         // stay focusable so a keyboard user learns the action exists but is
         // unavailable. No click handler is attached below, so it is inert.
         "aria-disabled": item.disabled ? "true" : null,
         "data-disabled": item.disabled ? "true" : null,
+        "aria-checked": checkable ? item.checked === true ? "true" : "false" : null,
+        "data-checked": item.checked === true ? "true" : null,
+        "data-keep-open": item.keepOpen ? "true" : null,
         // Roving focus: the menu is one tab stop and Up/Down move within it.
         tabindex: "-1"
       });
+      if (checkable) {
+        btn.append(el("span", {
+          class: "rui-menu-item-check",
+          "aria-hidden": "true",
+          style: "width:14px;display:inline-flex;justify-content:center"
+        }, [item.checked === true ? "✓" : ""]));
+      }
       const iconNode = renderIcon(item.icon, { className: "rui-menu-item-icon" });
       if (iconNode) btn.append(iconNode);
       btn.append(el("span", { class: "rui-menu-item-label" }, [item.label]));
       if (item.shortcut) btn.append(el("span", { class: "rui-menu-item-shortcut" }, [item.shortcut]));
       if (!item.disabled) {
         btn.onclick = (event) => {
+          if (item.keepOpen) {
+            helpers.invoke(item.action);
+            return;
+          }
           const origin = event.currentTarget ?? event.target;
           openSlot.set(false);
           if (ctx.stateName) helpers.setState(ctx.stateName, false);
@@ -23268,7 +22949,7 @@ const ContextMenu = {
       const panel = livePanelFor(from);
       if (!panel || panel.getAttribute("data-open") !== "true") return;
       if (typeahead && !panel.contains(from)) return;
-      const options = Array.from(panel.querySelectorAll("[role=menuitem]"));
+      const options = Array.from(panel.querySelectorAll(CONTEXT_ROW));
       if (options.length === 0) return;
       const active = panel.getRootNode().activeElement;
       const found = options.findIndex((o) => o === active);
@@ -23410,7 +23091,7 @@ const ColorPicker = {
     { name: "id", type: "string" },
     { name: "value", type: "string", optional: true, description: "Bound color value (typically $variable)" },
     { name: "label", type: "string", optional: true },
-    { name: "swatches", type: "string[]", optional: true, description: "Preset colors (default to a 12-color palette)" },
+    { name: "swatches", type: "string[]", optional: true, description: "Preset colors as hex, rgb() or hsl() strings (default: a 12-color palette); other values, such as named colors, are skipped" },
     { name: "disabled", type: "boolean", optional: true },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the newly-selected color string" },
     { name: "format", type: "string", optional: true, enum: COLOR_FORMATS, description: "Notation written back to state / onChange (default `hex`)" },
@@ -23490,9 +23171,7 @@ const ColorPicker = {
         readColor(event.currentTarget ?? event.target);
       };
     }
-    if (!disabled) {
-      attachOnChange(colorInput, props.onChange, helpers, { event: "input", getValue: readColor });
-    }
+    if (!disabled) bindChangeHandler(colorInput, props, helpers, { event: "input", getValue: readColor });
     if (!disabled) {
       textInput.oninput = (event) => {
         const field = event.currentTarget ?? event.target;
@@ -23521,17 +23200,16 @@ const ColorPicker = {
       const palette = swatches.length > 0 ? swatches : DEFAULT_SWATCHES;
       const activeHex = normaliseHex(display, allowAlpha);
       for (const swatch of palette) {
-        const safeColor = normaliseHex(swatch, allowAlpha) || sanitiseCssColor(swatch);
-        if (!safeColor) continue;
-        const canonical = normaliseHex(safeColor, allowAlpha);
+        const canonical = normaliseHex(swatch, allowAlpha);
+        if (!canonical) continue;
         const btn = el("button", {
           type: "button",
           class: "rui-color-picker-swatch",
-          style: `background:${safeColor}`,
-          "aria-label": safeColor,
-          title: safeColor,
+          style: `background:${canonical}`,
+          "aria-label": canonical,
+          title: canonical,
           "data-color": canonical,
-          "data-active": canonical !== "" && canonical === activeHex ? "true" : "false",
+          "data-active": canonical === activeHex ? "true" : "false",
           disabled: disabled ? "" : null
         });
         btn.onclick = (event) => {
@@ -23539,7 +23217,7 @@ const ColorPicker = {
           const live = origin.closest(".rui-color-picker");
           const chip = live?.querySelector(".rui-color-picker-color");
           if (!chip) return;
-          const picked = parseColor(origin.getAttribute("data-color") ?? safeColor);
+          const picked = parseColor(origin.getAttribute("data-color") ?? canonical);
           if (!picked) return;
           const field = live?.querySelector(".rui-color-picker-hex");
           if (field) field.value = formatColor(picked, format, allowAlpha);
@@ -23550,7 +23228,7 @@ const ColorPicker = {
       }
       root.append(swatchRow);
     }
-    return withFieldShell(root, props, { idKey: "id" });
+    return withFieldShell(root, props, { idKey: "id", ownsName: true });
   }
 };
 const Gauge = {
@@ -23697,8 +23375,8 @@ const Heatmap = {
   name: "Heatmap",
   description: "Color-intensity matrix grid (calendar-style or correlation-style). Pass `xLabels`, `yLabels`, and a `values` array of arrays (rows × columns). Cell intensity scales across the data range — pin it with `min`/`max` when two heatmaps must be comparable (or for a -1..1 correlation matrix). Set `showValues: false` for a GitHub-style colour-only grid. Use for activity heatmaps, schedule density, correlation matrices.",
   props: [
-    { name: "xLabels", type: "string[]" },
-    { name: "yLabels", type: "string[]" },
+    { name: "xLabels", type: "string[]", optional: true, description: "Column labels; a column without one is numbered from 1" },
+    { name: "yLabels", type: "string[]", optional: true, description: "Row labels; a row without one is numbered from 1" },
     { name: "values", type: "number[][]", description: "Matrix indexed by row (y), then column (x)" },
     { name: "title", type: "string", optional: true },
     { name: "tone", aliases: ["variant"], type: "string", optional: true, enum: ["primary", "success", "warning", "danger", "info"] },
@@ -23754,7 +23432,7 @@ const Heatmap = {
       headerRow.append(el("div", {
         class: "rui-heatmap-cell rui-heatmap-xlabel",
         role: "columnheader"
-      }, [xLabels[c] ?? ""]));
+      }, [xLabels[c] ?? String(c + 1)]));
     }
     tableWrap.append(headerRow);
     valueRows.forEach((row, rIdx) => {
@@ -23844,11 +23522,11 @@ const RadarChart = {
     svg.setAttribute("style", `max-width:${vbWidth}px;max-height:${size2}px;margin-inline:auto`);
     const rings = 4;
     for (let i = 1; i <= rings; i += 1) {
-      const radius = r / rings * i;
+      const radius2 = r / rings * i;
       const points = [];
       for (let j = 0; j < n; j += 1) {
         const angle = Math.PI * 2 * j / n - Math.PI / 2;
-        points.push(`${(cx + radius * Math.cos(angle)).toFixed(1)},${(cy + radius * Math.sin(angle)).toFixed(1)}`);
+        points.push(`${(cx + radius2 * Math.cos(angle)).toFixed(1)},${(cy + radius2 * Math.sin(angle)).toFixed(1)}`);
       }
       svg.append(svgEl$1("polygon", {
         points: points.join(" "),
@@ -23963,7 +23641,7 @@ function readScatterSeries(raw) {
   return raw.map((entry, i) => {
     const node = entry;
     const name = asString(node.args?.[0], `Series ${i + 1}`);
-    const color2 = asString(node.args?.[2]).trim();
+    const color2 = sanitiseCssColor(node.args?.[2]);
     const raw2 = node.args?.[3] ?? node.args?.[1];
     const points = asArray(raw2).map((p) => {
       if (Array.isArray(p)) {
@@ -24243,13 +23921,13 @@ function stepAttr(raw) {
   if (typeof raw === "string" && raw.trim().toLowerCase() === "any") return "any";
   return String(Math.max(1, Math.floor(asNumber(raw, 60))));
 }
-function padSlots(chars, length) {
-  const out = chars.slice(0, length).map((c) => c.slice(0, 1));
-  while (out.length < length) out.push("");
+function padSlots(chars, length2) {
+  const out = chars.slice(0, length2).map((c) => c.slice(0, 1));
+  while (out.length < length2) out.push("");
   return out;
 }
 function renderPin(opts) {
-  const { id, length, type, chars, disabled, mask, groupLabel, onSlots, onFocusChange } = opts;
+  const { id, name, length: length2, type, chars, disabled, mask, groupLabel, onSlots, onFocusChange } = opts;
   const alphanumeric = type === "alphanumeric";
   const root = el("div", {
     class: "rui-pin-input",
@@ -24257,10 +23935,10 @@ function renderPin(opts) {
     // The slots only make sense as a set: without group semantics a screen
     // reader announced "edit text" eight times with no name for the code.
     role: "group",
-    "aria-label": groupLabel || (alphanumeric ? `${length}-character code` : `${length}-digit code`)
+    "aria-label": groupLabel || (alphanumeric ? `${length2}-character code` : `${length2}-digit code`)
   });
   const inputs = [];
-  for (let i = 0; i < length; i += 1) {
+  for (let i = 0; i < length2; i += 1) {
     const input = el("input", {
       class: "rui-pin-input-slot",
       id: i === 0 ? id : null,
@@ -24272,7 +23950,7 @@ function renderPin(opts) {
       autocomplete: "one-time-code",
       inputmode: alphanumeric ? "text" : "numeric",
       type: mask ? "password" : "text",
-      "aria-label": alphanumeric ? `Character ${i + 1} of ${length}` : `Digit ${i + 1} of ${length}`,
+      "aria-label": alphanumeric ? `Character ${i + 1} of ${length2}` : `Digit ${i + 1} of ${length2}`,
       // Asserting the value on every render is deliberate here: the slot array
       // (gaps included) is the component's model, and re-asserting it is what
       // restores a cleared middle slot in the right box.
@@ -24282,12 +23960,25 @@ function renderPin(opts) {
     inputs.push(input);
     root.append(input);
   }
+  root.append(el("input", {
+    type: "hidden",
+    class: "rui-pin-input-value",
+    name,
+    value: chars.join(""),
+    disabled: disabled ? "" : null
+  }));
   const getLiveSlots = (origin) => {
     const pinRoot = origin.closest(".rui-pin-input");
     if (!pinRoot) return inputs;
     return Array.from(pinRoot.querySelectorAll(".rui-pin-input-slot"));
   };
-  const collectLive = (origin) => padSlots(getLiveSlots(origin).map((slot) => slot.value), length);
+  const collectLive = (origin) => padSlots(getLiveSlots(origin).map((slot) => slot.value), length2);
+  const reportSlots = (origin) => {
+    const slots = collectLive(origin);
+    const hidden = origin.closest(".rui-pin-input")?.querySelector("input.rui-pin-input-value");
+    if (hidden) hidden.value = slots.join("");
+    onSlots(slots);
+  };
   inputs.forEach((input, idx) => {
     input.oninput = (event) => {
       const target = event.currentTarget ?? event.target;
@@ -24297,17 +23988,17 @@ function renderPin(opts) {
       else v = v.replace(/[^A-Za-z0-9]/g, "");
       if (v.length > 1) {
         const chars2 = v.split("");
-        chars2.slice(0, length - idx).forEach((c, k) => {
+        chars2.slice(0, length2 - idx).forEach((c, k) => {
           const next = liveSlots[idx + k];
           if (next) next.value = c;
         });
-        const lastFilled = Math.min(idx + chars2.length, length - 1);
+        const lastFilled = Math.min(idx + chars2.length, length2 - 1);
         liveSlots[lastFilled]?.focus();
       } else {
         target.value = v;
-        if (v && idx < length - 1) liveSlots[idx + 1]?.focus();
+        if (v && idx < length2 - 1) liveSlots[idx + 1]?.focus();
       }
-      onSlots(collectLive(target));
+      reportSlots(target);
     };
     input.onkeydown = (event) => {
       const e = event;
@@ -24320,11 +24011,11 @@ function renderPin(opts) {
           prev.value = "";
           prev.focus();
         }
-        onSlots(collectLive(target));
+        reportSlots(target);
       } else if (e.key === "ArrowLeft" && idx > 0) {
         e.preventDefault();
         liveSlots[idx - 1]?.focus();
-      } else if (e.key === "ArrowRight" && idx < length - 1) {
+      } else if (e.key === "ArrowRight" && idx < length2 - 1) {
         e.preventDefault();
         liveSlots[idx + 1]?.focus();
       }
@@ -24365,7 +24056,7 @@ const PinInput = {
   ],
   render: (node, props, helpers) => {
     const id = asString(props.id) || autoId(helpers, "rui-pin-input");
-    const length = Math.max(1, Math.min(12, Math.floor(asNumber(props.length, 4))));
+    const length2 = Math.max(1, Math.min(12, Math.floor(asNumber(props.length, 4))));
     const type = asString(props.type, "numeric");
     const value = asString(props.value);
     const disabled = asBoolean(props.disabled);
@@ -24374,11 +24065,12 @@ const PinInput = {
     const slotsSlot = helpers.useInstanceState("slots", []);
     const stored = slotsSlot.get();
     const asserted = props.value !== null && props.value !== void 0;
-    const inSync = stored.length === length && stored.join("") === value;
-    const chars = !asserted || inSync ? padSlots(stored, length) : padSlots(value.split(""), length);
+    const inSync = stored.length === length2 && stored.join("") === value;
+    const chars = !asserted || inSync ? padSlots(stored, length2) : padSlots(value.split(""), length2);
     const root = renderPin({
       id,
-      length,
+      name: asString(props.name, id),
+      length: length2,
       type,
       chars,
       disabled,
@@ -24389,7 +24081,7 @@ const PinInput = {
         const joined = slots.join("");
         if (stateName) helpers.setState(stateName, joined);
         helpers.invoke(props.onChange, joined);
-        if (joined.length === length) helpers.invoke(props.onComplete, joined);
+        if (joined.length === length2) helpers.invoke(props.onComplete, joined);
       },
       onFocusChange: props.onBlur != null || props.onFocus != null ? (kind, slots) => {
         helpers.invoke(kind === "blur" ? props.onBlur : props.onFocus, slots.join(""));
@@ -24405,7 +24097,7 @@ const PinInput = {
         first.focus();
       });
     }
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, root, { native: false });
     return shell;
   }
@@ -24520,14 +24212,14 @@ const PasswordInput = {
       labelRow.append(el("span", { class: "rui-password-input-strength-label" }, [strength.label]));
       root.append(labelRow);
     }
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input);
     return shell;
   }
 };
 const TagInput = {
   name: "TagInput",
-  description: "Tag/chip input — type a value, press Enter (or comma) to commit, click × on a chip to remove. Tabbing away commits the pending text too. Pass a `$variable` (array of strings) as `value` for two-way binding. Use for keywords, recipients, labels, skills, allowlists. Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the labelled field shell.",
+  description: "Tag/chip input — type a value, press Enter (or comma) to commit, click × on a chip to remove. Tabbing away commits the pending text too. Pass a `$variable` (array of strings) as `value` for two-way binding; inside a form each tag is submitted as its own `name` entry, as a multiple select does. Use for keywords, recipients, labels, skills, allowlists. Pass `suggestions` for autocomplete and `label`/`hint`/`error` for the labelled field shell.",
   props: [
     { name: "id", type: "string" },
     { name: "value", type: "string[]", optional: true, description: "Bound array of tag values" },
@@ -24574,7 +24266,8 @@ const TagInput = {
       type: "text",
       class: "rui-tag-input-field",
       id,
-      name: id,
+      // No `name`: this field holds the uncommitted draft, not the value — the
+      // tags are submitted by the hidden fields below.
       // Keyed so the morph reconciler parks the live field when a new chip is
       // inserted ahead of it. Without a key the chip landed on the field's
       // index, the tag mismatch replaced the node, and focus was lost after
@@ -24618,9 +24311,8 @@ const TagInput = {
       if (props.onBlur != null) helpers.invoke(props.onBlur, next);
     };
     if (props.onFocus != null) {
-      input.onfocus = (event) => {
-        const liveInput = event.currentTarget ?? event.target;
-        helpers.invoke(props.onFocus, liveInput.value);
+      input.onfocus = () => {
+        helpers.invoke(props.onFocus, tags);
       };
     }
     root.append(input);
@@ -24629,7 +24321,17 @@ const TagInput = {
       for (const value of suggestions) list.append(el("option", { value }));
       root.append(list);
     }
-    const shell = withFieldShell(root, { ...props, id });
+    const fieldName = asString(props.name, id);
+    for (const tag of tags) {
+      root.append(el("input", {
+        type: "hidden",
+        class: "rui-tag-input-value",
+        name: fieldName,
+        value: tag,
+        disabled: disabled ? "" : null
+      }));
+    }
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input, { native: false });
     return shell;
   }
@@ -24699,7 +24401,7 @@ const MentionInput = {
     const textarea = el("textarea", {
       class: "rui-mention-input-field",
       id,
-      name: id,
+      name: asString(props.name, id),
       rows: String(Math.max(2, Math.floor(asNumber(props.rows, 3)))),
       placeholder: asString(props.placeholder, "Type @ to mention someone"),
       disabled: disabled ? "" : null,
@@ -24897,7 +24599,7 @@ const MentionInput = {
     root.append(suggestions);
     paintSuggestions(suggestions, querySlot.get());
     if (suggestions.getAttribute("data-open") === "true") positionMentionOnMount(root);
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, textarea);
     return shell;
   }
@@ -24910,7 +24612,7 @@ const TimePicker = {
     { name: "value", type: "string", optional: true, description: "HH:MM value; typically $variable" },
     { name: "min", type: "string", optional: true },
     { name: "max", type: "string", optional: true },
-    { name: "step", type: "number", optional: true, description: "Seconds between selectable times" },
+    { name: "step", type: "number | string", optional: true, description: 'Seconds between selectable times (a positive integer), or `"any"` to allow seconds' },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new HH:MM string when the user picks a time" },
     ...FIELD_SHELL_PROPS
   ],
@@ -24935,13 +24637,10 @@ const TimePicker = {
         getValue: (n) => n.value
       });
     }
-    attachOnChange(input, props.onChange, helpers, {
-      event: "change",
-      getValue: (n) => n.value
-    });
+    bindChangeHandler(input, props, helpers, { event: "change", getValue: (live) => live.value });
     attachFocusHandlers(input, props, helpers);
     root.append(input);
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input);
     return shell;
   }
@@ -24954,7 +24653,7 @@ const DateTimePicker = {
     { name: "value", type: "string", optional: true, description: "ISO date-time value; typically $variable" },
     { name: "min", type: "string", optional: true },
     { name: "max", type: "string", optional: true },
-    { name: "step", type: "number", optional: true, description: "Seconds between selectable times" },
+    { name: "step", type: "number | string", optional: true, description: 'Seconds between selectable times (a positive integer), or `"any"` to allow seconds' },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"], description: "Called with the new ISO `YYYY-MM-DDTHH:MM` string" },
     ...FIELD_SHELL_PROPS
   ],
@@ -24979,13 +24678,10 @@ const DateTimePicker = {
         getValue: (n) => n.value
       });
     }
-    attachOnChange(input, props.onChange, helpers, {
-      event: "change",
-      getValue: (n) => n.value
-    });
+    bindChangeHandler(input, props, helpers, { event: "change", getValue: (live) => live.value });
     attachFocusHandlers(input, props, helpers);
     root.append(input);
-    const shell = withFieldShell(root, { ...props, id });
+    const shell = withFieldShell(root, { ...props, id }, { ownsName: true });
     forwardFieldAria(root, input);
     return shell;
   }
@@ -25295,7 +24991,7 @@ const MultiStepForm = {
     { name: "prevLabel", type: "string", optional: true, description: 'Default "Back"' },
     { name: "nextLabel", type: "string", optional: true, description: 'Default "Continue"' },
     { name: "submitLabel", type: "string", optional: true, description: 'Default "Submit" (final step)' },
-    { name: "stepsLayout", type: "string", optional: true, enum: ["column", "row"], aliases: ["layout", "stepsDirection"], description: 'Direction of the steps indicator (default "column")' },
+    { name: "stepsLayout", type: "string", optional: true, enum: ["column", "row", "vertical", "horizontal"], aliases: ["layout", "stepsDirection"], description: 'Direction of the steps indicator: "column" (default) or "row"; "vertical" and "horizontal" are accepted synonyms' },
     { name: "nextDisabled", type: "boolean", optional: true, description: "Block Continue/Submit while the active step is incomplete" },
     { name: "submitting", type: "boolean", optional: true, description: "Disable the footer buttons while the submit is in flight" },
     { name: "onStepChange", type: "callable", optional: true, description: "Called with the new 0-indexed step whenever the step changes" },
@@ -25825,9 +25521,9 @@ const Tour = {
   description: "Product-tour controller — renders the current step's title, description, and a Prev/Next/Skip row. Bind `current` to a `$variable` (0-indexed) to drive the step from your own state; without a binding the component advances itself. Bind `open` to a `$variable` so Skip/Finish can close it (otherwise it closes itself). Pass `steps` as `{title, description, target?}` objects; the optional `target` is a CSS selector that renders alongside the step for designers to reference.",
   props: [
     { name: "steps", type: "object[]" },
-    { name: "current", type: "number", description: "0-indexed active step — bind a $variable" },
+    { name: "current", type: "number", optional: true, description: "0-indexed active step (default 0) — bind a $variable to drive it; without a binding the tour advances itself" },
     { name: "open", type: "boolean", optional: true, description: "Whether the tour is visible — bind a $variable to control it" },
-    { name: "onOpenChange", type: "callable", optional: true, aliases: ["onopenchange"], description: "Called with the new boolean open state whenever the component opens or closes." },
+    { name: "onOpenChange", type: "callable", optional: true, aliases: ["onopenchange"], description: "Called with `false` whenever the user closes the tour (Escape, Skip or Finish). Opening is driven by `open`, so it does not fire then." },
     { name: "onComplete", type: "callable", optional: true, description: "Fired when the user reaches Finish" },
     { name: "onSkip", type: "callable", optional: true, description: "Fired when the user bails out via Skip (falls back to `onComplete` when omitted)" },
     { name: "skipLabel", type: "string", optional: true, description: 'Default "Skip"' },
@@ -26265,7 +25961,7 @@ const Drawer = {
   name: "Drawer",
   description: "Side drawer overlay shown when `open` is true. Pass a `$variable` as `open` to control it. Choose `side` for slide direction (default right) and `width` for a wide detail drawer. `onClose` fires whenever the drawer is dismissed (× button, Escape, or backdrop click — set `closeOnBackdrop: false` to keep a form safe from stray clicks).",
   props: [
-    { name: "title", type: "string" },
+    { name: "title", type: "string", optional: true, description: 'Heading that names the dialog — without one it is announced as "Drawer"' },
     { name: "open", type: "boolean", description: "Open/closed state — usually a $variable" },
     { name: "children", aliases: ["child"], type: "Node[]" },
     { name: "side", type: "string", optional: true, enum: ["right", "left", "top", "bottom"] },
@@ -26649,11 +26345,14 @@ function collapseContext(rows, context) {
   return out;
 }
 function jsonPreview(value) {
+  let json;
   try {
-    return JSON.stringify(value, null, 2);
+    json = JSON.stringify(value, null, 2);
   } catch {
     return String(value);
   }
+  if (json !== void 0) return json;
+  return typeof value === "function" ? "[Function]" : String(value);
 }
 const IconButton = {
   name: "IconButton",
@@ -26728,7 +26427,7 @@ const CommandPalette = {
     { name: "open", type: "boolean", optional: true, description: "Whether the palette is visible (default true)" },
     { name: "placeholder", type: "string", optional: true },
     { name: "shortcut", type: "string", optional: true, description: "Hint label, e.g. Cmd+K" },
-    { name: "onSelect", type: "callable", optional: true, description: "Receives the selected item's `value`" },
+    { name: "onSelect", type: "callable", optional: true, description: 'Receives the selected item\'s `value` as a string (`5` arrives as `"5"`; the label when `value` is absent)' },
     { name: "onClose", type: "callable", optional: true, aliases: ["onOpenChange"], description: "Called with `false` whenever the palette is dismissed" },
     { name: "loading", type: "boolean", optional: true, description: "Show a pending state instead of the empty row" },
     { name: "emptyLabel", type: "string", optional: true, description: 'Text shown when nothing matches (default "No commands found")' },
@@ -26971,7 +26670,7 @@ const FilterChips = {
   description: 'Removable filter chips with an optional clear-all control. Set `max` to collapse the tail into a "+N" chip, and `disabled` to freeze the row while a filtered query is in flight.',
   props: [
     { name: "chips", type: "any[]", description: "Array of strings or {label, value} objects" },
-    { name: "onRemove", type: "callable", optional: true, description: "Receives the removed chip value as an argument" },
+    { name: "onRemove", type: "callable", optional: true, description: "Receives the removed chip's `value` as a string (the label when `value` is absent)" },
     { name: "onClear", type: "callable", optional: true },
     { name: "clearLabel", type: "string", optional: true, description: 'Text of the clear-all control (default "Clear all")' },
     { name: "max", type: "number", optional: true, description: 'Chips shown before the rest collapse into a "+N" chip' },
@@ -27071,7 +26770,7 @@ const FieldRepeater = {
     { name: "addLabel", type: "string", optional: true },
     { name: "onChange", type: "callable", optional: true, description: "Receives `(index, fieldName, value, rows)` on every edit" },
     { name: "removeLabel", type: "string", optional: true, description: 'Text of the per-row remove control (default "Remove")' },
-    { name: "min", type: "number", optional: true, description: "Rows that can never be removed (default 0)" },
+    { name: "min", type: "number", optional: true, description: "Minimum row count — every remove control is hidden once the list is down to this many rows (default 0)" },
     { name: "max", type: "number", optional: true, description: 'Maximum rows — "Add row" is disabled at the cap' }
   ],
   render: (node, props, helpers) => {
@@ -27489,7 +27188,9 @@ function readOperators(raw) {
       return {
         value: value2,
         label: asString(obj.label, OPERATOR_LABELS[value2] ?? value2),
-        type: asString(obj.type) || void 0
+        // Folded the same way `readFields` folds a field's `type`, or a
+        // mixed-case custom type (`"Currency"` on both) never matched.
+        type: asString(obj.type).trim().toLowerCase() || void 0
       };
     }
     const value = asString(entry);
@@ -27504,8 +27205,8 @@ const QueryBuilder = {
   props: [
     { name: "fields", type: "any[]" },
     { name: "value", type: "any[]", optional: true },
-    { name: "onChange", type: "callable", optional: true, description: "Receives the next rule array" },
-    { name: "operators", type: "any[]", optional: true, description: "Operator tokens or `{value, label, type?}` objects — `type` scopes them to matching fields" },
+    { name: "onChange", type: "callable", optional: true, description: "Receives the next rule array on every edit (also when `value` is bound, after the write-back)" },
+    { name: "operators", type: "any[]", optional: true, description: "Operator tokens or `{value, label, type?}` objects — `type` (case-insensitive) scopes them to matching fields" },
     { name: "disabled", type: "boolean", optional: true, description: "Freeze the builder while a query is in flight" },
     { name: "maxRules", type: "number", optional: true, description: "Maximum number of rules (default unlimited)" }
   ],
@@ -27538,7 +27239,7 @@ const QueryBuilder = {
       rulesSlot.set(next);
       seedSlot.set(jsonPreview(next));
       if (stateRef) helpers.setState(stateRef, next);
-      else helpers.invoke(props.onChange, next);
+      helpers.invoke(props.onChange, next);
       const liveRoot = origin.closest(".rui-query-builder");
       if (liveRoot) paint(liveRoot, next);
     };
@@ -27934,14 +27635,14 @@ function warnGanttDates(id, start, end) {
 }
 const Gantt = {
   name: "Gantt",
-  description: "Simple Gantt chart. Pass `tasks` as `{id, label, start, end, progress?, tone?}` with ISO date strings; `progress` accepts either a 0-1 fraction or a 0-100 percentage, and `tone` colours the bar (`success`, `warning`, `danger`, …). Set `axis` for a date scale and `today` for a now marker.",
+  description: "Simple Gantt chart. Pass `tasks` as `{id, label, start, end, progress?, tone?}` with ISO date strings (`name` is read when `label` is absent, `status` when `tone` is); `progress` accepts either a 0-1 fraction or a 0-100 percentage, and `tone` colours the bar — one of `success`, `warning`, `danger`, `info` or `muted` (any other value draws the default bar). Set `axis` for a date scale and `today` for a now marker.",
   props: [
     { name: "tasks", type: "any[]" },
     { name: "startDate", type: "string", optional: true },
     { name: "endDate", type: "string", optional: true },
     { name: "axis", type: "boolean", optional: true, description: "Render a date axis above the bars" },
     { name: "ticks", type: "number", optional: true, description: "Axis tick count (default 5, implies `axis`)" },
-    { name: "today", type: "boolean | string", optional: true, description: "Draw a marker line at now, or at the given ISO date" },
+    { name: "today", type: "boolean | string | number", optional: true, description: "Draw a marker line: `true` at now, an ISO date string or an epoch-millisecond timestamp at that moment" },
     { name: "onTaskClick", type: "callable", optional: true, description: "Receives the clicked task's id" }
   ],
   render: (_node, props, helpers) => {
@@ -27972,7 +27673,7 @@ const Gantt = {
         return new Date(time).toISOString().slice(0, 10);
       }
     };
-    const todayTime = props.today === void 0 || props.today === false ? null : typeof props.today === "string" ? parseDate(props.today) : Date.now();
+    const todayTime = props.today === true ? Date.now() : typeof props.today === "string" ? parseDate(props.today) : typeof props.today === "number" && Number.isFinite(props.today) ? props.today : null;
     if (wantsAxis) {
       const axis = el("div", { class: "rui-gantt-axis", "aria-hidden": "true" });
       axis.append(el("div", { class: "rui-gantt-label" }));
@@ -28055,7 +27756,7 @@ const Truncate = {
   name: "Truncate",
   description: 'Clamp long text (or a `child` node) with an expand control. The toggle hides itself when the content already fits, and `expanded` + `onToggle` make the state controllable for "expand all" flows.',
   props: [
-    { name: "text", type: "string" },
+    { name: "text", type: "string", optional: true, description: "Plain text to clamp — omit it when passing `child`" },
     { name: "maxLines", type: "number", optional: true, description: "Lines before clamping (default 3)" },
     { name: "expandLabel", type: "string", optional: true },
     { name: "collapseLabel", type: "string", optional: true, description: 'Text of the collapse control (default "Show less")' },
@@ -28289,9 +27990,26 @@ const InlineEdit = {
       };
     }
     root.append(display, input);
-    return withFieldShell(root, props);
+    const shell = withFieldShell(root, props);
+    moveShellControlAttributes(root, input, display);
+    return shell;
   }
 };
+function moveShellControlAttributes(wrapper, input, display) {
+  const name = wrapper.getAttribute("name");
+  if (name) input.setAttribute("name", name);
+  if (wrapper.getAttribute("aria-invalid") === "true") input.setAttribute("aria-invalid", "true");
+  const describedBy = (wrapper.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+  if (describedBy.length > 0) {
+    for (const target of [input, display]) {
+      const own = (target.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+      target.setAttribute("aria-describedby", [.../* @__PURE__ */ new Set([...own, ...describedBy])].join(" "));
+    }
+  }
+  for (const attr of ["name", "aria-invalid", "aria-describedby", "required", "disabled"]) {
+    wrapper.removeAttribute(attr);
+  }
+}
 const BELL_PANEL_SELECTOR = ".rui-notification-bell-panel";
 const BELL_TRIGGER_SELECTOR = ".rui-notification-bell-trigger";
 const bellFloatingOpts = (align) => ({
@@ -28306,7 +28024,7 @@ const NotificationBell = {
     { name: "count", type: "number", optional: true },
     { name: "items", type: "any[]", optional: true, description: "{title, message?, time?, href?, unread?} objects" },
     { name: "onOpen", type: "callable", optional: true },
-    { name: "onItemClick", type: "callable", optional: true, description: "Receives the clicked notification object and its index" },
+    { name: "onItemClick", type: "callable", optional: true, description: "Receives the clicked notification object and its index in `items`" },
     { name: "onMarkAllRead", type: "callable", optional: true, description: 'Renders a "mark all read" footer control' },
     { name: "align", type: "string", optional: true, enum: ["left", "right"], description: "Which edge the panel aligns to (default right)" },
     { name: "loading", type: "boolean", optional: true, description: "Show a pending state instead of the empty message" },
@@ -28318,7 +28036,8 @@ const NotificationBell = {
   render: (_node, props, helpers) => {
     const count = Math.max(0, Math.floor(asNumber(props.count, 0)));
     const maxCount = Math.max(1, Math.floor(asNumber(props.maxCount, 99)));
-    const items = readPlainObjects(props.items);
+    const rawItems = asArray(props.items);
+    const items = rawItems.flatMap((item, position) => item && typeof item === "object" && !Array.isArray(item) ? [{ item, position }] : []);
     const loading = asBoolean(props.loading);
     const align = asString(props.align, "right");
     const labelText = asString(props.label, "Notifications");
@@ -28372,14 +28091,14 @@ const NotificationBell = {
         asString(props.emptyLabel, "No notifications")
       ]));
     } else {
-      items.forEach((item, index) => {
+      items.forEach(({ item, position }) => {
         const href = asString(item.href).trim();
         const unread = asBoolean(item.unread);
         const shared = {
           class: "rui-notification-bell-item",
           role: "menuitem",
           tabindex: "-1",
-          "data-index": String(index),
+          "data-index": String(position),
           "data-unread": unread ? "true" : null
         };
         const row = href ? el("a", { ...shared, href: sanitiseHref(href) }) : el(clickable ? "button" : "div", { ...shared, ...clickable ? { type: "button" } : {} });
@@ -28393,8 +28112,8 @@ const NotificationBell = {
           row.onclick = (event) => {
             const origin = event.currentTarget ?? event.target;
             const at = Number(origin.getAttribute("data-index"));
-            const idx = Number.isFinite(at) ? at : index;
-            helpers.invoke(props.onItemClick, items[idx], idx);
+            const idx = Number.isFinite(at) ? at : position;
+            helpers.invoke(props.onItemClick, rawItems[idx], idx);
           };
         }
         panel.append(row);
@@ -28518,8 +28237,8 @@ function normalisePath(raw) {
   if (!raw) return "/";
   let value = String(raw);
   if (value.startsWith("#")) value = value.slice(1);
-  const queryAt = value.indexOf("?");
-  if (queryAt >= 0) value = value.slice(0, queryAt);
+  const cut = value.search(/[?#]/);
+  if (cut >= 0) value = value.slice(0, cut);
   value = value.replace(/\/{2,}/g, "/");
   if (!value || value === "/") return "/";
   if (!value.startsWith("/")) value = "/" + value;
@@ -29570,6 +29289,7 @@ function runMountCleanup(state) {
   state.instance = void 0;
   state.node = null;
   state.started = false;
+  state.ready = false;
   if (typeof cleanup !== "function") return;
   defer(() => {
     try {
@@ -29581,11 +29301,11 @@ function runMountCleanup(state) {
 }
 const Mount = {
   name: "Mount",
-  description: "First-class host for an imperative / third-party widget that owns its own DOM (chart, map, editor, payment element, captcha, video SDK). Aktion creates the host element; `setup(node, props)` runs once after it attaches and returns an instance handle, `update(instance, props)` runs when `props` change (or when `deps` change, if you pass them), and `cleanup(instance)` runs on unmount. `onError(err, stage)` fires if `setup`/`update` throws, so a failed map / payment element / captcha can show a fallback. The host is preserved across re-renders so the widget is never rebuilt. Apply layout with `sx`.",
+  description: "First-class host for an imperative / third-party widget that owns its own DOM (chart, map, editor, payment element, captcha, video SDK). Aktion creates the host element; `setup(node, props)` runs once after it attaches and may return an instance handle, `update(instance, props, node)` runs when `props` change (or when `deps` change, if you pass them), and `cleanup(instance)` runs on unmount. `onError(err, stage)` fires if `setup`/`update` throws, so a failed map / payment element / captcha can show a fallback. The host is preserved across re-renders so the widget is never rebuilt. Apply layout with `sx`.",
   props: [
-    { name: "setup", type: "callable", required: true, description: "`(node, props) => instance` — runs once after the host attaches; return value is the instance handle passed to `update`/`cleanup`." },
-    { name: "update", type: "callable", optional: true, description: "`(instance, props) => void` — runs when `props` (or `deps`) change." },
-    { name: "cleanup", type: "callable", optional: true, description: "`(instance) => void` — runs when the component leaves the tree (destroy/teardown)." },
+    { name: "setup", type: "callable", required: true, description: "`(node, props) => instance` — runs once after the host attaches; the return value (if any) is the instance handle passed to `update`/`cleanup`." },
+    { name: "update", type: "callable", optional: true, description: "`(instance, props, node) => void` — runs when `props` (or `deps`) change, once `setup` has returned — also when it returned nothing (`instance` is then `undefined`; update the widget through `node`, the live host). Never runs after a `setup` that threw." },
+    { name: "cleanup", type: "callable", optional: true, description: "`(instance) => void` — runs when the component leaves the tree (destroy/teardown). `instance` is `undefined` when `setup` returned nothing, threw, or never ran (the component left before its host attached)." },
     { name: "props", type: "object", optional: true, description: "Reactive prop bag handed to `setup`/`update`. Bind `$state` here to drive the widget." },
     { name: "tag", type: "string", optional: true, enum: ["div", "span", "section", "article", "aside", "figure", "canvas", "p", "pre", "form"], description: 'Host element tag (default "div").' },
     { name: "deps", type: "any[]", optional: true, description: "Explicit dependency list gating `update`. Use when the `props` bag is rebuilt on every commit, or to force an update after an in-place mutation." },
@@ -29597,6 +29317,7 @@ const Mount = {
     const deps = props.deps === void 0 ? null : asArray(props.deps);
     const slot = helpers.useInstanceState("rui-mount", {
       started: false,
+      ready: false,
       instance: void 0,
       props: widgetProps,
       prevProps: null,
@@ -29639,7 +29360,10 @@ const Mount = {
         state.node = live;
         if (live !== host) live.replaceChildren();
         try {
-          state.instance = typeof props.setup === "function" ? props.setup(live, state.props) : void 0;
+          if (typeof props.setup === "function") {
+            state.instance = props.setup(live, state.props);
+            state.ready = true;
+          }
         } catch (err) {
           reportMountError(state, helpers.invoke, "setup", err);
         }
@@ -29651,12 +29375,13 @@ const Mount = {
     const prevDeps = state.deps;
     state.deps = deps;
     const changed = deps !== null ? !sameBag(prevDeps, deps) : !sameBag(state.prevProps, widgetProps);
-    if (state.instance !== void 0 && typeof props.update === "function" && changed) {
+    if (state.ready && typeof props.update === "function" && changed) {
       const update = props.update;
       const instance = state.instance;
+      const hostNode = state.node;
       defer(() => {
         try {
-          update(instance, widgetProps);
+          update(instance, widgetProps, hostNode);
         } catch (err) {
           reportMountError(state, helpers.invoke, "update", err);
         }
@@ -29697,24 +29422,29 @@ function applyAttributes(node, attributes) {
     node.setAttribute(key, value === true ? "" : String(value));
   }
 }
-const BLOCKED_PROPERTIES = /* @__PURE__ */ new Set([
-  "innerhtml",
-  "outerhtml",
-  "insertadjacenthtml",
-  "srcdoc",
+const BLOCKED_DOM_PROPERTIES = [
   "src",
   "href",
   "action",
-  "formaction",
+  "formAction",
   "style",
   "id",
   "attributes",
-  "shadowroot",
-  "contenteditable",
-  "constructor",
-  "__proto__",
-  "prototype"
-]);
+  "shadowRoot",
+  "contentEditable",
+  "innerHTML",
+  "outerHTML",
+  "insertAdjacentHTML",
+  "srcdoc"
+];
+const BLOCKED_PROTOTYPE_KEYS = ["constructor", "__proto__", "prototype"];
+const BLOCKED_PROPERTIES = new Set(
+  [...BLOCKED_DOM_PROPERTIES, ...BLOCKED_PROTOTYPE_KEYS].map((key) => key.toLowerCase())
+);
+const codeList = (names) => {
+  const quoted = names.map((name) => `\`${name}\``);
+  return quoted.length > 1 ? `${quoted.slice(0, -1).join(", ")} and ${quoted[quoted.length - 1]}` : quoted.join("");
+};
 function applyProperties(node, properties) {
   const target = node;
   for (const [key, value] of Object.entries(properties)) {
@@ -29733,7 +29463,7 @@ const WebComponent = {
   props: [
     { name: "tag", type: "string", positional: true, required: true, description: 'Custom-element tag name (must contain a hyphen, e.g. "stripe-pricing-table").' },
     { name: "attributes", type: "object", optional: true, aliases: ["attrs"], description: "Reactive attribute map. `$state` values update the element on change; `on*` keys are ignored." },
-    { name: "properties", type: "object", optional: true, aliases: ["props"], description: "JS properties assigned on the element (for components that take rich, non-string props)." },
+    { name: "properties", type: "object", optional: true, aliases: ["props"], description: `JS properties assigned on the element (for components that take rich, non-string props). \`on*\` keys (use \`on\`), the built-in DOM properties ${codeList(BLOCKED_DOM_PROPERTIES)}, and ${codeList(BLOCKED_PROTOTYPE_KEYS)} are silently skipped (in any letter case) — pass \`src\`/\`href\`/\`id\`/\`style\` through \`attributes\` (URLs are sanitised there), and content through \`children\`.` },
     { name: "on", type: "object", optional: true, aliases: ["events"], description: "Event map `{ eventName: handler }` bound once to the live element (handlers stay current across re-renders)." },
     { name: "children", aliases: ["child"], type: "Node[]", optional: true, description: "Light-DOM child nodes / text to slot inside the element." }
   ],
@@ -29786,6 +29516,584 @@ const WebComponent = {
       }
     });
     return element;
+  }
+};
+function renderChildAsNode(helpers, child) {
+  if (child == null) return document.createTextNode("");
+  if (Array.isArray(child)) {
+    const wrap = el("span", { class: "rui-wrapper-fragment", style: "display: contents;" });
+    for (const c of child) {
+      if (c == null) continue;
+      wrap.append(typeof c === "string" ? document.createTextNode(c) : helpers.renderNode(c));
+    }
+    return wrap;
+  }
+  if (typeof child === "string") return document.createTextNode(child);
+  return helpers.renderNode(child);
+}
+const BOXED_UNIVERSALS = ["sx", "style", "animate", "className", "class"];
+function wrapperStyle(universal, transparent) {
+  if (!universal) return transparent;
+  if (universal.hidden === true) return "display: none;";
+  const needsBox = BOXED_UNIVERSALS.some((key) => universal[key] != null);
+  return needsBox ? "display: block;" : transparent;
+}
+function transparentWrapper(className, universal, extraAttrs) {
+  return el("span", {
+    class: `rui-wrapper ${className}`,
+    style: wrapperStyle(universal, "display: contents;"),
+    ...extraAttrs ?? {}
+  });
+}
+function useLiveBox(helpers, key, initial) {
+  const box = helpers.useInstanceState(key, initial).get();
+  box.props = initial.props;
+  return box;
+}
+function useLiveWrapper(helpers, wrapper, key) {
+  const slot = helpers.useInstanceState(key, wrapper);
+  const remembered = slot.get();
+  if (remembered === wrapper || remembered.isConnected) return remembered;
+  slot.set(wrapper);
+  return wrapper;
+}
+function installOnce(helpers, key, target, install) {
+  const slot = helpers.useInstanceState(key, null);
+  if (slot.get() === target) return;
+  slot.set(target);
+  install(target);
+}
+const SELF_ACTING_CHILD = [
+  "a",
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "label",
+  "summary",
+  '[contenteditable="true"]',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="checkbox"]',
+  '[role="switch"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="tab"]',
+  '[role="textbox"]'
+].join(",");
+function fromSelfActingChild(wrapper, event) {
+  const target = event.target;
+  if (!target || target === wrapper || typeof target.closest !== "function") return false;
+  const owner = target.closest(SELF_ACTING_CHILD);
+  return owner != null && owner !== wrapper && wrapper.contains(owner);
+}
+function sanitiseInlineStyle(input) {
+  const raw = asString(input).trim();
+  if (!raw) return "";
+  if (/[<>]/.test(raw)) return "";
+  if (/\bexpression\s*\(|\bjavascript\s*:|\bbehavior\s*:|@import\b/i.test(raw)) return "";
+  return raw;
+}
+const CLASS_TOKEN_RE = /^[A-Za-z_][A-Za-z0-9_\-:/]*$/;
+function sanitiseClassList(input) {
+  const tokens = Array.isArray(input) ? input.map((value) => asString(value)) : asString(input).split(/\s+/);
+  return tokens.map((token) => token.trim()).filter((token) => token.length > 0 && token.length <= 64 && CLASS_TOKEN_RE.test(token));
+}
+const OnClick = {
+  name: "OnClick",
+  description: "Make any component clickable. Wraps the child in a transparent span and dispatches `onClick(event)` when the user clicks or taps it. Clicks that land on a self-acting child (a Button, Link, or form control) are left to that child, so nesting is safe. Enter / Space activate it too unless `keyboard: false`. Use to attach click behaviour to components that do not expose an `action` / `onClick` prop (cards, list rows, media tiles, custom layouts).",
+  props: [
+    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"], description: "Component (or array of components) to wrap" },
+    { name: "onClick", type: "callable", required: true, aliases: ["action", "onclick"], description: "Callable invoked on click / tap, and on Enter / Space while `keyboard` is on. Receives the native MouseEvent — or the KeyboardEvent for a key activation." },
+    { name: "disabled", type: "boolean", optional: true, description: "Skip firing the handler while truthy (also sets aria-disabled and leaves the tab order)" },
+    { name: "stopPropagation", type: "boolean", optional: true, description: "Call event.stopPropagation() after invoking the handler (default false)" },
+    { name: "role", type: "string", optional: true, description: 'ARIA role for the wrapper (default "button"). Pass "none" when the wrapped element is a list row / table cell whose container owns the semantics.' },
+    { name: "keyboard", type: "boolean", optional: true, description: "Activate on Enter / Space and expose a tab stop (default true). Pass false when the child is already focusable — e.g. a card containing inputs." }
+  ],
+  render: (node, props, helpers) => {
+    const disabled = asBoolean(props.disabled);
+    const keyboard = props.keyboard === void 0 ? true : asBoolean(props.keyboard);
+    const role = asString(props.role, keyboard ? "button" : "");
+    const wrapper = transparentWrapper("rui-on-click", node.universal, {
+      role: role || null,
+      // Only claim a tab stop while we actually handle keys. A disabled wrapper
+      // leaves the tab order but stays announced as a disabled control.
+      tabindex: keyboard ? disabled ? "-1" : "0" : null,
+      "aria-disabled": disabled ? "true" : null,
+      "data-disabled": disabled ? "true" : null
+    });
+    wrapper.append(renderChildAsNode(helpers, props.child));
+    if (!disabled) wrapper.style.cursor = "pointer";
+    const stopProp = asBoolean(props.stopPropagation);
+    const fire = (event) => {
+      if (disabled) return false;
+      const self = event.currentTarget ?? event.target;
+      if (fromSelfActingChild(self, event)) return false;
+      if (stopProp) event.stopPropagation();
+      helpers.invoke(props.onClick, event);
+      return true;
+    };
+    wrapper.onclick = (event) => {
+      fire(event);
+    };
+    wrapper.onkeydown = keyboard ? (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (fire(event)) event.preventDefault();
+    } : null;
+    return wrapper;
+  }
+};
+const MOUSE_EVENT_MAP = [
+  { prop: "enter", handler: "onmouseenter" },
+  { prop: "leave", handler: "onmouseleave" },
+  { prop: "hover", handler: "onmouseover" },
+  { prop: "move", handler: "onmousemove" },
+  { prop: "down", handler: "onmousedown" },
+  { prop: "up", handler: "onmouseup" },
+  { prop: "click", handler: "onclick" },
+  { prop: "doubleClick", handler: "ondblclick" },
+  { prop: "contextMenu", handler: "oncontextmenu" },
+  { prop: "wheel", handler: "onwheel" },
+  { prop: "pointerDown", handler: "onpointerdown" },
+  { prop: "pointerMove", handler: "onpointermove" },
+  { prop: "pointerUp", handler: "onpointerup" },
+  { prop: "drag", handler: "ondrag" },
+  { prop: "drop", handler: "ondrop" },
+  { prop: "dragStart", handler: "ondragstart" },
+  { prop: "dragEnd", handler: "ondragend" },
+  { prop: "dragEnter", handler: "ondragenter" },
+  { prop: "dragLeave", handler: "ondragleave" },
+  { prop: "dragOver", handler: "ondragover" }
+];
+const OnMouse = {
+  name: "OnMouse",
+  description: "Attach any combination of mouse / pointer / drag listeners to a component. Pass only the props you need — unused events install no handler so the wrapper is essentially free. Each handler receives the native MouseEvent / PointerEvent / DragEvent / WheelEvent (a plain Event for `scroll`). Use for hover tracking, custom drag-and-drop, context menus, scroll-aware UIs.",
+  props: [
+    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"], description: "Component to wrap" },
+    { name: "enter", type: "callable", optional: true, description: "Fired when the pointer enters the element (mouseenter)" },
+    { name: "leave", type: "callable", optional: true, description: "Fired when the pointer leaves the element (mouseleave)" },
+    { name: "hover", type: "callable", optional: true, description: "Fired on every mouseover inside the element" },
+    { name: "move", type: "callable", optional: true, description: "Fired on every mousemove inside the element" },
+    { name: "down", type: "callable", optional: true, description: "Fired on mousedown" },
+    { name: "up", type: "callable", optional: true, description: "Fired on mouseup" },
+    { name: "click", type: "callable", optional: true, description: "Fired on click / tap" },
+    { name: "doubleClick", type: "callable", optional: true, description: "Fired on double-click" },
+    { name: "contextMenu", type: "callable", optional: true, description: "Fired on right-click (contextmenu)" },
+    { name: "scroll", type: "callable", optional: true, description: "Fired when an inner element scrolls (observed on the capture phase, since scroll does not bubble)" },
+    { name: "wheel", type: "callable", optional: true, description: "Fired on mouse-wheel / trackpad scroll. Not passive, so `event.preventDefault()` works (custom zoom)." },
+    { name: "pointerDown", type: "callable", optional: true, description: "Fired on pointerdown — use instead of `down` for touch / pen drags (gives `pointerId`, pressure, setPointerCapture)" },
+    { name: "pointerMove", type: "callable", optional: true, description: "Fired on pointermove" },
+    { name: "pointerUp", type: "callable", optional: true, description: "Fired on pointerup" },
+    { name: "drag", type: "callable", optional: true, description: "Fired while the element is being dragged" },
+    { name: "drop", type: "callable", optional: true, description: "Fired when something is dropped onto the element" },
+    { name: "dragStart", type: "callable", optional: true, description: "Fired when a drag begins" },
+    { name: "dragEnd", type: "callable", optional: true, description: "Fired when a drag ends" },
+    { name: "dragEnter", type: "callable", optional: true, description: "Fired when a drag enters the element" },
+    { name: "dragLeave", type: "callable", optional: true, description: "Fired when a drag leaves the element" },
+    { name: "dragOver", type: "callable", optional: true, description: "Fired while something is dragged over the element. Call `event.preventDefault()` to make the element a valid drop target." },
+    { name: "draggable", type: "boolean", optional: true, description: 'Make the wrapper itself draggable (sets `draggable="true"`)' },
+    { name: "passiveScroll", type: "boolean", optional: true, description: "Register the `scroll` listener as passive (default true, for scroll performance). Read on the first render." }
+  ],
+  render: (node, props, helpers) => {
+    const wrapper = transparentWrapper("rui-on-mouse", node.universal, {
+      draggable: asBoolean(props.draggable) ? "true" : null
+    });
+    wrapper.append(renderChildAsNode(helpers, props.child));
+    for (const { prop: prop2, handler } of MOUSE_EVENT_MAP) {
+      const callback = props[prop2];
+      if (callback == null) continue;
+      wrapper[handler] = (event) => {
+        helpers.invoke(callback, event);
+      };
+    }
+    const box = useLiveBox(helpers, "rui-on-mouse", { props, wantsScroll: false });
+    if (props.scroll != null) box.wantsScroll = true;
+    if (box.wantsScroll) {
+      const passive = props.passiveScroll === void 0 ? true : asBoolean(props.passiveScroll);
+      const live = useLiveWrapper(helpers, wrapper, "rui-on-mouse-node");
+      installOnce(helpers, "rui-on-mouse-scroll", live, (target) => {
+        target.addEventListener("scroll", (event) => {
+          helpers.invoke(box.props.scroll, event);
+        }, { capture: true, passive });
+      });
+    }
+    return wrapper;
+  }
+};
+const KEYBOARD_EVENT_MAP = [
+  { prop: "onKeyDown", event: "keydown", handler: "onkeydown" },
+  { prop: "onKeyUp", event: "keyup", handler: "onkeyup" },
+  { prop: "onKeyPress", event: "keypress", handler: "onkeypress" }
+];
+const OnKeyboard = {
+  name: "OnKeyboard",
+  description: 'Attach keyboard listeners to a component. Pass any combination of `onKeyDown`, `onKeyUp`, and `onKeyPress`; each handler receives the native KeyboardEvent. Use for navigation and custom focusable widgets. The wrapper is focusable by default (tabindex="0") so it can be reached via Tab; pass `focusable=false` when the child is already focusable. For an app-wide shortcut (Cmd+K, `?`) pass `global: true`, which listens on the window instead so the keys fire wherever focus is.',
+  props: [
+    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
+    { name: "onKeyDown", type: "callable", optional: true, aliases: ["onkeydown"], description: "Fired on keydown" },
+    { name: "onKeyUp", type: "callable", optional: true, aliases: ["onkeyup"], description: "Fired on keyup" },
+    { name: "onKeyPress", type: "callable", optional: true, aliases: ["onkeypress"], description: "Fired on keypress" },
+    { name: "focusable", type: "boolean", optional: true, description: "Make the wrapper focusable via Tab (default true, or false when `global`)" },
+    { name: "global", type: "boolean", optional: true, description: "Listen on the window rather than the wrapper, so the shortcut fires regardless of focus (command palettes, help overlays). Removed when the component leaves the tree." }
+  ],
+  render: (node, props, helpers) => {
+    const isGlobal = asBoolean(props.global);
+    const focusable = props.focusable === void 0 ? !isGlobal : asBoolean(props.focusable);
+    const wrapper = transparentWrapper(
+      "rui-on-keyboard",
+      node.universal,
+      focusable ? { tabindex: "0" } : {}
+    );
+    wrapper.append(renderChildAsNode(helpers, props.child));
+    const box = useLiveBox(helpers, "rui-on-keyboard", {
+      props,
+      detachGlobal: null,
+      disposerInstalled: false
+    });
+    if (!isGlobal) {
+      for (const { prop: prop2, handler } of KEYBOARD_EVENT_MAP) {
+        const callback = props[prop2];
+        if (callback == null) continue;
+        wrapper[handler] = (event) => {
+          helpers.invoke(callback, event);
+        };
+      }
+    }
+    if (isGlobal && box.detachGlobal == null && typeof window !== "undefined") {
+      const bound = KEYBOARD_EVENT_MAP.map(({ prop: prop2, event }) => {
+        const listener = (ev) => {
+          helpers.invoke(box.props[prop2], ev);
+        };
+        window.addEventListener(event, listener);
+        return { event, listener };
+      });
+      box.detachGlobal = () => {
+        for (const { event, listener } of bound) window.removeEventListener(event, listener);
+      };
+      if (!box.disposerInstalled) {
+        box.disposerInstalled = true;
+        helpers.registerDisposer(() => {
+          box.detachGlobal?.();
+          box.detachGlobal = null;
+        }, "rui-on-keyboard-global");
+      }
+    } else if (!isGlobal && box.detachGlobal != null) {
+      box.detachGlobal();
+      box.detachGlobal = null;
+    }
+    return wrapper;
+  }
+};
+const OnFocus = {
+  name: "OnFocus",
+  description: "Attach focus / blur listeners to a component. Use to track input focus rings, custom focus indicators, or autosave-on-blur flows. The wrapped subtree is treated as one unit: `onFocus` fires when focus enters it from outside and `onBlur` when focus leaves it, while moving focus between two descendants fires neither.",
+  props: [
+    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
+    { name: "onFocus", type: "callable", optional: true, aliases: ["onfocus"], description: "Fired with the `focusin` FocusEvent when focus enters the element or any descendant from outside it" },
+    { name: "onBlur", type: "callable", optional: true, aliases: ["onblur"], description: "Fired with the `focusout` FocusEvent when focus leaves the element and all its descendants" }
+  ],
+  render: (node, props, helpers) => {
+    const wrapper = transparentWrapper("rui-on-focus", node.universal);
+    wrapper.append(renderChildAsNode(helpers, props.child));
+    const box = useLiveBox(helpers, "rui-on-focus", { props });
+    const live = useLiveWrapper(helpers, wrapper, "rui-on-focus-node");
+    installOnce(helpers, "rui-on-focus-listeners", live, (target) => {
+      const fromInside = (event) => {
+        const other = event.relatedTarget;
+        return other instanceof Node && target.contains(other);
+      };
+      target.addEventListener("focusin", (event) => {
+        if (!fromInside(event)) helpers.invoke(box.props.onFocus, event);
+      });
+      target.addEventListener("focusout", (event) => {
+        if (!fromInside(event)) helpers.invoke(box.props.onBlur, event);
+      });
+    });
+    return wrapper;
+  }
+};
+const ROOT_MARGIN_TOKEN = /^[+-]?(?:\d+|\d*\.\d+)(?:px|%)$|^[+-]?0$/;
+function sanitiseRootMargin(raw) {
+  const value = asString(raw).trim();
+  if (!value) return "";
+  const tokens = value.split(/\s+/);
+  if (tokens.length > 4) return "";
+  return tokens.every((token) => ROOT_MARGIN_TOKEN.test(token)) ? value : "";
+}
+function resolveObserverRoot(target, selector) {
+  try {
+    const ancestor = target.closest(selector);
+    if (ancestor && ancestor !== target) return ancestor;
+    const root = target.getRootNode();
+    if (root instanceof Document || root instanceof ShadowRoot) {
+      return root.querySelector(selector);
+    }
+  } catch {
+  }
+  return null;
+}
+const OnIntersect = {
+  name: "OnIntersect",
+  description: "Observe whether a component is visible in the viewport (or a scroll container passed as `root`) using IntersectionObserver. Fires `onEnter` each time the wrapped element becomes visible (only the first time with `once: true`), `onLeave` when it leaves, and `onChange({visible, ratio})` for every transition. Use for lazy-load sentinels, infinite-scroll triggers, impression analytics, and reveal-on-scroll animations. Set `disabled: true` once there is nothing left to load.",
+  props: [
+    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
+    { name: "onEnter", type: "callable", optional: true, description: "Fired when the element enters the viewport" },
+    { name: "onLeave", type: "callable", optional: true, description: "Fired when the element leaves the viewport" },
+    { name: "onChange", type: "callable", optional: true, description: "Fired with `{visible, ratio}` on every transition" },
+    { name: "threshold", type: "number", optional: true, description: "Visible-ratio threshold 0–1 (default 0.05)" },
+    { name: "rootMargin", type: "string", optional: true, description: 'Root margin as 1–4 px / % lengths (e.g. "0px 0px -64px 0px"). Unit-less values are ignored.' },
+    { name: "root", type: "string", optional: true, description: 'CSS selector for the scroll container to observe inside (e.g. ".rui-scroll-area"). Defaults to the viewport.' },
+    { name: "once", type: "boolean", optional: true, description: "Disconnect after the first entry (default false)" },
+    { name: "disabled", type: "boolean", optional: true, description: "Stop firing the callbacks while truthy — use it when the last page of an infinite list has loaded" }
+  ],
+  render: (node, props, helpers) => {
+    const wrapper = el("span", {
+      class: "rui-wrapper rui-on-intersect",
+      style: wrapperStyle(node.universal, "display: block;")
+    });
+    wrapper.append(renderChildAsNode(helpers, props.child));
+    const ObserverCtor = typeof IntersectionObserver !== "undefined" ? IntersectionObserver : void 0;
+    if (!ObserverCtor) return wrapper;
+    const box = useLiveBox(helpers, "rui-on-intersect", {
+      props,
+      observer: null,
+      node: null,
+      optionsKey: "",
+      lastVisible: null
+    });
+    const rawThreshold = asNumber(props.threshold, 0.05);
+    const threshold = Number.isFinite(rawThreshold) ? Math.max(0, Math.min(1, rawThreshold)) : 0.05;
+    const rootMargin = sanitiseRootMargin(props.rootMargin);
+    const rootSelector = asString(props.root).trim();
+    const optionsKey = `${threshold}|${rootMargin}|${rootSelector}`;
+    const install = (target) => {
+      if (box.observer && box.node === target && box.optionsKey === optionsKey) return;
+      box.observer?.disconnect();
+      box.observer = null;
+      const root = rootSelector ? resolveObserverRoot(target, rootSelector) : null;
+      let observer;
+      try {
+        observer = new ObserverCtor((entries) => {
+          const current = box.props;
+          if (asBoolean(current.disabled)) return;
+          for (const entry of entries) {
+            const visible = entry.isIntersecting;
+            if (visible !== box.lastVisible) {
+              if (visible && current.onEnter != null) helpers.invoke(current.onEnter, entry);
+              if (!visible && box.lastVisible === true && current.onLeave != null) {
+                helpers.invoke(current.onLeave, entry);
+              }
+              box.lastVisible = visible;
+            }
+            if (current.onChange != null) {
+              helpers.invoke(current.onChange, { visible, ratio: entry.intersectionRatio });
+            }
+            if (asBoolean(current.once) && visible) {
+              box.observer?.disconnect();
+              return;
+            }
+          }
+        }, {
+          threshold,
+          ...rootMargin ? { rootMargin } : {},
+          ...root ? { root } : {}
+        });
+      } catch {
+        return;
+      }
+      observer.observe(target);
+      box.observer = observer;
+      box.node = target;
+      box.optionsKey = optionsKey;
+      helpers.registerDisposer(() => observer.disconnect(), "rui-onintersect-io");
+    };
+    const live = useLiveWrapper(helpers, wrapper, "rui-on-intersect-node");
+    if (rootSelector && !live.isConnected) {
+      deferToPaint(() => {
+        if (live.isConnected) install(live);
+      });
+    } else {
+      install(live);
+    }
+    return wrapper;
+  }
+};
+function serialiseDeps(deps) {
+  if (deps == null) return null;
+  const list = Array.isArray(deps) ? deps : [deps];
+  return list.map((value) => {
+    if (value == null) return String(value);
+    const kind = typeof value;
+    if (kind === "object" || kind === "function") {
+      try {
+        return JSON.stringify(value) ?? "[unserialisable]";
+      } catch {
+        return "[unserialisable]";
+      }
+    }
+    return `${kind}:${String(value)}`;
+  }).join("|");
+}
+const runSoon = (fn) => {
+  if (typeof queueMicrotask === "function") queueMicrotask(fn);
+  else void Promise.resolve().then(fn);
+};
+function runUnmount(box, helpers) {
+  if (!box.mounted) return;
+  box.mounted = false;
+  const target = box.live;
+  const callback = box.props.onUnmount;
+  if (target == null || callback == null) return;
+  runSoon(() => helpers.invoke(callback, target));
+}
+const OnMount = {
+  name: "OnMount",
+  description: "Run imperative code against the wrapped component's rendered DOM node. `onMount(node)` fires once, on a microtask after the child is attached to the DOM — the Aktion way to get a DOM ref (measure an element, focus it, or hand it to an imperative library such as a chart / map / editor). `onUnmount(node)` fires when the component leaves the tree. Pass `deps` to tear down and re-run the pair when the values in it change. Pair with `$ref(...)` to stash the node across renders.",
+  props: [
+    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
+    { name: "onMount", type: "callable", optional: true, description: "`(node) => void` — fired once after the wrapped element is attached." },
+    { name: "onUnmount", type: "callable", optional: true, description: "`(node) => void` — fired when the wrapped element leaves the tree." },
+    { name: "deps", type: "any[]", optional: true, description: "Re-run `onUnmount` + `onMount` whenever a value in this list changes (e.g. `deps: [$docId]` to rebind an editor to another document)." }
+  ],
+  render: (node, props, helpers) => {
+    const wrapper = el("span", {
+      class: "rui-wrapper rui-on-mount",
+      style: wrapperStyle(node.universal, "display: contents;")
+    });
+    wrapper.append(renderChildAsNode(helpers, props.child));
+    const box = useLiveBox(helpers, "rui-on-mount", {
+      props,
+      live: null,
+      mounted: false,
+      depsKey: null,
+      disposer: null
+    });
+    const depsKey = serialiseDeps(props.deps);
+    if (box.mounted && depsKey !== box.depsKey) runUnmount(box, helpers);
+    if (!box.mounted) {
+      box.depsKey = depsKey;
+      const fire = () => {
+        if (box.mounted) return;
+        const fresh = wrapper.firstElementChild ?? wrapper;
+        const target = fresh.isConnected ? fresh : box.live?.isConnected ? box.live : null;
+        if (!target) return;
+        box.mounted = true;
+        box.live = target;
+        helpers.invoke(box.props.onMount, target);
+      };
+      runSoon(fire);
+    }
+    if (!box.disposer) box.disposer = () => {
+      runUnmount(box, helpers);
+    };
+    helpers.registerDisposer(box.disposer, "rui-on-mount-unmount");
+    return wrapper;
+  }
+};
+function renderLinkChildren(helpers, child) {
+  if (child == null) return [];
+  if (typeof child === "string") return [document.createTextNode(child)];
+  if (Array.isArray(child)) {
+    return child.filter((c) => c != null).map((c) => typeof c === "string" ? document.createTextNode(c) : helpers.renderNode(c));
+  }
+  return [helpers.renderNode(child)];
+}
+const ABSOLUTE_URL_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:|^\/\//;
+const DOWNLOAD_NAME_RE = /^[A-Za-z0-9._ ()-]{1,128}$/;
+function routerHref(helpers, to) {
+  if (to.startsWith("#")) return to;
+  const path = to.startsWith("/") ? to : `/${to}`;
+  const mode = typeof helpers.router?.getMode === "function" ? helpers.router.getMode() : "hash";
+  return mode === "history" ? path : `#${path}`;
+}
+const Link = {
+  name: "Link",
+  description: 'Anchor link. Accepts either a plain string label or a wrapped component as its positional child. Pass `to` for client-side router navigation (no page reload) or `href` for a regular anchor. `external: true` opens the link in a new tab with `rel="noopener noreferrer"`. `disabled: true` renders a non-navigating link (pagination edges, gated steps). Use to make any component clickable as a link — cards, icons, badges, list rows.',
+  props: [
+    { name: "label", type: "string | Node", positional: true, required: true, aliases: ["child", "children"], description: "Visible text OR a wrapped component" },
+    { name: "to", type: "string", optional: true, description: "Router path (preferred). Navigates via the runtime router on click." },
+    { name: "href", type: "string", optional: true, description: "Standard anchor href. Used when `to` is omitted." },
+    { name: "external", type: "boolean", optional: true, description: 'Open in a new tab (`target="_blank"`, `rel="noopener noreferrer"`)' },
+    { name: "variant", aliases: ["tone"], type: "string", optional: true, enum: ["default", "subtle"] },
+    { name: "disabled", type: "boolean", optional: true, description: "Render as a non-navigating link: no href, out of the tab order, announced as disabled" },
+    { name: "onClick", type: "callable", optional: true, aliases: ["onclick"], description: "Ran before navigation (analytics, closing a drawer). Call `event.preventDefault()` inside it to cancel the navigation." },
+    { name: "download", type: "boolean | string", optional: true, description: "Download the target instead of navigating. Pass a string to suggest a filename." }
+  ],
+  render: (_node, props, helpers) => {
+    const to = asString(props.to).trim();
+    const external = asBoolean(props.external);
+    const disabled = asBoolean(props.disabled);
+    const isRoute = to !== "" && !ABSOLUTE_URL_RE.test(to);
+    const safeHref = disabled ? null : isRoute ? routerHref(helpers, to) : sanitiseHref(to || props.href, "#");
+    const download = props.download;
+    const downloadName = typeof download === "string" ? download.trim() : "";
+    const downloadAttr = download === true || downloadName === "true" ? "" : downloadName !== "" && downloadName !== "false" && DOWNLOAD_NAME_RE.test(downloadName) ? downloadName : null;
+    const variant = asString(props.variant, "default");
+    const anchor = el("a", {
+      class: "rui-link",
+      "data-variant": variant,
+      href: safeHref,
+      // A disabled link keeps its place in the layout but is not activatable:
+      // no href (so Enter does nothing), no tab stop, announced as disabled.
+      role: disabled ? "link" : null,
+      "aria-disabled": disabled ? "true" : null,
+      "data-disabled": disabled ? "true" : null,
+      tabindex: disabled ? "-1" : null,
+      target: external && !disabled ? "_blank" : null,
+      rel: external && !disabled ? "noopener noreferrer" : null,
+      download: downloadAttr
+    });
+    for (const node of renderLinkChildren(helpers, props.label)) anchor.append(node);
+    if (external && !disabled) {
+      anchor.append(el("span", { class: "rui-visually-hidden" }, [" (opens in new tab)"]));
+    }
+    anchor.onclick = (event) => {
+      if (disabled) {
+        event.preventDefault();
+        return;
+      }
+      helpers.invoke(props.onClick, event);
+      if (!isRoute || external || downloadAttr != null) return;
+      if (event.defaultPrevented) return;
+      if (event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      helpers.router.navigate(to);
+    };
+    return anchor;
+  }
+};
+function applyCss(target, classes, style) {
+  for (const token of classes) target.classList.add(token);
+  if (!style) return;
+  const existing = target.getAttribute("style");
+  target.setAttribute("style", existing ? `${existing};${style}` : style);
+}
+const Css = {
+  name: "Css",
+  description: "Apply raw CSS class names and / or an inline style string to a wrapped component. The styling is merged onto the rendered child's DOM element — no extra wrapper element is added when the child renders as one element (including an `Svg` root). Several children are each styled individually; a plain-text child gets a wrapping span to carry the styling. Reach for `Css` only when the component's own props cannot express the styling (use `Box`/`Stack`/`Grid` props for layout, `Theme` for tokens, `Styles` + selector classes for sweeping changes).",
+  props: [
+    { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
+    { name: "style", type: "string", optional: true, description: 'Inline CSS declarations (e.g. "padding: 16px; background: #eef;")' },
+    { name: "class", type: "string | string[]", optional: true, aliases: ["className", "classes"], description: "Class name (space-separated string or array). Tokens must match `[A-Za-z_][A-Za-z0-9_-:/]*`." }
+  ],
+  render: (_node, props, helpers) => {
+    const safeClasses = sanitiseClassList(props.class);
+    const safeStyle = sanitiseInlineStyle(props.style);
+    if (Array.isArray(props.child)) {
+      const fragment = renderChildAsNode(helpers, props.child);
+      for (const child of Array.from(fragment.children)) applyCss(child, safeClasses, safeStyle);
+      return fragment;
+    }
+    const rendered = renderChildAsNode(helpers, props.child);
+    if (rendered instanceof Element) {
+      applyCss(rendered, safeClasses, safeStyle);
+      return rendered;
+    }
+    const span = el("span", { class: "rui-css" });
+    span.append(rendered);
+    applyCss(span, safeClasses, safeStyle);
+    return span;
   }
 };
 const GradientText = {
@@ -29934,7 +30242,9 @@ const OverlayItem = {
       "data-anchor": asString(props.anchor, "top-right"),
       // Validated as a CSS length: a raw value could otherwise close the custom
       // property with `;` and append arbitrary declarations to this element.
-      style: props.offset ? `--ak-ov-off:${sanitiseCssLength(props.offset, "8px")}` : null
+      // A numeric 0 is a real offset, not "unset": only a missing or empty
+      // value leaves the stylesheet's 8px default in place.
+      style: props.offset != null && props.offset !== "" ? `--ak-ov-off:${sanitiseCssLength(props.offset, "8px")}` : null
     });
     if (props.child != null) wrap.append(helpers.renderNode(props.child));
     return wrap;
@@ -30343,6 +30653,7 @@ function windowBar(file, status, helpers, action) {
 }
 function extractCodeString(codeNode) {
   if (typeof codeNode === "string") return codeNode;
+  if (typeof codeNode === "number" || typeof codeNode === "boolean") return String(codeNode);
   if (codeNode == null || typeof codeNode !== "object") return "";
   const node = codeNode;
   if (node.__kind !== "Component" || !Array.isArray(node.args)) return "";
@@ -30768,7 +31079,7 @@ const Backdrop = {
 };
 const ThemeToggle = {
   name: "ThemeToggle",
-  description: "A sun/moon button that toggles the host between light and dark themes — no host glue required. It flips the <aktion-app> `theme` attribute and dispatches a `theme-change` event the host can listen for.",
+  description: "A sun/moon button that toggles the host between light and dark themes — no host glue required. It flips the <aktion-app> `theme` attribute between `light` and `dark` (any theme names) and dispatches a `theme-change` event the host can listen for.",
   props: [
     { name: "light", type: "string", optional: true, description: "Theme name when toggled to light (default 'light')" },
     { name: "dark", type: "string", optional: true, description: "Theme name when toggled to dark (default 'dark')" }
@@ -30776,6 +31087,12 @@ const ThemeToggle = {
   render: (_node, props, helpers) => {
     const lightName = asString(props.light, "light");
     const darkName = asString(props.dark, "dark");
+    const isDarkTheme = (theme) => {
+      const key = theme.trim().toLowerCase();
+      if (key === darkName.trim().toLowerCase()) return true;
+      if (key === lightName.trim().toLowerCase()) return false;
+      return key.includes("dark");
+    };
     const darkSlot = helpers.useInstanceState("rui-theme-dark", false);
     const isDark = darkSlot.get();
     const btn = el("button", {
@@ -30799,7 +31116,7 @@ const ThemeToggle = {
     deferToPaint(() => {
       if (!btn.isConnected) return;
       const host = hostFrom(btn);
-      const dark = (host?.getAttribute("theme") || "").toLowerCase().includes("dark");
+      const dark = isDarkTheme(host?.getAttribute("theme") || lightName);
       if (dark === darkSlot.get()) return;
       darkSlot.set(dark);
       paint(btn, dark);
@@ -30808,11 +31125,11 @@ const ThemeToggle = {
       const target = event.currentTarget ?? event.target;
       const host = hostFrom(target);
       if (!host) return;
-      const cur = (host.getAttribute("theme") || lightName).toLowerCase();
-      const next = cur.includes("dark") ? lightName : darkName;
+      const toLight = isDarkTheme(host.getAttribute("theme") || lightName);
+      const next = toLight ? lightName : darkName;
       host.setAttribute("theme", next);
       host.dispatchEvent(new CustomEvent("theme-change", { detail: { theme: next }, bubbles: true, composed: true }));
-      const dark = next.toLowerCase().includes("dark");
+      const dark = !toLight;
       darkSlot.set(dark);
       if (target) paint(target, dark);
     };
@@ -30856,6 +31173,11 @@ const Swatch = {
     return root;
   }
 };
+function copyButtonIconOnly(raw) {
+  if (typeof raw !== "string") return asBoolean(raw);
+  const word = raw.trim().toLowerCase();
+  return word === "true" || word === "icon" || word === "icon-only" || word === "icononly";
+}
 const CopyButton = {
   name: "CopyButton",
   description: "A button that copies `text` to the clipboard and confirms it — the label flips to `copiedLabel` (default 'Copied!') with a check icon for a couple of seconds, then reverts, and the confirmation is announced to screen readers. `iconOnly` drops the label for tight corners (code blocks, API-key fields). Bounded, no host glue.",
@@ -30868,7 +31190,7 @@ const CopyButton = {
   render: (_node, props, helpers) => {
     const label = asString(props.label, "Copy");
     const copiedLabel = asString(props.copiedLabel, "Copied!");
-    const iconOnly = asBoolean(props.iconOnly);
+    const iconOnly = copyButtonIconOnly(props.iconOnly);
     const copiedSlot = helpers.useInstanceState("rui-copy-copied", false);
     const copied = copiedSlot.get();
     const wrap = el("span", { class: "rui-copy-button-wrap" });
@@ -30937,10 +31259,14 @@ const CopyButton = {
 };
 const SegmentedControl = {
   name: "SegmentedControl",
-  description: "A compact segmented toggle (iOS-style). `options` is an array of strings or {label, value, icon?, disabled?}. Bind `value` to a $variable; `onChange(value)` fires on select. Left/Right arrows move between segments; `size` sets the height and `disabled` locks the whole control.",
+  description: "A compact segmented toggle (iOS-style). `options` is an array of strings or {label, value, icon?, disabled?}. Bind `value` to a $variable; `onChange(value)` fires on select. Option values keep their type, so numeric options write numbers back. Left/Right arrows move between segments; `size` sets the height and `disabled` locks the whole control.",
   props: [
     { name: "options", type: "any[]", positional: true, required: true, aliases: ["items"] },
-    { name: "value", type: "string", optional: true },
+    // `string | number`: option values keep their type (see the description), so
+    // a numeric option's `value` is a number. No `object` in the hint, so
+    // `propExpectsObject` stays false and a trailing `{…}` is still read as the
+    // named props, never as `value` (`chooseNamedBagIndex`).
+    { name: "value", type: "string | number", optional: true, description: 'The selected option\'s value (compared as text, so `2` and `"2"` select the same option)' },
     { name: "onChange", type: "callable", optional: true, aliases: ["onchange"] },
     { name: "disabled", type: "boolean", optional: true, description: "Lock every segment" },
     { name: "size", type: "string", optional: true, enum: ["sm", "md", "lg"] },
@@ -30958,9 +31284,9 @@ const SegmentedControl = {
     const current = asString(props.value);
     for (const raw of asArray(props.options)) {
       const opt = raw && typeof raw === "object" ? raw : { label: raw, value: raw, icon: void 0, disabled: void 0 };
-      const value = asString(opt.value ?? opt.label);
+      const value = opt.value ?? opt.label ?? "";
       const label = asString(opt.label ?? opt.value);
-      const active = value === current;
+      const active = asString(value) === current;
       const disabled = groupDisabled || asBoolean(opt.disabled);
       const btn = el("button", {
         class: "rui-segmented-control-option",
@@ -31079,6 +31405,7 @@ function relativeTimeLabel(date) {
   }
   return "just now";
 }
+const RELATIVE_TIME_RUNNING = /* @__PURE__ */ new WeakMap();
 const RelativeTime = {
   name: "RelativeTime",
   description: "Renders a human relative time ('3m ago', 'in 2 days') from an ISO date/timestamp, localized via Intl. Emits a `<time datetime=…>` carrying the absolute instant and refreshes itself on a coarse schedule, so a list left open does not keep claiming 'just now'.",
@@ -31087,7 +31414,7 @@ const RelativeTime = {
   ],
   render: (_node, props, helpers) => {
     const raw = props.value;
-    const date = typeof raw === "number" ? new Date(raw) : new Date(asString(raw));
+    const date = typeof raw === "number" || raw instanceof Date ? new Date(raw) : new Date(asString(raw));
     if (Number.isNaN(date.getTime())) {
       return el("span", { class: "rui-relative-time" }, [asString(raw)]);
     }
@@ -31099,24 +31426,33 @@ const RelativeTime = {
     });
     const labelEl = el("span", { class: "rui-relative-time-label" }, [relativeTimeLabel(date)]);
     root.append(labelEl, el("span", { class: "rui-visually-hidden" }, [` (${absolute})`]));
+    const at = date.getTime();
+    const liveSlot = helpers.useInstanceState("rui-relativetime-live", null);
     const cancel = deferToPaint(() => {
-      if (!root.isConnected) return;
+      const live = root.isConnected ? root : liveSlot.get();
+      if (!live?.isConnected || RELATIVE_TIME_RUNNING.get(live) === at) return;
+      liveSlot.set(live);
+      RELATIVE_TIME_RUNNING.set(live, at);
       let timer;
+      const stop = () => {
+        clearTimeout(timer);
+        if (RELATIVE_TIME_RUNNING.get(live) === at) RELATIVE_TIME_RUNNING.delete(live);
+      };
       const run = () => {
-        const live = root.querySelector(".rui-relative-time-label");
-        if (!root.isConnected || !live) {
-          clearTimeout(timer);
+        const label = live.querySelector(".rui-relative-time-label");
+        if (!live.isConnected || !label) {
+          stop();
           return;
         }
-        live.textContent = relativeTimeLabel(date);
+        label.textContent = relativeTimeLabel(date);
         schedule();
       };
       const schedule = () => {
-        const delay = Math.abs(date.getTime() - Date.now()) < 6e4 ? 1e3 : 3e4;
+        const delay = Math.abs(at - Date.now()) < 6e4 ? 1e3 : 3e4;
         timer = setTimeout(run, delay);
       };
       schedule();
-      helpers.registerDisposer(() => clearTimeout(timer), "rui-relativetime");
+      helpers.registerDisposer(stop, "rui-relativetime");
     });
     helpers.registerDisposer(() => {
       if (!root.isConnected) cancel();
@@ -31264,13 +31600,13 @@ const QuantityStepper = {
 };
 const ProductCard = {
   name: "ProductCard",
-  description: "An e-commerce product card: image, title, optional rating, a PriceTag, and an add-to-cart action. Pass `price`/`compareAt` directly or a custom `price` node. Give it `href` or `onClick` to make the whole card open the product (the card's hover lift promises it), `rating` + `reviewCount` for credible stars, and `soldOut` to dim it and stop the add button firing.",
+  description: "An e-commerce product card: image, title, optional rating, a PriceTag, and an add-to-cart action. Pass `price`/`compareAt` (formatted by a PriceTag), or a custom `price` node rendered as-is. Give it `href` or `onClick` to make the whole card open the product (the card's hover lift promises it), `rating` + `reviewCount` for credible stars, and `soldOut` to dim it and stop the add button firing.",
   props: [
     { name: "title", type: "string", positional: true, required: true },
     { name: "image", type: "string", optional: true, aliases: ["src"] },
-    { name: "price", type: "string | number", optional: true },
-    { name: "compareAt", type: "string | number", optional: true },
-    { name: "currency", type: "string", optional: true },
+    { name: "price", type: "string | number | Node", optional: true, description: "Price for the built-in PriceTag, or your own node (e.g. a PriceTag with a `period`)" },
+    { name: "compareAt", type: "string | number", optional: true, description: "Struck-through original price (ignored when `price` is a node)" },
+    { name: "currency", type: "string", optional: true, description: "Currency symbol (ignored when `price` is a node)" },
     { name: "rating", type: "number", optional: true, description: "0–5 stars" },
     { name: "badge", type: "string", optional: true, description: "Corner ribbon label (e.g. 'Sale')" },
     { name: "action", type: "Node", optional: true, description: "Add-to-cart Button; omit it and pass `onAdd` for the built-in icon button" },
@@ -31322,7 +31658,9 @@ const ProductCard = {
       body.append(stars);
     }
     const row = el("div", { class: "rui-product-foot" });
-    if (props.price != null) {
+    if (isComponentNode(props.price)) {
+      row.append(helpers.renderNode(props.price));
+    } else if (props.price != null) {
       row.append(PriceTag.render(
         { __kind: "Component", name: "PriceTag", args: [], argMeta: [] },
         { price: props.price, compareAt: props.compareAt, currency: props.currency },
@@ -31424,19 +31762,31 @@ const COUNTDOWN_LABELS = {
   minutes: "min",
   seconds: "sec"
 };
-const COUNTDOWN_RUNNING = /* @__PURE__ */ new WeakSet();
+const COUNTDOWN_RUNNING = /* @__PURE__ */ new WeakMap();
+const COUNTDOWN_PENDING = "--";
+function countdownTarget(raw) {
+  if (typeof raw === "number") return raw;
+  if (raw instanceof Date) return raw.getTime();
+  const text = asString(raw).trim();
+  return text ? new Date(text).getTime() : Number.NaN;
+}
+function stopCountdown(live, id = COUNTDOWN_RUNNING.get(live)) {
+  if (id === void 0) return;
+  clearInterval(id);
+  if (COUNTDOWN_RUNNING.get(live) === id) COUNTDOWN_RUNNING.delete(live);
+}
 const CountdownTimer = {
   name: "CountdownTimer",
-  description: "Live countdown to a target date/time (ISO string or timestamp). Ticks every second, then shows `endLabel` and fires `onEnd` (enable checkout, reveal a link, refresh a price). `units` trims the boxes — a 10-minute flash sale should not render two zeroed day/hour cells.",
+  description: "Live countdown to a target date/time (ISO string or timestamp). Ticks every second, then shows `endLabel` and fires `onEnd` (enable checkout, reveal a link, refresh a price). Changing `to` retargets the running clock, and `onEnd` fires once per target; an empty or null `to` (data still loading) shows `--` cells and fires nothing. `units` trims the boxes — a 10-minute flash sale should not render two zeroed day/hour cells.",
   props: [
     { name: "to", type: "string | number", positional: true, required: true, aliases: ["target", "date"] },
     { name: "endLabel", type: "string", optional: true, description: "Shown when the countdown finishes (default 'Done')" },
-    { name: "onEnd", type: "callable", optional: true, aliases: ["onFinish", "onComplete"], description: "Fired once when the countdown reaches zero" },
+    { name: "onEnd", type: "callable", optional: true, aliases: ["onFinish", "onComplete"], description: "Fired once per target when the countdown reaches zero" },
     { name: "units", type: "string[]", optional: true, enum: COUNTDOWN_UNITS, description: "Which units to show (default all four)" },
     { name: "showDays", type: "boolean", optional: true, description: "Set false to drop the days cell" }
   ],
   render: (_node, props, helpers) => {
-    const target = typeof props.to === "number" ? props.to : new Date(asString(props.to)).getTime();
+    const target = countdownTarget(props.to);
     const endLabel = asString(props.endLabel, "Done");
     const requested = asArray(props.units).map((u) => asString(u));
     let units = requested.filter((u) => COUNTDOWN_UNITS.includes(u));
@@ -31447,26 +31797,29 @@ const CountdownTimer = {
     for (const unit of units) {
       const u = el("div", { class: "rui-countdown-unit", "data-unit": unit });
       u.append(
-        el("div", { class: "rui-countdown-value" }, ["00"]),
+        el("div", { class: "rui-countdown-value" }, [COUNTDOWN_PENDING]),
         el("div", { class: "rui-countdown-label" }, [COUNTDOWN_LABELS[unit] ?? unit])
       );
       root.append(u);
     }
     const summary = el("span", { class: "rui-countdown-summary rui-visually-hidden", role: "status", "aria-live": "polite" });
     root.append(summary);
-    const endedSlot = helpers.useInstanceState("rui-countdown-ended", false);
-    const fireEnd = () => {
-      if (endedSlot.get()) return;
-      endedSlot.set(true);
-      helpers.invoke(props.onEnd);
-    };
+    const config = { target, endLabel, units, onEnd: props.onEnd };
+    const configSlot = helpers.useInstanceState("rui-countdown-config", config);
+    configSlot.set(config);
+    const endedFor = helpers.useInstanceState("rui-countdown-ended", null);
+    const liveSlot = helpers.useInstanceState("rui-countdown-live", null);
     const pad3 = (n) => String(Math.max(0, n)).padStart(2, "0");
-    const paint = (host) => {
-      const diff = target - Date.now();
-      if (!Number.isFinite(target) || diff <= 0) {
-        host.replaceChildren(el("div", { class: "rui-countdown-done" }, [endLabel]));
+    const paint = (host, cfg2) => {
+      if (!Number.isFinite(cfg2.target)) {
+        for (const cell of host.querySelectorAll(".rui-countdown-value")) cell.textContent = COUNTDOWN_PENDING;
+        return "pending";
+      }
+      const diff = cfg2.target - Date.now();
+      if (diff <= 0) {
+        host.replaceChildren(el("div", { class: "rui-countdown-done" }, [cfg2.endLabel]));
         host.setAttribute("data-done", "true");
-        return false;
+        return "done";
       }
       const sec = Math.floor(diff / 1e3);
       const values = {
@@ -31475,42 +31828,42 @@ const CountdownTimer = {
         minutes: Math.floor(sec % 3600 / 60),
         seconds: sec % 60
       };
-      for (const unit of units) {
+      for (const unit of cfg2.units) {
         const cell = host.querySelector(`.rui-countdown-unit[data-unit="${unit}"] .rui-countdown-value`);
         if (cell) cell.textContent = pad3(values[unit] ?? 0);
       }
       const live = host.querySelector(".rui-countdown-summary");
       if (live) {
-        const spoken = units.filter((u) => u !== "seconds" || sec < 60).map((u) => `${values[u] ?? 0} ${u}`).join(", ");
+        const spoken = cfg2.units.filter((u) => u !== "seconds" || sec < 60).map((u) => `${values[u] ?? 0} ${u}`).join(", ");
         const next = `${spoken} remaining`;
         if (live.textContent !== next && (sec % 60 === 0 || live.textContent === "")) live.textContent = next;
       }
-      return true;
+      return "running";
     };
-    paint(root);
+    paint(root, config);
+    const step = (live) => {
+      const cfg2 = configSlot.get();
+      const phase = paint(live, cfg2);
+      if (phase === "done" && endedFor.get() !== cfg2.target) {
+        endedFor.set(cfg2.target);
+        helpers.invoke(cfg2.onEnd);
+      }
+      return phase;
+    };
     const cancel = deferToPaint(() => {
-      if (!root.isConnected || COUNTDOWN_RUNNING.has(root)) return;
-      if (!paint(root)) {
-        fireEnd();
+      const live = root.isConnected ? root : liveSlot.get();
+      if (!live?.isConnected) return;
+      liveSlot.set(live);
+      if (step(live) !== "running") {
+        stopCountdown(live);
         return;
       }
-      COUNTDOWN_RUNNING.add(root);
+      if (COUNTDOWN_RUNNING.has(live)) return;
       const id = setInterval(() => {
-        if (!root.isConnected) {
-          clearInterval(id);
-          COUNTDOWN_RUNNING.delete(root);
-          return;
-        }
-        if (!paint(root)) {
-          clearInterval(id);
-          COUNTDOWN_RUNNING.delete(root);
-          fireEnd();
-        }
+        if (!live.isConnected || step(live) !== "running") stopCountdown(live, id);
       }, 1e3);
-      helpers.registerDisposer(() => {
-        clearInterval(id);
-        COUNTDOWN_RUNNING.delete(root);
-      }, "countdown");
+      COUNTDOWN_RUNNING.set(live, id);
+      helpers.registerDisposer(() => stopCountdown(live, id), "countdown");
     });
     helpers.registerDisposer(() => {
       if (!root.isConnected) cancel();
@@ -32175,6 +32528,24 @@ function normaliseDragType(raw) {
   return asString(raw).trim().toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 40);
 }
 let KEYBOARD_DRAG = null;
+const DRAG_PAYLOAD_FORMAT = "application/x-rui-drag-payload+json";
+let POINTER_DRAG = null;
+function readDropPayload(transfer) {
+  const json = transfer?.getData(DRAG_PAYLOAD_FORMAT) ?? "";
+  if (json) {
+    if (POINTER_DRAG && POINTER_DRAG.json === json) return POINTER_DRAG.data;
+    try {
+      return JSON.parse(json);
+    } catch {
+    }
+  }
+  const raw = transfer?.getData("text/plain") ?? "";
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
 function clearKeyboardGrab(from) {
   const root = from?.getRootNode?.();
   if (!(root instanceof ShadowRoot) && !(root instanceof Document)) return;
@@ -32188,7 +32559,7 @@ const Draggable = {
   description: "Makes its child draggable, carrying a `data` payload picked up by a DropZone. `type` tags the payload so a DropZone can `accept` (or refuse) it before the drop; `disabled` makes it immovable without re-rendering a different child. `onDragStart`/`onDragEnd` optional. Keyboard users focus it and press Space/Enter to pick up (Escape cancels), then Space/Enter on a DropZone to drop — give it an `ariaLabel` so they know what it is.",
   props: [
     { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
-    { name: "data", type: "any", optional: true, description: "Payload (stringified) handed to the DropZone" },
+    { name: "data", type: "any", optional: true, description: "Payload handed to the DropZone's `onDrop` unchanged, by pointer or keyboard (a drop into another page receives a JSON copy)" },
     { name: "type", type: "string", optional: true, description: 'Payload kind, e.g. "card" / "file" / "tag" — a DropZone\'s `accept` matches against it' },
     { name: "disabled", type: "boolean", optional: true, description: "Not draggable (locked, in flight, not the user's to move)" },
     { name: "ariaLabel", type: "string", optional: true, description: "What is being dragged, announced to screen readers" },
@@ -32217,7 +32588,6 @@ const Draggable = {
     });
     wrap.append(renderChild$1(helpers, props.child));
     if (disabled) return wrap;
-    const payload = () => typeof props.data === "string" ? props.data : JSON.stringify(props.data ?? null);
     const setDragging = (node, next) => {
       modeSlot.set({ mode: next });
       if (!node) return;
@@ -32227,16 +32597,21 @@ const Draggable = {
     };
     const liveWrap = (e) => (e.currentTarget ?? e.target)?.closest?.(".rui-draggable") ?? null;
     wrap.ondragstart = (e) => {
+      POINTER_DRAG = null;
       try {
-        const text = payload();
+        const json = JSON.stringify(props.data ?? null) ?? "null";
+        const text = typeof props.data === "string" ? props.data : json;
         e.dataTransfer?.setData("text/plain", text);
+        e.dataTransfer?.setData(DRAG_PAYLOAD_FORMAT, json);
         if (type) e.dataTransfer?.setData(dragTypeFormat(type), text);
+        POINTER_DRAG = { data: props.data, json };
       } catch {
       }
       setDragging(liveWrap(e), "pointer");
       helpers.invoke(props.onDragStart, props.data);
     };
     wrap.ondragend = (e) => {
+      POINTER_DRAG = null;
       setDragging(liveWrap(e), "none");
       helpers.invoke(props.onDragEnd);
     };
@@ -32266,7 +32641,7 @@ const Draggable = {
 };
 const DropZone = {
   name: "DropZone",
-  description: "A target that accepts a Draggable. `onDrop(data)` receives the dropped payload (parsed JSON when possible). `accept` lists the Draggable `type`s this zone can take (comma-separated) — anything else is refused before it is dropped, so a 'To do' / 'Done' / 'Archive' board can express what goes where; `disabled` makes the zone inert. Pass `child` for the zone's content, or just `label` for a bare labelled target. Keyboard users focus the zone and press Space/Enter to drop what a Draggable picked up.",
+  description: "A target that accepts a Draggable. `onDrop(data)` receives the Draggable's `data` unchanged (text dragged in from outside the app arrives as parsed JSON when possible). `accept` lists the Draggable `type`s this zone can take (comma-separated) — anything else is refused before it is dropped, so a 'To do' / 'Done' / 'Archive' board can express what goes where; `disabled` makes the zone inert. Pass `child` for the zone's content, or just `label` for a bare labelled target. Keyboard users focus the zone and press Space/Enter to drop what a Draggable picked up.",
   props: [
     { name: "child", type: "Node", positional: true, optional: true, aliases: ["children"], description: "Zone content. Omit it and pass `label` for a plain labelled target" },
     { name: "onDrop", type: "callable", optional: true },
@@ -32327,13 +32702,7 @@ const DropZone = {
         return;
       }
       e.preventDefault();
-      const raw = e.dataTransfer?.getData("text/plain") ?? "";
-      let data = raw;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-      }
-      drop(node, data);
+      drop(node, readDropPayload(e.dataTransfer));
     };
     zone.onkeydown = (e) => {
       if (e.key !== " " && e.key !== "Enter") return;
@@ -32363,7 +32732,7 @@ const Parallax = {
   props: [
     { name: "child", type: "Node", positional: true, required: true, aliases: ["children"] },
     { name: "speed", type: "number", optional: true, description: "−1…1 (default 0.3)" },
-    { name: "maxOffset", type: "string", optional: true, description: `Maximum travel in either direction — a length ("120px") or a percentage of the layer's height ("40%"). Default 50%` }
+    { name: "maxOffset", type: "string", optional: true, description: 'Maximum travel in either direction — pixels (`120` or "120px") or a percentage of the layer\'s height ("40%"). Other units (rem, vh, calc()) are not measured and fall back to the default, 50%' }
   ],
   render: (_node, props, helpers) => {
     const offsetSlot = helpers.useInstanceState("rui-parallax-y", 0);
@@ -33298,7 +33667,9 @@ const QRCode = {
       // so the constraint holds no matter which theme is adopted.
       style: "max-width:100%;height:auto"
     });
-    svg.append(svgEl("rect", { x: "0", y: "0", width: String(dim), height: String(dim), fill: background }));
+    if (background.toLowerCase() !== "transparent") {
+      svg.append(svgEl("rect", { x: "0", y: "0", width: String(dim), height: String(dim), fill: background }));
+    }
     let d = "";
     for (let y = 0; y < count; y += 1) {
       for (let x = 0; x < count; x += 1) {
@@ -33656,7 +34027,8 @@ function readGcalEvents(raw) {
       continue;
     }
     const colorRaw = asString(e.color ?? e.tone, "primary");
-    const color2 = CHIP_TONES[colorRaw] ?? sanitiseCssColor(colorRaw) ?? CHIP_TONES.primary;
+    const tone = Object.prototype.hasOwnProperty.call(CHIP_TONES, colorRaw) ? CHIP_TONES[colorRaw] : void 0;
+    const color2 = tone ?? (sanitiseCssColor(colorRaw) || CHIP_TONES.primary);
     const list = chips.get(date) ?? [];
     list.push({ label, color: color2, time: asString(e.time), raw: entry });
     chips.set(date, list);
@@ -34071,10 +34443,15 @@ function padDataUrl(canvas) {
     return "";
   }
 }
+const padHasInk = (pad3) => pad3.base !== null || pad3.strokes.some((path) => path.length >= 2);
 const padResult = (pad3) => ({
   strokes: pad3.strokes.length,
-  inked: pad3.strokes.some((path) => path.length >= 2)
+  inked: padHasInk(pad3)
 });
+function signatureValue(canvas) {
+  const pad3 = PADS.get(canvas);
+  return pad3 && padHasInk(pad3) ? padDataUrl(canvas) : "";
+}
 function resizePad(canvas, pad3, width, height, applyCssSize) {
   const sx = pad3.width > 0 ? width / pad3.width : 1;
   const sy = pad3.height > 0 ? height / pad3.height : 1;
@@ -34194,9 +34571,9 @@ function makeDrawingSurface(spec) {
     live.drawing = false;
     const url = padDataUrl(cv);
     live.value = url;
-    const hidden = cv.closest(`.${rootClass}`)?.querySelector("input.rui-canvas-value");
-    if (hidden) hidden.value = url;
-    spec.onEnd?.(url, padResult(live));
+    const info = padResult(live);
+    writeValueField(cv, rootClass, spec.fieldValue ? spec.fieldValue(url, info) : url);
+    spec.onEnd?.(url, info);
   };
   if (!disabled) {
     canvas.onpointerdown = (e) => {
@@ -34276,6 +34653,10 @@ function valueField(name, value) {
   if (!name) return null;
   return el("input", { type: "hidden", class: "rui-canvas-value", name, value: valueAttr(value) });
 }
+function writeValueField(canvas, rootClass, value) {
+  const hidden = canvas.closest(`.${rootClass}`)?.querySelector("input.rui-canvas-value");
+  if (hidden) hidden.value = value;
+}
 const DrawingCanvas = {
   name: "DrawingCanvas",
   description: "A freehand drawing surface (pointer / touch / stylus). `onChange(count)` fires when a stroke starts or the pad is cleared; `onEnd(dataUrl, count)` fires when a stroke finishes with a PNG data URL. Pass that URL back as `value` to restore the drawing after a re-render or route change. `color`/`lineWidth`/`background` style the ink (`background` defaults to the surface colour so the export is never ink-on-transparency). Includes a Clear button unless `clearable=false`; `disabled` locks the surface.",
@@ -34322,18 +34703,20 @@ const DrawingCanvas = {
         disabled: disabled ? "" : null
       }, ["Clear"]);
       clearBtn.onclick = (event) => {
-        clearPad(liveSurfaceCanvas(event, "rui-drawing-canvas", surface.canvas));
+        const live = liveSurfaceCanvas(event, "rui-drawing-canvas", surface.canvas);
+        clearPad(live);
+        writeValueField(live, "rui-drawing-canvas", "");
         helpers.invoke(props.onChange, 0);
       };
       bar.append(clearBtn);
       surface.root.append(bar);
     }
-    return withFieldShell(surface.root, props);
+    return withFieldShell(surface.root, props, { ownsName: true });
   }
 };
 const SignaturePad = {
   name: "SignaturePad",
-  description: "A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check). Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows.",
+  description: "A signature capture pad — a DrawingCanvas tuned for signing, with a baseline and a Clear button. `onChange(pngDataUrl, strokeCount)` fires when the signature changes (empty string when cleared, and also when the pad only received taps — so a stray tap cannot pass a truthiness check); `onBlur` / `onFocus` receive that same value, and a `name`d pad submits it. Pass the URL back as `value` to restore a signature after a re-render, and `disabled` to lock the pad once it is submitted. `label`/`error`/`required` render the usual field shell. Use in contracts, delivery confirmation, and consent flows.",
   props: [
     { name: "width", type: "number", optional: true, description: "px (default 400)" },
     { name: "height", type: "number", optional: true, description: "px (default 160)" },
@@ -34364,9 +34747,12 @@ const SignaturePad = {
       // Taps alone are not a signature: reporting "" keeps a blank-but-truthy
       // data URL from satisfying `$signature != ""` after an accidental touch.
       onEnd: (url, info) => helpers.invoke(props.onChange, info.inked ? url : "", info.strokes),
+      // …and the form field follows the same rule, or a `required` pad in a
+      // Form submitted a blank PNG as its signature.
+      fieldValue: (url, info) => info.inked ? url : "",
       helpers
     });
-    attachFocusHandlers(surface.canvas, props, helpers, (node) => padDataUrl(node));
+    attachFocusHandlers(surface.canvas, props, helpers, (node) => signatureValue(node));
     const surfaceBox = el("div", { class: "rui-signature-surface", style: "position:relative;display:block" });
     surfaceBox.append(surface.canvas, el("div", { class: "rui-signature-baseline", style: "bottom:14px" }));
     surface.root.append(surfaceBox);
@@ -34380,13 +34766,15 @@ const SignaturePad = {
         disabled: disabled ? "" : null
       }, ["Clear"]);
       clearBtn.onclick = (event) => {
-        clearPad(liveSurfaceCanvas(event, "rui-signature-pad", surface.canvas));
+        const live = liveSurfaceCanvas(event, "rui-signature-pad", surface.canvas);
+        clearPad(live);
+        writeValueField(live, "rui-signature-pad", "");
         helpers.invoke(props.onChange, "", 0);
       };
       bar.append(clearBtn);
       surface.root.append(bar);
     }
-    return withFieldShell(surface.root, props);
+    return withFieldShell(surface.root, props, { ownsName: true });
   }
 };
 let idSeq = 0;
@@ -34451,7 +34839,13 @@ function wireOverlayLayer(root, helpers, reset, key) {
     }, key);
   });
 }
-const VIEWBOX_RE = /^[\d.\s-]+$/;
+function parseViewBox(raw) {
+  const parts = raw.trim().split(/[\s,]+/);
+  if (parts.length !== 4) return null;
+  const nums = parts.map(Number);
+  if (nums.some((n) => !Number.isFinite(n)) || nums[2] < 0 || nums[3] < 0) return null;
+  return nums.join(" ");
+}
 const SVG_PAINT_RE = /^[a-zA-Z#()0-9,.\s-]+$/;
 const PRESERVE_AR_RE = /^[a-zA-Z\s]+$/;
 const Svg = {
@@ -34459,10 +34853,10 @@ const Svg = {
   description: "Render inline SVG markup safely (paths, shapes, gradients) — for brand illustrations, custom icons, and data-viz overlays without the HTMLTag escape hatch. Pass the inner markup (everything inside <svg>) plus a `viewBox`, or paste a whole `<svg …>` element and its viewBox/fill/stroke are picked up. `label` names the graphic for assistive tech (unlabelled graphics are hidden as decorative). Script/event-handler payloads are stripped.",
   props: [
     { name: "content", type: "string", positional: true, required: true, aliases: ["paths", "markup"] },
-    { name: "viewBox", type: "string", optional: true, description: 'e.g. "0 0 24 24" (default)' },
+    { name: "viewBox", type: "string", optional: true, description: 'Four numbers, space- or comma-separated, e.g. "0 0 24 24" (default)' },
     { name: "width", type: "string", optional: true },
     { name: "height", type: "string", optional: true },
-    { name: "fill", type: "string", optional: true, description: "currentColor (default), none, or a token color" },
+    { name: "fill", type: "string", optional: true, description: "SVG paint: currentColor (default), none, a hex / rgb() / named colour, or url(#gradientId). Theme tokens are not resolved here; colour the parent and keep currentColor" },
     { name: "stroke", type: "string", optional: true, description: "Stroke colour — for outline icon sets (Lucide, Feather)" },
     { name: "strokeWidth", type: "string | number", optional: true, aliases: ["stroke-width"] },
     { name: "preserveAspectRatio", type: "string", optional: true, description: 'e.g. "none" to stretch to the box' },
@@ -34475,7 +34869,7 @@ const Svg = {
     const safe = sanitiseSvgMarkup(asString(props.content));
     const rootAttrs = safe?.rootAttrs ?? {};
     const vb = asString(props.viewBox) || rootAttrs.viewbox || "0 0 24 24";
-    svg.setAttribute("viewBox", VIEWBOX_RE.test(vb) ? vb : "0 0 24 24");
+    svg.setAttribute("viewBox", parseViewBox(vb) ?? "0 0 24 24");
     const fill = asString(props.fill) || rootAttrs.fill || "currentColor";
     svg.setAttribute("fill", SVG_PAINT_RE.test(fill) ? fill : "currentColor");
     const stroke = asString(props.stroke) || rootAttrs.stroke || "";
@@ -35108,7 +35502,7 @@ function moneyFormatter(currency, locale) {
 }
 const OrderSummary = {
   name: "OrderSummary",
-  description: 'An order/cart summary: line items, subtotal, discount, shipping, tax, and a bold total. Pass `items` as {label, amount, qty?} and the named totals. `currency` takes an ISO code ("EUR" — properly localised via `locale`) or a bare symbol prefix. `loading` shows placeholders while an async shipping/tax quote resolves.',
+  description: 'An order/cart summary: line items, subtotal, discount, shipping, tax, and a bold total. Pass `items` as {label, amount, qty?} (`quantity` is accepted for `qty`) and the named totals. `currency` takes an ISO code ("EUR" — properly localised via `locale`) or a bare symbol prefix. `loading` shows placeholders while an async shipping/tax quote resolves.',
   props: [
     { name: "items", type: "object[]", positional: true, required: true, aliases: ["lines"] },
     { name: "subtotal", type: "string | number", optional: true },
@@ -35168,7 +35562,7 @@ const OrderSummary = {
 };
 const ScrollSpy = {
   name: "ScrollSpy",
-  description: "A sticky in-page nav that highlights the section currently in view. `sections` is an array of {label, id} matching element ids on the page (set via the universal `id` prop). Clicking smooth-scrolls to a section; `offset` clears a sticky header and `top` sets the sticky offset.",
+  description: "A sticky in-page nav that highlights the section currently in view. `sections` is an array of {label, id} matching element ids on the page (set via the universal `id` prop, which takes a letter followed by letters, digits, `_` or `-`). Clicking smooth-scrolls to a section; `offset` clears a sticky header and `top` sets the sticky offset.",
   props: [
     { name: "sections", type: "object[]", positional: true, required: true, aliases: ["items"] },
     { name: "title", type: "string", optional: true },
@@ -35190,7 +35584,7 @@ const ScrollSpy = {
     const list = el("ul", { class: "rui-scrollspy-list" });
     const sections = asArray(props.sections).map((raw) => {
       const s = raw ?? {};
-      return { label: asString(s.label), id: asString(s.id).replace(/[^A-Za-z0-9_-]/g, "") };
+      return { label: asString(s.label), id: asString(s.id).trim() };
     }).filter((s) => s.id);
     const active = activeSlot.get();
     for (const s of sections) {
@@ -35561,6 +35955,13 @@ const Lottie = {
         if (speed !== 1) anim.setSpeed?.(speed);
         if (playing === false) anim.pause?.();
         if (props.onComplete != null) anim.addEventListener?.("complete", () => helpers.invoke(props.onComplete));
+        let failed = false;
+        anim.addEventListener?.("data_failed", () => {
+          if (failed) return;
+          failed = true;
+          live.classList.add("rui-lottie-empty");
+          helpers.invoke(props.onError, "load-failed");
+        });
         helpers.registerDisposer(() => {
           try {
             anim.destroy?.();
@@ -36533,20 +36934,26 @@ function getComponentCatalog(library = defaultLibrary) {
 const UNIVERSAL_PROP_DOCS = {
   sx: {
     type: "object",
-    description: 'Style channel accepted by EVERY component: layout, colour, typography, spacing, borders, effects. Values may be responsive maps (`{base, sm, md, lg}`), interaction states (`{_hover, _focus, _active}`), or theme-token refs (`"primary"`, `"gradient.brand"`, `"space.md"`).'
+    description: 'Style channel accepted by EVERY component: a bounded set of layout, colour, typography, spacing, border and effect keys (`p`, `gap`, `w`, `bg`, `color`, `radius`, `shadow`, …; unknown keys are ignored). Values are theme tokens (`"md"`, `"primary"`, `"gradient.brand"` on `bg`), sanitised CSS strings, or numbers — pixels on length keys (`p: 8` → `8px`). Most keys also take a breakpoint map (`{ base, sm, md, lg, xl }`). Interaction states: `hover` / `focus` (an effect name such as `"lift"`, or a style object) and `states: { active, "focus-visible", disabled, … }`.'
   },
   animate: {
     type: "string | object",
-    description: 'Motion channel accepted by EVERY component. A preset name (`"fade"`, `"slide-up"`, `"pulse"`, `"none"`) or an object with `{ preset, duration, delay, easing, repeat }`.'
+    description: 'Motion channel accepted by EVERY component. A preset name (`"fade"`, `"slide-up"`, `"pulse"`, …; `"none"` for no animation) or an object `{ preset, duration, delay, repeat }`, with `duration` and `delay` in milliseconds.'
   },
   id: { type: "string", description: "DOM id on the rendered root element." },
   anchor: {
     type: "string",
     description: "Scroll-anchor id — the target for `SkipLink`, `ScrollSpy` and `#hash` links."
   },
-  className: { type: "string", description: "Extra CSS classes appended to the rendered root element." },
-  class: { type: "string", description: "Alias of `className`." },
-  style: { type: "string | object", description: "Inline CSS. Prefer `sx`, which is token- and breakpoint-aware." },
+  className: {
+    type: "string | string[]",
+    description: "Extra CSS classes (a space-separated string or an array) appended to the rendered root element."
+  },
+  class: { type: "string | string[]", description: "Alias of `className`." },
+  style: {
+    type: "string",
+    description: 'Inline CSS declarations as a STRING (`"color: red; padding: 4px"`); build one from an object with `$util.style.toStyle({…})`. Prefer `sx`, which is token- and breakpoint-aware.'
+  },
   aria: {
     type: "object",
     description: 'ARIA attributes as a plain object, e.g. `{ label: "Close", expanded: false }` → `aria-*`.'
@@ -36558,24 +36965,27 @@ const UNIVERSAL_PROP_DOCS = {
   },
   role: {
     type: "string",
-    description: "Override the rendered ARIA role. An escape valve for accessibility defects; use sparingly."
+    description: "Override the rendered ARIA role. Allow-listed (landmarks, live regions, common widget roles, `none` / `presentation`): any other role is dropped. An escape valve for accessibility defects; use sparingly.",
+    enumValues: [...ALLOWED_ROLES]
   },
-  tooltip: { type: "string", description: "Native hover tooltip (`title`) on the rendered root element." },
+  tooltip: { type: "string | number", description: "Native hover tooltip (`title`) on the rendered root element." },
   hidden: { type: "boolean", description: "Remove the component from the accessibility tree and hide it visually." },
   testId: {
-    type: "string",
+    type: "string | number",
     description: "End-to-end test hook: renders `data-testid` on the component's ROOT element. Works on every component, including the six that shadow the `data` channel. Prefer role/label queries; reach for this where they are genuinely ambiguous."
   },
-  testid: { type: "string", description: "Alias of `testId`." }
+  testid: { type: "string | number", description: "Alias of `testId`." }
 };
 const universalPropCatalog = [...UNIVERSAL_PROP_NAMES].map((name) => {
   const doc = UNIVERSAL_PROP_DOCS[name];
-  return {
+  const param = {
     name,
     type: doc?.type ?? "any",
     required: false,
     description: doc?.description ?? "Universal prop accepted by every component."
   };
+  if (doc?.enumValues) param.enumValues = doc.enumValues;
+  return param;
 });
 function indexCatalog(entries) {
   const out = {};
@@ -37629,17 +38039,19 @@ function getDefinitionTarget(source, position) {
 }
 function findDeclaration(source, name, isState) {
   const tokens = tokenize(source);
+  const binding = findTopLevelLetDeclaration(tokens, name, isState);
+  if (binding) return binding;
   const table = collectSymbols(tokens);
+  const topLevel = isState ? table.topState.get(name) : table.topIdent.get(name);
+  if (topLevel) return topLevel.kind === "import" ? null : topLevel.range;
   const decl = isState ? table.state.get(name) : table.ident.get(name);
-  if (decl) return decl.kind === "import" ? null : decl.range;
-  return findTopLevelLetDeclaration(tokens, name, isState);
+  return decl && decl.kind !== "import" ? decl.range : null;
 }
 function findTopLevelLetDeclaration(tokens, name, isState) {
   let depth = 0;
   for (let i = 0; i < tokens.length; i += 1) {
     const t = tokens[i];
-    if (t.type === "Punctuation" && t.value === "{") depth += 1;
-    else if (t.type === "Punctuation" && t.value === "}") depth = Math.max(0, depth - 1);
+    if (t.type === "Punctuation") depth = nestingAfter(t, depth);
     else if (depth === 0 && t.type === "Keyword" && (t.value === "let" || t.value === "const" || t.value === "var")) {
       const nameTok = nextMeaningful$1(tokens, i + 1);
       if (!nameTok || nameTok.value !== name) continue;
@@ -37701,14 +38113,19 @@ function resolveSymbol(tokens, tok) {
   return table.ident.get(tok.value) ?? null;
 }
 function collectSymbols(tokens) {
-  const table = { state: /* @__PURE__ */ new Map(), ident: /* @__PURE__ */ new Map(), all: [] };
+  const table = { state: /* @__PURE__ */ new Map(), ident: /* @__PURE__ */ new Map(), topState: /* @__PURE__ */ new Map(), topIdent: /* @__PURE__ */ new Map(), all: [] };
   const add = (decl) => {
+    if (decl.topLevel) {
+      const top = decl.sigil ? table.topState : table.topIdent;
+      if (!top.has(decl.name)) top.set(decl.name, decl);
+    }
     const bucket = decl.sigil ? table.state : table.ident;
     if (bucket.has(decl.name)) return;
     bucket.set(decl.name, decl);
     table.all.push(decl);
   };
   let depth = 0;
+  let groups = 0;
   let stmtStart = true;
   for (let i = 0; i < tokens.length; i += 1) {
     const t = tokens[i];
@@ -37718,29 +38135,31 @@ function collectSymbols(tokens) {
     }
     if (t.type === "EOF") break;
     if (t.type === "Keyword" && t.value === "import") {
-      i = scanImport(tokens, i, add);
+      i = scanImport(tokens, i, add, depth === 0 && groups === 0);
       stmtStart = true;
       continue;
     }
+    const topLevel = depth === 0 && groups === 0;
     if (t.type === "Keyword" && t.value === "function") {
       const nameTok = nextMeaningful$1(tokens, i + 1);
       if (nameTok) {
         if (nameTok.type === "StateIdentifier") {
-          add({ name: nameTok.value, kind: "hook", sigil: true, range: tokenRange(nameTok) });
+          add({ name: nameTok.value, kind: "hook", sigil: true, range: tokenRange(nameTok), topLevel });
         } else if (nameTok.type === "Identifier") {
           add({
             name: nameTok.value,
             kind: isPascalCase$1(nameTok.value) ? "component" : "action",
             sigil: false,
-            range: tokenRange(nameTok)
+            range: tokenRange(nameTok),
+            topLevel
           });
         }
       }
     }
-    if (t.type === "StateIdentifier" && stmtStart && depth === 0) {
+    if (t.type === "StateIdentifier" && stmtStart && topLevel) {
       const next = nextMeaningful$1(tokens, i + 1);
       if (next && next.type === "Operator" && next.value === "=") {
-        add({ name: t.value, kind: "state", sigil: true, range: tokenRange(t) });
+        add({ name: t.value, kind: "state", sigil: true, range: tokenRange(t), topLevel });
       }
     }
     if (t.type === "Punctuation" && t.value === "{") {
@@ -37749,6 +38168,12 @@ function collectSymbols(tokens) {
     } else if (t.type === "Punctuation" && t.value === "}") {
       depth = Math.max(0, depth - 1);
       stmtStart = true;
+    } else if (t.type === "Punctuation" && (t.value === "(" || t.value === "[")) {
+      groups += 1;
+      stmtStart = false;
+    } else if (t.type === "Punctuation" && (t.value === ")" || t.value === "]")) {
+      groups = Math.max(0, groups - 1);
+      stmtStart = false;
     } else if (t.type === "Keyword" && t.value === "export") ;
     else {
       stmtStart = false;
@@ -37756,10 +38181,10 @@ function collectSymbols(tokens) {
   }
   return table;
 }
-function scanImport(tokens, start, add) {
+function scanImport(tokens, start, add, topLevel) {
   const { clause, end } = readImportClause(tokens, start);
   for (const spec of clause.specifiers) {
-    add({ name: spec.local, kind: "import", sigil: spec.isState, range: spec.localRange });
+    add({ name: spec.local, kind: "import", sigil: spec.isState, range: spec.localRange, topLevel });
   }
   return end;
 }
@@ -37844,6 +38269,11 @@ function findNameTokenAt(tokens, position) {
   }
   return best;
 }
+function nestingAfter(t, depth) {
+  if (t.value === "{" || t.value === "(" || t.value === "[") return depth + 1;
+  if (t.value === "}" || t.value === ")" || t.value === "]") return Math.max(0, depth - 1);
+  return depth;
+}
 function nextMeaningful$1(tokens, from) {
   for (let i = from; i < tokens.length; i += 1) {
     const t = tokens[i];
@@ -37856,10 +38286,10 @@ function tokenTextLength(t) {
   return t.type === "StateIdentifier" ? t.value.length + 1 : t.value.length;
 }
 function tokenRange(t) {
-  const length = tokenTextLength(t);
+  const length2 = tokenTextLength(t);
   return {
     start: { line: t.line, column: t.column },
-    end: { line: t.line, column: t.column + length }
+    end: { line: t.line, column: t.column + length2 }
   };
 }
 function rangesEqual(a, b) {
@@ -39349,6 +39779,12 @@ const TOKEN_TO_CSS = {
   chart5: "--rui-chart-5",
   chart6: "--rui-chart-6"
 };
+const WARNED_THEMES = /* @__PURE__ */ new Set();
+function warnThemeFallback(key, reason) {
+  if (WARNED_THEMES.has(key)) return;
+  WARNED_THEMES.add(key);
+  console.warn(`[aktion] ${reason} — using the light theme.`);
+}
 function resolveTheme(input) {
   if (!input) return { name: "light", tokens: lightTheme };
   if (typeof input === "string") {
@@ -39357,12 +39793,16 @@ function resolveTheme(input) {
       try {
         return { name: "custom", tokens: mergeTheme(JSON.parse(input)) };
       } catch {
+        warnThemeFallback(input.trim(), 'the theme string starts with "{" but is not valid JSON');
         return { name: "light", tokens: lightTheme };
       }
     }
     const canonical = canonicalThemeName(key);
     const tokens = findThemeByName(canonical);
     if (tokens) return { name: canonical, tokens };
+    if (key) {
+      warnThemeFallback(key, `"${input.trim()}" is not a theme (built-in themes: ${Object.keys(builtInThemes).join(", ")})`);
+    }
     return { name: "light", tokens: lightTheme };
   }
   return { name: "custom", tokens: mergeTheme(input) };
@@ -39719,506 +40159,48 @@ const COMMON_ICON_ALIASES = [
   "thumbs-down",
   "thumbtack"
 ];
-const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-const PLAIN_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const NEEDS_ESCAPE_DOUBLE = /[\\"\n\r\t]/;
-const NEEDS_ESCAPE_SINGLE = /[\\'\n\r\t]/;
-const DEFAULT_INDENT_WIDTH = 2;
-function resolveFormatOptions(options) {
-  const unit = (() => {
-    if (options?.indentStyle === "tab") {
-      return "	";
-    }
-    const width = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
-    if (!Number.isInteger(width) || width < 0) {
-      throw new RangeError(
-        `FormatOptions.indentWidth must be a non-negative integer, got ${width}`
-      );
-    }
-    return " ".repeat(width);
-  })();
-  return {
-    unit,
-    quote: options?.quoteStyle === "single" ? "'" : '"',
-    trailingComma: options?.trailingComma ?? false,
-    objectCurlySpacing: options?.objectCurlySpacing ?? true
-  };
+function componentParamPublicName(param) {
+  return param.publicName ?? param.name;
 }
-function pad(indent, opts) {
-  return opts.unit.repeat(indent);
+function hasRestParam(params) {
+  return params.length > 0 && params[params.length - 1].rest === true;
 }
-function printPattern(pattern, indent, opts) {
-  const open = pattern.kind === "array" ? "[" : "{";
-  const close = pattern.kind === "array" ? "]" : "}";
-  const key = (k) => PLAIN_KEY.test(k) ? k : printStringLiteral(k, opts);
-  const parts = pattern.bindings.map((b) => {
-    const lead = b.rest ? "..." : "";
-    const target = b.pattern ? pattern.kind === "object" && b.sourceKey ? `${key(b.sourceKey)}: ${printPattern(b.pattern, indent, opts)}` : printPattern(b.pattern, indent, opts) : b.sourceKey ? `${key(b.sourceKey)}: ${b.name}` : b.name || "";
-    const def = b.defaultValue ? ` = ${printExpression(b.defaultValue, indent, opts)}` : "";
-    return `${lead}${target}${def}`;
-  });
-  return `${open}${parts.join(", ")}${close}`;
-}
-const LAYOUT_ONLY_KEYS = /* @__PURE__ */ new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
-function structuralFingerprint(program) {
-  const canonical = (value) => {
-    if (typeof value === "number") {
-      if (Object.is(value, -0)) return "__negative_zero__";
-      if (!Number.isFinite(value)) return `__number_${String(value)}__`;
-      return value;
-    }
-    if (Array.isArray(value)) return value.map((item) => canonical(item));
-    if (value === null || typeof value !== "object") return value;
-    const node = value;
-    const out = {};
-    const isForHead = node.kind === "ForOfStatement" || node.kind === "ForInStatement";
-    const keys = isForHead ? [.../* @__PURE__ */ new Set([...Object.keys(node), "declaration"])] : Object.keys(node);
-    for (const key of keys.sort()) {
-      if (key === "declaration" && isForHead) {
-        out[key] = node[key] ?? "let";
-        continue;
-      }
-      if (LAYOUT_ONLY_KEYS.has(key) || node[key] === void 0) continue;
-      if (key === "name" && node.kind === "EffectDeclaration" && typeof node[key] === "string") {
-        out[key] = node[key].replace(/_L\d+_C\d+$/, "_L_C");
-        continue;
-      }
-      out[key] = canonical(node[key]);
-    }
-    return out;
-  };
-  return JSON.stringify(canonical(program.statements));
-}
-function skippedFormatting(source, reason) {
-  return { formatted: source, errors: [], warnings: [{ message: `Formatting skipped: ${reason}`, line: 1, column: 1 }] };
-}
-function formatProgram(source, options) {
-  const program = parse(source);
-  if (program.errors.length > 0) {
-    return { formatted: source, errors: [...program.errors] };
-  }
-  const out = printProgram(program, options);
-  const second = parse(out);
-  if (second.errors.length > 0) {
-    return skippedFormatting(source, "the printed output did not re-parse.");
-  }
-  if (structuralFingerprint(second) !== structuralFingerprint(program)) {
-    return skippedFormatting(source, "the printed output would not parse to the same program as the input.");
-  }
-  return { formatted: out, errors: [] };
-}
-function printProgram(program, options) {
-  const opts = resolveFormatOptions(options);
-  const lines = [];
-  let prev = null;
-  for (const stmt of program.statements) {
-    const forceBlankLine = prev !== null && needsBlankLineBetween(prev, stmt);
-    lines.push(printStatementWithComments(stmt, 0, opts, forceBlankLine));
-    prev = stmt;
-  }
-  return lines.join("\n") + "\n";
-}
-function needsBlankLineBetween(prev, next) {
-  const heavy = /* @__PURE__ */ new Set([
-    "ComponentDeclaration",
-    "EffectDeclaration",
-    "ActionDeclaration",
-    "HookDeclaration"
-  ]);
-  if (heavy.has(prev.kind) || heavy.has(next.kind)) return true;
-  return false;
-}
-function printCommentGroup(comments, indent, opts) {
-  const padStr = pad(indent, opts);
-  const lines = [];
-  for (const c of comments) {
-    if (c.blankLineBefore) lines.push("");
-    lines.push(`${padStr}${c.text}`);
-  }
-  return lines;
-}
-function printStatementWithComments(stmt, indent, opts, forceBlankLineBefore) {
-  const lines = [];
-  const leading = stmt.leadingComments;
-  if (leading && leading.length > 0) {
-    if (forceBlankLineBefore || leading[0].blankLineBefore) lines.push("");
-    const padStr = pad(indent, opts);
-    for (let i = 0; i < leading.length; i += 1) {
-      const c = leading[i];
-      if (i > 0 && c.blankLineBefore) lines.push("");
-      lines.push(`${padStr}${c.text}`);
-    }
-  } else if (forceBlankLineBefore) {
-    lines.push("");
-  }
-  const stmtText = printStatement(stmt, indent, opts);
-  const trailing = stmt.trailingComments;
-  if (trailing && trailing.length > 0) {
-    lines.push(`${stmtText} ${trailing.map((c) => c.text).join(" ")}`);
-  } else {
-    lines.push(stmtText);
-  }
-  return lines.join("\n");
-}
-function printStatement(stmt, indent, opts) {
-  const padStr = pad(indent, opts);
-  const exp = "exported" in stmt && stmt.exported ? "export " : "";
-  switch (stmt.kind) {
-    case "Import": {
-      const specs = stmt.specifiers.map((s) => {
-        const imported = s.isState ? `$${s.imported}` : s.imported;
-        if (s.local === s.imported) return imported;
-        const local = s.isState ? `$${s.local}` : s.local;
-        return `${imported} as ${local}`;
-      }).join(", ");
-      return `${padStr}import { ${specs} } from ${printStringLiteral(stmt.source, opts)}`;
-    }
-    case "Assignment": {
-      const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
-      if (stmt.uninitialized) return `${padStr}${exp}${stmt.declaration ?? "let"} ${lhs}`;
-      const expr = printExpression(stmt.expression, indent, opts);
-      const kw = stmt.declaration ? `${stmt.declaration} ` : "";
-      return `${padStr}${exp}${kw}${lhs} = ${expr}`;
-    }
-    case "ComponentDeclaration": {
-      const params = printDeclParams(stmt.params, opts);
-      const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
-      const body = printBlockBody(stmt.body, indent + 1, opts);
-      return body.length > 0 ? `${head}
-${body}
-${padStr}}` : `${head}
-${padStr}}`;
-    }
-    case "EffectDeclaration": {
-      const deps = stmt.triggers.map((t) => printTrigger(t, opts)).filter((s) => s.length > 0);
-      if (stmt.rateLimit) {
-        deps.push(printStringLiteral(`${stmt.rateLimit.kind}(${stmt.rateLimit.ms})`, opts));
-      }
-      const body = printBlockBody(stmt.body, indent + 1, opts);
-      const depsArray = `[${deps.join(", ")}]`;
-      return `${padStr}$effect(() => {
-${body}
-${padStr}}, ${depsArray})`;
-    }
-    case "ActionDeclaration": {
-      const params = printDeclParams(stmt.params, opts);
-      const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
-      const body = printBlockBody(stmt.body, indent + 1, opts);
-      return `${head}
-${body}
-${padStr}}`;
-    }
-    case "HookDeclaration": {
-      const params = printDeclParams(stmt.params, opts);
-      const head = `${padStr}${exp}function $${stmt.name}(${params}) {`;
-      const body = printBlockBody(stmt.body, indent + 1, opts);
-      return `${head}
-${body}
-${padStr}}`;
-    }
-    case "Await": {
-      return `${padStr}await ${printExpression(stmt.argument, indent, opts)}`;
-    }
-    case "Return": {
-      return stmt.argument ? `${padStr}return ${printExpression(stmt.argument, indent, opts)}` : `${padStr}return`;
-    }
-    case "ExpressionStatement": {
-      const prefix = stmt.exportDefault ? "export default " : "";
-      return `${padStr}${prefix}${printExpression(stmt.expression, indent, opts)}`;
-    }
-    case "IfStatement": {
-      const test = printExpression(stmt.test, indent, opts);
-      const cons = `{
-${printBlockBody(stmt.consequent, indent + 1, opts)}
-${padStr}}`;
-      if (!stmt.alternate) return `${padStr}if (${test}) ${cons}`;
-      const alt = stmt.alternate.kind === "IfStatement" ? printStatement(stmt.alternate, indent, opts).trimStart() : `{
-${printBlockBody(stmt.alternate, indent + 1, opts)}
-${padStr}}`;
-      return `${padStr}if (${test}) ${cons} else ${alt}`;
-    }
-    case "SwitchStatement": {
-      const disc = printExpression(stmt.discriminant, indent, opts);
-      const cases = stmt.cases.map((c) => printSwitchCase(c, indent + 1, opts)).join("\n");
-      return `${padStr}switch (${disc}) {
-${cases}
-${padStr}}`;
-    }
-    case "ForOfStatement": {
-      const iter = printExpression(stmt.iterable, indent, opts);
-      const body = `{
-${printBlockBody(stmt.body, indent + 1, opts)}
-${padStr}}`;
-      const binding = stmt.pattern ? printPattern(stmt.pattern, indent, opts) : stmt.item;
-      return `${padStr}for (${stmt.declaration ?? "let"} ${binding} of ${iter}) ${body}`;
-    }
-    case "ForClassicStatement": {
-      const init = stmt.init ? printStatement(stmt.init, 0, opts).trimStart() : "";
-      const test = stmt.test ? printExpression(stmt.test, indent, opts) : "";
-      const update = stmt.update ? printExpression(stmt.update, indent, opts) : "";
-      const body = `{
-${printBlockBody(stmt.body, indent + 1, opts)}
-${padStr}}`;
-      return `${padStr}for (${init}; ${test}; ${update}) ${body}`;
-    }
-    case "WhileStatement": {
-      const test = printExpression(stmt.test, indent, opts);
-      const body = `{
-${printBlockBody(stmt.body, indent + 1, opts)}
-${padStr}}`;
-      return `${padStr}while (${test}) ${body}`;
-    }
-    case "DoWhileStatement": {
-      const test = printExpression(stmt.test, indent, opts);
-      const body = `{
-${printBlockBody(stmt.body, indent + 1, opts)}
-${padStr}}`;
-      return `${padStr}do ${body} while (${test})`;
-    }
-    case "ForInStatement": {
-      const iter = printExpression(stmt.iterable, indent, opts);
-      const body = `{
-${printBlockBody(stmt.body, indent + 1, opts)}
-${padStr}}`;
-      return `${padStr}for (${stmt.declaration ?? "let"} ${stmt.item} in ${iter}) ${body}`;
-    }
-    case "DestructureStatement": {
-      const pattern = printPattern({ kind: stmt.patternKind, bindings: stmt.bindings }, indent, opts);
-      const expr = printExpression(stmt.expression, indent, opts);
-      return `${padStr}${stmt.declaration ?? "let"} ${pattern} = ${expr}`;
-    }
-    case "BreakStatement":
-      return `${padStr}break`;
-    case "ContinueStatement":
-      return `${padStr}continue`;
-    case "ThrowStatement":
-      return `${padStr}throw ${printExpression(stmt.argument, indent, opts)}`;
-    case "TryStatement": {
-      const block = `{
-${printBlockBody(stmt.block, indent + 1, opts)}
-${padStr}}`;
-      let out = `${padStr}try ${block}`;
-      if (stmt.catchBlock) {
-        const catchHead = stmt.catchParam ? ` (${stmt.catchParam})` : "";
-        const catchBody = `{
-${printBlockBody(stmt.catchBlock, indent + 1, opts)}
-${padStr}}`;
-        out += ` catch${catchHead} ${catchBody}`;
-      }
-      if (stmt.finallyBlock) {
-        const finBody = `{
-${printBlockBody(stmt.finallyBlock, indent + 1, opts)}
-${padStr}}`;
-        out += ` finally ${finBody}`;
-      }
-      return out;
+const IDENTIFIER_KEY = /^[A-Za-z_$][\w$]*$/;
+function trailingPropsArgument(args, params) {
+  let index = -1;
+  for (let i = args.length - 1; i >= 0; i -= 1) {
+    if (args[i].kind === "Object") {
+      index = i;
+      break;
     }
   }
-}
-function printDeclParams(params, opts) {
-  return params.map((p) => printParam(p, 0, opts)).join(", ");
-}
-function printParam(p, indent, opts) {
-  const rest = p.rest ? "..." : "";
-  const target = p.pattern ? printPattern(p.pattern, indent, opts) : p.name;
-  const def = p.defaultValue ? ` = ${printExpression(p.defaultValue, indent, opts)}` : "";
-  return `${rest}${target}${def}`;
-}
-function printTrigger(t, opts) {
-  if (t.kind === "lifecycle") return printStringLiteral(t.name, opts);
-  if (t.kind === "every") return printStringLiteral(`every(${t.intervalMs})`, opts);
-  if (t.kind === "state") return `$${t.name}`;
-  return "";
-}
-function printBlock(stmts, indent, opts) {
-  return stmts.map((s) => printStatementWithComments(s, indent, opts, false)).join("\n");
-}
-function printBlockBody(block, indent, opts) {
-  if (block.body.length === 0 && block.innerComments && block.innerComments.length > 0) {
-    return printCommentGroup(block.innerComments, indent, opts).join("\n");
+  if (index < 0) return null;
+  const object = args[index];
+  const publicNames = new Set(params.map(componentParamPublicName));
+  let named = false;
+  let keys = 0;
+  let identifierKeys = true;
+  for (const prop2 of object.properties) {
+    if (prop2.spread) continue;
+    keys += 1;
+    if (prop2.key === "key" || publicNames.has(prop2.key)) named = true;
+    if (!IDENTIFIER_KEY.test(prop2.key)) identifierKeys = false;
   }
-  return printBlock(block.body, indent, opts);
-}
-function printDesugaredOperator(expr, indent, opts) {
-  const literalOperator = (arg) => arg && arg.kind === "Literal" && typeof arg.value === "string" ? arg.value : null;
-  switch (expr.name) {
-    case "__rui_assign__": {
-      const [target, value, opNode] = expr.arguments;
-      const op = literalOperator(opNode);
-      if (!target || !value || op === null) return null;
-      return `${printExpression(target, indent, opts)} ${op} ${printExpression(value, indent, opts)}`;
-    }
-    case "__rui_postfix__": {
-      const [target, opNode] = expr.arguments;
-      const op = literalOperator(opNode);
-      if (!target || op === null) return null;
-      return `${printExpression(target, indent, opts)}${op}`;
-    }
-    case "__rui_prefix__": {
-      const [target, opNode] = expr.arguments;
-      const op = literalOperator(opNode);
-      if (!target || op === null) return null;
-      return `${op}${printExpression(target, indent, opts)}`;
-    }
-    case "__rui_await__": {
-      const [argument] = expr.arguments;
-      if (!argument) return null;
-      return `await (${printExpression(argument, indent, opts)})`;
-    }
-    default:
-      return null;
+  if (!named && identifierKeys && keys > 0 && !hasRestParam(params) && args.length - 1 >= params.length) {
+    named = true;
   }
+  return { index, named };
 }
-function printExpression(expr, indent, opts) {
-  switch (expr.kind) {
-    case "Literal":
-      return printLiteral(expr.value, opts);
-    case "Identifier":
-      return expr.name;
-    case "StateRef":
-      return `$${expr.name}`;
-    case "Array": {
-      if (expr.elements.length === 0) return "[]";
-      const items = expr.elements.map((e) => printExpression(e, indent + 1, opts));
-      const inline = `[${items.join(", ")}]`;
-      if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
-      const innerPad = pad(indent + 1, opts);
-      const body = items.map((s) => `${innerPad}${s}`).join(",\n");
-      const trailingComma = opts.trailingComma ? "," : "";
-      return `[
-${body}${trailingComma}
-${pad(indent, opts)}]`;
-    }
-    case "Object": {
-      if (expr.properties.length === 0) return "{}";
-      const items = expr.properties.map((p) => printObjectProp(p, indent + 1, opts));
-      const inline = opts.objectCurlySpacing ? `{ ${items.join(", ")} }` : `{${items.join(", ")}}`;
-      if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
-      const innerPad = pad(indent + 1, opts);
-      const body = items.map((s) => `${innerPad}${s}`).join(",\n");
-      const trailingComma = opts.trailingComma ? "," : "";
-      return `{
-${body}${trailingComma}
-${pad(indent, opts)}}`;
-    }
-    case "Member": {
-      const obj = printExpression(expr.object, indent, opts);
-      const dot = expr.optional ? "?." : ".";
-      if (expr.property) return `${obj}${dot}${expr.property}`;
-      if (expr.computed) {
-        const inner = printExpression(expr.computed, indent, opts);
-        return expr.optional ? `${obj}?.[${inner}]` : `${obj}[${inner}]`;
-      }
-      return obj;
-    }
-    case "Unary":
-      return `${expr.operator}${printExpression(expr.argument, indent, opts)}`;
-    case "Binary":
-      return `${printExpression(expr.left, indent, opts)} ${expr.operator} ${printExpression(expr.right, indent, opts)}`;
-    case "Ternary":
-      return `${printExpression(expr.test, indent, opts)} ? ${printExpression(expr.consequent, indent, opts)} : ${printExpression(expr.alternate, indent, opts)}`;
-    case "Call":
-      return printCall(expr.callee, expr.arguments, indent, opts);
-    case "MethodCall": {
-      const target = printExpression(expr.object, indent, opts);
-      const sep = expr.optional ? "?." : ".";
-      return printCall(`${target}${sep}${expr.method}`, expr.arguments, indent, opts);
-    }
-    case "Invoke": {
-      const callee = printExpression(expr.callee, indent, opts);
-      const sep = expr.optional ? "?." : "";
-      return printCall(`${callee}${sep}`, expr.arguments, indent, opts);
-    }
-    case "New": {
-      const callee = printExpression(expr.callee, indent, opts);
-      return `new ${printCall(callee, expr.arguments, indent, opts)}`;
-    }
-    case "BuiltinCall":
-      return printDesugaredOperator(expr, indent, opts) ?? printCall(`@${expr.name}`, expr.arguments, indent, opts);
-    case "Template":
-      return printTemplate(expr.quasis, expr.expressions, indent, opts);
-    case "Spread":
-      return `...${printExpression(expr.argument, indent, opts)}`;
-    case "Lambda": {
-      const params = expr.params.map((p) => printParam(p, indent, opts)).join(", ");
-      const only = expr.params.length === 1 ? expr.params[0] : void 0;
-      const head = only && !only.defaultValue && !only.rest && !only.pattern ? only.name : `(${params})`;
-      return `${head} => ${printExpression(expr.body, indent, opts)}`;
-    }
-    case "Block":
-      return `{
-${printBlockBody(expr, indent + 1, opts)}
-${pad(indent, opts)}}`;
+function positionalKeyArguments(args, params) {
+  const out = [];
+  const rest = hasRestParam(params);
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg.kind !== "Object") continue;
+    const keyOnly = i === args.length - 1 && arg.properties.length === 1 && !arg.properties[0].spread && arg.properties[0].key === "key";
+    if (keyOnly || i >= params.length && !rest) out.push(i);
   }
-}
-function printCall(callee, args, indent, opts) {
-  if (args.length === 0) return `${callee}()`;
-  const parts = args.map((a) => printExpression(a, indent + 1, opts));
-  const inline = `${callee}(${parts.join(", ")})`;
-  if (inline.length <= 80 && !parts.some((s) => s.includes("\n"))) return inline;
-  const innerPad = pad(indent + 1, opts);
-  return `${callee}(
-${parts.map((s) => `${innerPad}${s}`).join(",\n")}
-${pad(indent, opts)})`;
-}
-function printSwitchCase(c, indent, opts) {
-  const padStr = pad(indent, opts);
-  const body = printBlock(c.body, indent + 1, opts);
-  const head = c.test === null ? `${padStr}default:` : `${padStr}case ${printExpression(c.test, indent, opts)}:`;
-  const caseText = body.length > 0 ? `${head}
-${body}` : head;
-  if (!c.leadingComments || c.leadingComments.length === 0) return caseText;
-  const header = printCommentGroup(c.leadingComments, indent, opts);
-  return `${header.join("\n")}
-${caseText}`;
-}
-function printObjectProp(prop2, indent, opts) {
-  if (prop2.spread) return `...${printExpression(prop2.value, indent, opts)}`;
-  if (prop2.method && prop2.value.kind === "Lambda" && prop2.value.body.kind === "Block") {
-    const name = prop2.computedKey ? `[${printExpression(prop2.computedKey, indent, opts)}]` : PLAIN_KEY.test(prop2.key) ? prop2.key : printStringLiteral(prop2.key, opts);
-    const params = prop2.value.params.map((p) => printParam(p, indent, opts)).join(", ");
-    return `${name}(${params}) ${printExpression(prop2.value.body, indent, opts)}`;
-  }
-  const value = printExpression(prop2.value, indent, opts);
-  if (prop2.value.kind === "Identifier" && prop2.value.name === prop2.key && SAFE_IDENT.test(prop2.key)) {
-    return prop2.key;
-  }
-  const key = SAFE_IDENT.test(prop2.key) ? prop2.key : printStringLiteral(prop2.key, opts);
-  return `${key}: ${value}`;
-}
-function printLiteral(value, opts) {
-  if (value === null) return "null";
-  if (typeof value === "string") return printStringLiteral(value, opts);
-  if (typeof value === "boolean") return value ? "true" : "false";
-  return String(value);
-}
-function chooseQuote(value, opts) {
-  const other = opts.quote === '"' ? "'" : '"';
-  if (value.includes(opts.quote) && !value.includes(other)) return other;
-  return opts.quote;
-}
-function printStringLiteral(value, opts) {
-  const quote = chooseQuote(value, opts);
-  const needsEscape = quote === '"' ? NEEDS_ESCAPE_DOUBLE.test(value) : NEEDS_ESCAPE_SINGLE.test(value);
-  if (needsEscape) {
-    const quoteEscape = quote === '"' ? /"/g : /'/g;
-    const quoteReplacement = quote === '"' ? '\\"' : "\\'";
-    const escaped = value.replace(/\\/g, "\\\\").replace(quoteEscape, quoteReplacement).replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
-    return `${quote}${escaped}${quote}`;
-  }
-  return `${quote}${value}${quote}`;
-}
-function printTemplate(quasis, expressions, indent, opts) {
-  const parts = [];
-  for (let i = 0; i < quasis.length; i += 1) {
-    parts.push(quasis[i] ?? "");
-    if (i < expressions.length) {
-      parts.push("${");
-      parts.push(printExpression(expressions[i], indent, opts));
-      parts.push("}");
-    }
-  }
-  return `\`${parts.join("")}\``;
+  return out;
 }
 const components = [
   {
@@ -40655,12 +40637,12 @@ const components = [
       "items",
       "size",
       "fullWidth",
-      "ariaLabel"
+      "ariaLabel",
+      "ariaLabelledBy"
     ],
     positional: 0,
     aliases: {
       full: "fullWidth",
-      ariaLabelledBy: "ariaLabel",
       label: "ariaLabel"
     }
   },
@@ -41179,11 +41161,12 @@ const components = [
       "highlightColumn",
       "featureLabel",
       "caption",
-      "stickyFirstColumn"
+      "stickyFirstColumn",
+      "ariaLabel"
     ],
     positional: 0,
     aliases: {
-      ariaLabel: "caption"
+      arialabel: "ariaLabel"
     }
   },
   {
@@ -45264,6 +45247,804 @@ const manifest = {
   namespaces,
   builtins
 };
+const PLAIN_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const NEEDS_ESCAPE_DOUBLE = /[\\"\n\r\t]/;
+const NEEDS_ESCAPE_SINGLE = /[\\'\n\r\t]/;
+const PREC = {
+  /**
+   * Arrow and `function` expressions, and an assignment: a concise arrow body
+   * runs to the end of the enclosing expression, so these print bare only in
+   * a full-expression position (an argument, element, property value,
+   * statement expression, ternary branch, interpolation, …).
+   */
+  lambda: 0,
+  ternary: 1,
+  /** `||` and `??` share one level in this grammar (`parseLogicalOr`). */
+  logicalOr: 2,
+  logicalAnd: 3,
+  bitwiseOr: 4,
+  bitwiseXor: 5,
+  bitwiseAnd: 6,
+  equality: 7,
+  /** `<` `>` `<=` `>=` `in` `instanceof`. */
+  relational: 8,
+  shift: 9,
+  additive: 10,
+  multiplicative: 11,
+  /** `**`, right-associative; its base is a unary operand (`parseExponent`). */
+  exponent: 12,
+  /** Prefix operators: `!x`, `-x`, `typeof x`, `++x`, `await x`. */
+  unary: 13,
+  /** `x++` / `x--`. */
+  postfix: 14,
+  /** Member access, calls, `new X()`, and every primary. */
+  member: 15
+};
+const BINARY_PRECEDENCE = {
+  "||": PREC.logicalOr,
+  "??": PREC.logicalOr,
+  "&&": PREC.logicalAnd,
+  "|": PREC.bitwiseOr,
+  "^": PREC.bitwiseXor,
+  "&": PREC.bitwiseAnd,
+  "==": PREC.equality,
+  "!=": PREC.equality,
+  "===": PREC.equality,
+  "!==": PREC.equality,
+  "<": PREC.relational,
+  ">": PREC.relational,
+  "<=": PREC.relational,
+  ">=": PREC.relational,
+  in: PREC.relational,
+  instanceof: PREC.relational,
+  "<<": PREC.shift,
+  ">>": PREC.shift,
+  ">>>": PREC.shift,
+  "+": PREC.additive,
+  "-": PREC.additive,
+  "*": PREC.multiplicative,
+  "/": PREC.multiplicative,
+  "%": PREC.multiplicative,
+  "**": PREC.exponent
+};
+const LIBRARY_COMPONENTS$1 = new Set(manifest.components.map((c) => c.name));
+function componentsOf(statements) {
+  const out = /* @__PURE__ */ new Map();
+  for (const stmt of statements) if (stmt.kind === "ComponentDeclaration") out.set(stmt.name, stmt);
+  return out;
+}
+const DEFAULT_INDENT_WIDTH = 2;
+function resolveFormatOptions(program, options) {
+  const unit = (() => {
+    if (options?.indentStyle === "tab") {
+      return "	";
+    }
+    const width = options?.indentWidth ?? DEFAULT_INDENT_WIDTH;
+    if (!Number.isInteger(width) || width < 0) {
+      throw new RangeError(
+        `FormatOptions.indentWidth must be a non-negative integer, got ${width}`
+      );
+    }
+    return " ".repeat(width);
+  })();
+  return {
+    unit,
+    quote: options?.quoteStyle === "single" ? "'" : '"',
+    trailingComma: options?.trailingComma ?? false,
+    objectCurlySpacing: options?.objectCurlySpacing ?? true,
+    calls: { topLevel: componentsOf(program.statements), nested: [], enclosing: [] }
+  };
+}
+function pad(indent, opts) {
+  return opts.unit.repeat(indent);
+}
+function printPattern(pattern, indent, opts) {
+  const open = pattern.kind === "array" ? "[" : "{";
+  const close = pattern.kind === "array" ? "]" : "}";
+  const key = (k) => PLAIN_KEY.test(k) ? k : printStringLiteral(k, opts);
+  const parts = pattern.bindings.map((b) => {
+    const lead = b.rest ? "..." : "";
+    const target = b.pattern ? pattern.kind === "object" && b.sourceKey ? `${key(b.sourceKey)}: ${printPattern(b.pattern, indent, opts)}` : printPattern(b.pattern, indent, opts) : b.sourceKey ? `${key(b.sourceKey)}: ${b.name}` : b.name || "";
+    const def = b.defaultValue ? ` = ${printExpression(b.defaultValue, indent, opts)}` : "";
+    return `${lead}${target}${def}`;
+  });
+  return `${open}${parts.join(", ")}${close}`;
+}
+const LAYOUT_ONLY_KEYS = /* @__PURE__ */ new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
+function structuralFingerprint(program) {
+  const canonical = (value) => {
+    if (typeof value === "number") {
+      if (Object.is(value, -0)) return "__negative_zero__";
+      if (!Number.isFinite(value)) return `__number_${String(value)}__`;
+      return value;
+    }
+    if (Array.isArray(value)) return value.map((item) => canonical(item));
+    if (value === null || typeof value !== "object") return value;
+    const node = value;
+    const out = {};
+    const isForHead = node.kind === "ForOfStatement" || node.kind === "ForInStatement";
+    const keys = isForHead ? [.../* @__PURE__ */ new Set([...Object.keys(node), "declaration"])] : Object.keys(node);
+    for (const key of keys.sort()) {
+      if (key === "declaration" && isForHead) {
+        out[key] = node[key] ?? "let";
+        continue;
+      }
+      if (LAYOUT_ONLY_KEYS.has(key) || node[key] === void 0) continue;
+      if (key === "name" && node.kind === "EffectDeclaration" && typeof node[key] === "string") {
+        out[key] = node[key].replace(/_L\d+_C\d+$/, "_L_C");
+        continue;
+      }
+      out[key] = canonical(node[key]);
+    }
+    return out;
+  };
+  return JSON.stringify(canonical(program.statements));
+}
+function commentLayout(source) {
+  const comments = [];
+  const tokens = tokenize(source, comments);
+  const out = [];
+  let depth = 0;
+  let next = 0;
+  for (const comment of comments) {
+    while (next < tokens.length) {
+      const token = tokens[next];
+      if (token.line > comment.line || token.line === comment.line && token.column >= comment.column) break;
+      if (token.type === "Punctuation" && token.value === "{") depth += 1;
+      else if (token.type === "Punctuation" && token.value === "}") depth -= 1;
+      next += 1;
+    }
+    out.push(`${depth}:${comment.text}`);
+  }
+  return out;
+}
+function sameCommentLayout(a, b) {
+  const left = commentLayout(a);
+  const right = commentLayout(b);
+  return left.length === right.length && left.every((entry, i) => entry === right[i]);
+}
+function skippedFormatting(source, reason) {
+  return { formatted: source, errors: [], warnings: [{ message: `Formatting skipped: ${reason}`, line: 1, column: 1 }] };
+}
+function formatProgram(source, options) {
+  const program = parse(source);
+  if (program.errors.length > 0) {
+    return { formatted: source, errors: [...program.errors] };
+  }
+  const out = printProgram(program, options);
+  const second = parse(out);
+  if (second.errors.length > 0) {
+    return skippedFormatting(source, "the printed output did not re-parse.");
+  }
+  if (structuralFingerprint(second) !== structuralFingerprint(program)) {
+    return skippedFormatting(source, "the printed output would not parse to the same program as the input.");
+  }
+  if (!sameCommentLayout(source, out)) {
+    return skippedFormatting(source, "the printed output would drop or move a comment.");
+  }
+  return { formatted: out, errors: [] };
+}
+function printProgram(program, options) {
+  const opts = resolveFormatOptions(program, options);
+  const lines = [];
+  let prev = null;
+  for (const stmt of program.statements) {
+    const forceBlankLine = prev !== null && needsBlankLineBetween(prev, stmt);
+    lines.push(printStatementWithComments(stmt, 0, opts, forceBlankLine));
+    prev = stmt;
+  }
+  return lines.join("\n") + "\n";
+}
+function needsBlankLineBetween(prev, next) {
+  const heavy = /* @__PURE__ */ new Set([
+    "ComponentDeclaration",
+    "EffectDeclaration",
+    "ActionDeclaration",
+    "HookDeclaration"
+  ]);
+  if (heavy.has(prev.kind) || heavy.has(next.kind)) return true;
+  return false;
+}
+function printCommentGroup(comments, indent, opts) {
+  const padStr = pad(indent, opts);
+  const lines = [];
+  for (const c of comments) {
+    if (c.blankLineBefore) lines.push("");
+    lines.push(`${padStr}${c.text}`);
+  }
+  return lines;
+}
+function printStatementWithComments(stmt, indent, opts, forceBlankLineBefore) {
+  const lines = [];
+  const leading = stmt.leadingComments;
+  if (leading && leading.length > 0) {
+    if (forceBlankLineBefore || leading[0].blankLineBefore) lines.push("");
+    const padStr = pad(indent, opts);
+    for (let i = 0; i < leading.length; i += 1) {
+      const c = leading[i];
+      if (i > 0 && c.blankLineBefore) lines.push("");
+      lines.push(`${padStr}${c.text}`);
+    }
+  } else if (forceBlankLineBefore) {
+    lines.push("");
+  }
+  const stmtText = printStatement(stmt, indent, opts);
+  const trailing = stmt.trailingComments;
+  if (trailing && trailing.length > 0) {
+    lines.push(`${stmtText} ${trailing.map((c) => c.text).join(" ")}`);
+  } else {
+    lines.push(stmtText);
+  }
+  return lines.join("\n");
+}
+function printStatement(stmt, indent, opts) {
+  const padStr = pad(indent, opts);
+  const exp = "exported" in stmt && stmt.exported ? "export " : "";
+  switch (stmt.kind) {
+    case "Import": {
+      const specs = stmt.specifiers.map((s) => {
+        const imported = s.isState ? `$${s.imported}` : s.imported;
+        if (s.local === s.imported) return imported;
+        const local = s.isState ? `$${s.local}` : s.local;
+        return `${imported} as ${local}`;
+      }).join(", ");
+      return `${padStr}import { ${specs} } from ${printStringLiteral(stmt.source, opts)}`;
+    }
+    case "Assignment": {
+      const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
+      if (stmt.uninitialized) return `${padStr}${exp}${stmt.declaration ?? "let"} ${lhs}`;
+      const expr = printExpression(stmt.expression, indent, opts);
+      const kw = stmt.declaration ? `${stmt.declaration} ` : "";
+      return `${padStr}${exp}${kw}${lhs} = ${expr}`;
+    }
+    case "ComponentDeclaration": {
+      const params = printDeclParams(stmt.params, opts);
+      const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
+      opts.calls.enclosing.push(stmt.name);
+      let body;
+      try {
+        body = printBlockBody(stmt.body, indent + 1, opts);
+      } finally {
+        opts.calls.enclosing.pop();
+      }
+      return body.length > 0 ? `${head}
+${body}
+${padStr}}` : `${head}
+${padStr}}`;
+    }
+    case "EffectDeclaration": {
+      const deps = stmt.triggers.map((t) => printTrigger(t, opts)).filter((s) => s.length > 0);
+      if (stmt.rateLimit) {
+        deps.push(printStringLiteral(`${stmt.rateLimit.kind}(${stmt.rateLimit.ms})`, opts));
+      }
+      const body = printBlockBody(stmt.body, indent + 1, opts);
+      const depsArray = `[${deps.join(", ")}]`;
+      return `${padStr}$effect(() => {
+${body}
+${padStr}}, ${depsArray})`;
+    }
+    case "ActionDeclaration": {
+      const params = printDeclParams(stmt.params, opts);
+      const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
+      const body = printBlockBody(stmt.body, indent + 1, opts);
+      return `${head}
+${body}
+${padStr}}`;
+    }
+    case "HookDeclaration": {
+      const params = printDeclParams(stmt.params, opts);
+      const head = `${padStr}${exp}function $${stmt.name}(${params}) {`;
+      const body = printBlockBody(stmt.body, indent + 1, opts);
+      return `${head}
+${body}
+${padStr}}`;
+    }
+    case "Await": {
+      return `${padStr}await ${printExpression(stmt.argument, indent, opts)}`;
+    }
+    case "Return": {
+      return stmt.argument ? `${padStr}return ${afterKeyword(printExpression(stmt.argument, indent, opts))}` : `${padStr}return`;
+    }
+    case "ExpressionStatement": {
+      if (stmt.exportDefault) return `${padStr}export default ${printExpression(stmt.expression, indent, opts)}`;
+      const text = printExpression(stmt.expression, indent, opts);
+      return /^(?:function\b|await\b|\{)/.test(text) ? `${padStr}(${text})` : `${padStr}${text}`;
+    }
+    case "IfStatement": {
+      const test = printExpression(stmt.test, indent, opts);
+      const cons = `{
+${printBlockBody(stmt.consequent, indent + 1, opts)}
+${padStr}}`;
+      if (!stmt.alternate) return `${padStr}if (${test}) ${cons}`;
+      const alt = stmt.alternate.kind === "IfStatement" ? printStatement(stmt.alternate, indent, opts).trimStart() : `{
+${printBlockBody(stmt.alternate, indent + 1, opts)}
+${padStr}}`;
+      return `${padStr}if (${test}) ${cons} else ${alt}`;
+    }
+    case "SwitchStatement": {
+      const disc = printExpression(stmt.discriminant, indent, opts);
+      const cases = stmt.cases.map((c) => printSwitchCase(c, indent + 1, opts)).join("\n");
+      return `${padStr}switch (${disc}) {
+${cases}
+${padStr}}`;
+    }
+    case "ForOfStatement": {
+      const iter = afterKeyword(printExpression(stmt.iterable, indent, opts));
+      const body = `{
+${printBlockBody(stmt.body, indent + 1, opts)}
+${padStr}}`;
+      const binding = stmt.pattern ? printPattern(stmt.pattern, indent, opts) : stmt.item;
+      return `${padStr}for (${stmt.declaration ?? "let"} ${binding} of ${iter}) ${body}`;
+    }
+    case "ForClassicStatement": {
+      const init = stmt.init ? printStatement(stmt.init, 0, opts).trimStart() : "";
+      const test = stmt.test ? printExpression(stmt.test, indent, opts) : "";
+      const update = stmt.update ? printExpression(stmt.update, indent, opts) : "";
+      const body = `{
+${printBlockBody(stmt.body, indent + 1, opts)}
+${padStr}}`;
+      return `${padStr}for (${init}; ${test}; ${update}) ${body}`;
+    }
+    case "WhileStatement": {
+      const test = printExpression(stmt.test, indent, opts);
+      const body = `{
+${printBlockBody(stmt.body, indent + 1, opts)}
+${padStr}}`;
+      return `${padStr}while (${test}) ${body}`;
+    }
+    case "DoWhileStatement": {
+      const test = printExpression(stmt.test, indent, opts);
+      const body = `{
+${printBlockBody(stmt.body, indent + 1, opts)}
+${padStr}}`;
+      return `${padStr}do ${body} while (${test})`;
+    }
+    case "ForInStatement": {
+      const iter = afterKeyword(printExpression(stmt.iterable, indent, opts));
+      const body = `{
+${printBlockBody(stmt.body, indent + 1, opts)}
+${padStr}}`;
+      return `${padStr}for (${stmt.declaration ?? "let"} ${stmt.item} in ${iter}) ${body}`;
+    }
+    case "DestructureStatement": {
+      const pattern = printPattern({ kind: stmt.patternKind, bindings: stmt.bindings }, indent, opts);
+      const expr = printExpression(stmt.expression, indent, opts);
+      return `${padStr}${stmt.declaration ?? "let"} ${pattern} = ${expr}`;
+    }
+    case "BreakStatement":
+      return `${padStr}break`;
+    case "ContinueStatement":
+      return `${padStr}continue`;
+    case "ThrowStatement":
+      return `${padStr}throw ${afterKeyword(printExpression(stmt.argument, indent, opts))}`;
+    case "TryStatement": {
+      const block = `{
+${printBlockBody(stmt.block, indent + 1, opts)}
+${padStr}}`;
+      let out = `${padStr}try ${block}`;
+      if (stmt.catchBlock) {
+        const catchHead = stmt.catchParam ? ` (${stmt.catchParam})` : "";
+        const catchBody = `{
+${printBlockBody(stmt.catchBlock, indent + 1, opts)}
+${padStr}}`;
+        out += ` catch${catchHead} ${catchBody}`;
+      }
+      if (stmt.finallyBlock) {
+        const finBody = `{
+${printBlockBody(stmt.finallyBlock, indent + 1, opts)}
+${padStr}}`;
+        out += ` finally ${finBody}`;
+      }
+      return out;
+    }
+  }
+}
+function printDeclParams(params, opts) {
+  return params.map((p) => printParam(p, 0, opts)).join(", ");
+}
+function printParam(p, indent, opts) {
+  const rest = p.rest ? "..." : "";
+  const target = p.pattern ? printPattern(p.pattern, indent, opts) : p.name;
+  const def = p.defaultValue ? ` = ${printExpression(p.defaultValue, indent, opts)}` : "";
+  return `${rest}${target}${def}`;
+}
+function printTrigger(t, opts) {
+  if (t.kind === "lifecycle") return printStringLiteral(t.name, opts);
+  if (t.kind === "every") return printStringLiteral(`every(${t.intervalMs})`, opts);
+  if (t.kind === "state") return `$${t.name}`;
+  return "";
+}
+function printBlock(stmts, indent, opts) {
+  const nested = componentsOf(stmts);
+  if (nested.size === 0) return stmts.map((s) => printStatementWithComments(s, indent, opts, false)).join("\n");
+  opts.calls.nested.push(nested);
+  try {
+    return stmts.map((s) => printStatementWithComments(s, indent, opts, false)).join("\n");
+  } finally {
+    opts.calls.nested.pop();
+  }
+}
+function printBlockBody(block, indent, opts) {
+  if (block.body.length === 0 && block.innerComments && block.innerComments.length > 0) {
+    return printCommentGroup(block.innerComments, indent, opts).join("\n");
+  }
+  return printBlock(block.body, indent, opts);
+}
+function printDesugaredOperator(expr, indent, opts) {
+  const literalOperator = (arg) => arg && arg.kind === "Literal" && typeof arg.value === "string" ? arg.value : null;
+  switch (expr.name) {
+    case "__rui_assign__": {
+      const [target, value, opNode] = expr.arguments;
+      const op = literalOperator(opNode);
+      if (!target || !value || op === null) return null;
+      return `${printOperand(target, PREC.member, indent, opts)} ${op} ${printExpression(value, indent, opts)}`;
+    }
+    case "__rui_postfix__": {
+      const [target, opNode] = expr.arguments;
+      const op = literalOperator(opNode);
+      if (!target || op === null) return null;
+      return `${printOperand(target, PREC.member, indent, opts)}${op}`;
+    }
+    case "__rui_prefix__": {
+      const [target, opNode] = expr.arguments;
+      const op = literalOperator(opNode);
+      if (!target || op === null) return null;
+      return `${op}${printOperand(target, PREC.unary, indent, opts)}`;
+    }
+    case "__rui_await__": {
+      const [argument] = expr.arguments;
+      if (!argument) return null;
+      return `await (${printExpression(argument, indent, opts)})`;
+    }
+    default:
+      return null;
+  }
+}
+function precedenceOf(expr) {
+  switch (expr.kind) {
+    case "Lambda":
+      return PREC.lambda;
+    case "Ternary":
+      return PREC.ternary;
+    case "Binary":
+      return BINARY_PRECEDENCE[expr.operator];
+    case "Unary":
+      return PREC.unary;
+    case "BuiltinCall":
+      switch (expr.name) {
+        case "__rui_assign__":
+          return PREC.lambda;
+        case "__rui_prefix__":
+        case "__rui_await__":
+          return PREC.unary;
+        case "__rui_postfix__":
+          return PREC.postfix;
+        default:
+          return PREC.member;
+      }
+    default:
+      return PREC.member;
+  }
+}
+function printOperand(expr, min, indent, opts) {
+  const text = printExpression(expr, indent, opts);
+  return precedenceOf(expr) < min ? `(${text})` : text;
+}
+function printReceiver(expr, indent, opts) {
+  const text = printExpression(expr, indent, opts);
+  const group = precedenceOf(expr) < PREC.member || expr.kind === "Literal" && typeof expr.value === "number";
+  return group ? `(${text})` : text;
+}
+function isNegativeNumber(expr) {
+  return expr.kind === "Literal" && typeof expr.value === "number" && (expr.value < 0 || Object.is(expr.value, -0));
+}
+function afterKeyword(text) {
+  return /^-[\d.]/.test(text) ? `(${text})` : text;
+}
+function mixesNullish(operator, operand) {
+  if (operand.kind !== "Binary") return false;
+  if (operator === "??") return operand.operator === "||" || operand.operator === "&&";
+  return (operator === "||" || operator === "&&") && operand.operator === "??";
+}
+function isNewCallee(expr) {
+  if (expr.kind === "Identifier" || expr.kind === "StateRef") return true;
+  return expr.kind === "Member" && expr.optional !== true && isNewCallee(expr.object);
+}
+function printExpression(expr, indent, opts) {
+  switch (expr.kind) {
+    case "Literal":
+      return printLiteral(expr.value, opts);
+    case "Identifier":
+      return expr.name;
+    case "StateRef":
+      return `$${expr.name}`;
+    case "Array": {
+      if (expr.elements.length === 0) return "[]";
+      const items = expr.elements.map((e) => printExpression(e, indent + 1, opts));
+      const inline = `[${items.join(", ")}]`;
+      if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
+      const innerPad = pad(indent + 1, opts);
+      const body = items.map((s) => `${innerPad}${s}`).join(",\n");
+      const trailingComma = opts.trailingComma ? "," : "";
+      return `[
+${body}${trailingComma}
+${pad(indent, opts)}]`;
+    }
+    case "Object": {
+      if (expr.properties.length === 0) return "{}";
+      const items = expr.properties.map((p) => printObjectProp(p, indent + 1, opts));
+      const inline = opts.objectCurlySpacing ? `{ ${items.join(", ")} }` : `{${items.join(", ")}}`;
+      if (inline.length <= 80 && !items.some((s) => s.includes("\n"))) return inline;
+      const innerPad = pad(indent + 1, opts);
+      const body = items.map((s) => `${innerPad}${s}`).join(",\n");
+      const trailingComma = opts.trailingComma ? "," : "";
+      return `{
+${body}${trailingComma}
+${pad(indent, opts)}}`;
+    }
+    case "Member": {
+      const obj = printReceiver(expr.object, indent, opts);
+      const dot = expr.optional ? "?." : ".";
+      if (expr.property) return `${obj}${dot}${expr.property}`;
+      if (expr.computed) {
+        const inner = printExpression(expr.computed, indent, opts);
+        return expr.optional ? `${obj}?.[${inner}]` : `${obj}[${inner}]`;
+      }
+      return obj;
+    }
+    case "Unary": {
+      const argument = printOperand(expr.argument, PREC.unary, indent, opts);
+      if (/^[a-z]/.test(expr.operator)) return `${expr.operator} ${afterKeyword(argument)}`;
+      const spaced = (expr.operator === "-" || expr.operator === "+") && argument.startsWith(expr.operator) || expr.operator === "-" && /^[\d.]/.test(argument);
+      return `${expr.operator}${spaced ? " " : ""}${argument}`;
+    }
+    case "Binary": {
+      const precedence = BINARY_PRECEDENCE[expr.operator];
+      const exponent = expr.operator === "**";
+      const leftText = printExpression(expr.left, indent, opts);
+      const rightText = printExpression(expr.right, indent, opts);
+      const groupLeft = precedenceOf(expr.left) < (exponent ? PREC.postfix : precedence) || mixesNullish(expr.operator, expr.left) || exponent && isNegativeNumber(expr.left);
+      const groupRight = precedenceOf(expr.right) < (exponent ? precedence : precedence + 1) || mixesNullish(expr.operator, expr.right);
+      const left = groupLeft ? `(${leftText})` : leftText;
+      const right = groupRight ? `(${rightText})` : rightText;
+      const keyword = expr.operator === "in" || expr.operator === "instanceof";
+      return `${left} ${expr.operator} ${keyword ? afterKeyword(right) : right}`;
+    }
+    case "Ternary": {
+      const test = printOperand(expr.test, PREC.logicalOr, indent, opts);
+      return `${test} ? ${printExpression(expr.consequent, indent, opts)} : ${printExpression(expr.alternate, indent, opts)}`;
+    }
+    case "Call":
+      return printCallExpr(expr, indent, opts);
+    case "MethodCall": {
+      const target = printReceiver(expr.object, indent, opts);
+      const sep = expr.optional ? "?." : ".";
+      return printCall(`${target}${sep}${expr.method}`, expr.arguments, indent, opts);
+    }
+    case "Invoke": {
+      const byName = expr.callee.kind === "Identifier" || expr.callee.kind === "Member" && expr.callee.property !== void 0;
+      const receiver = printReceiver(expr.callee, indent, opts);
+      const callee = byName ? `(${receiver})` : receiver;
+      const sep = expr.optional ? "?." : "";
+      return printCall(`${callee}${sep}`, expr.arguments, indent, opts);
+    }
+    case "New": {
+      const text = printExpression(expr.callee, indent, opts);
+      const callee = isNewCallee(expr.callee) ? text : `(${text})`;
+      return `new ${printCall(callee, expr.arguments, indent, opts)}`;
+    }
+    case "BuiltinCall":
+      return printDesugaredOperator(expr, indent, opts) ?? printCall(`@${expr.name}`, expr.arguments, indent, opts);
+    case "Template":
+      return printTemplate(expr.quasis, expr.expressions, indent, opts);
+    case "Spread":
+      return `...${printExpression(expr.argument, indent, opts)}`;
+    case "Lambda":
+      return printLambda(expr, indent, opts);
+    case "Block":
+      return `{
+${printBlockBody(expr, indent + 1, opts)}
+${pad(indent, opts)}}`;
+  }
+}
+function printLambda(expr, indent, opts) {
+  const params = expr.params.map((p) => printParam(p, indent, opts)).join(", ");
+  if (expr.selfName !== void 0) {
+    const body2 = expr.body.kind === "Block" ? expr.body : { kind: "Block", body: [{ kind: "Return", argument: expr.body }] };
+    return `function ${expr.selfName}(${params}) ${printExpression(body2, indent, opts)}`;
+  }
+  const only = expr.params.length === 1 ? expr.params[0] : void 0;
+  const head = only && !only.defaultValue && !only.rest && !only.pattern ? only.name : `(${params})`;
+  if (expr.body.kind === "Block") return `${head} => ${printExpression(expr.body, indent, opts)}`;
+  const body = printExpression(expr.body, indent, opts);
+  return `${head} => ${body.startsWith("{") ? `(${body})` : body}`;
+}
+function printCall(callee, args, indent, opts) {
+  if (args.length === 0) return `${callee}()`;
+  const parts = args.map((a) => printExpression(a, indent + 1, opts));
+  const inline = `${callee}(${parts.join(", ")})`;
+  if (inline.length <= 80 && !parts.some((s) => s.includes("\n"))) return inline;
+  const innerPad = pad(indent + 1, opts);
+  return `${callee}(
+${parts.map((s) => `${innerPad}${s}`).join(",\n")}
+${pad(indent, opts)})`;
+}
+function printCallExpr(expr, indent, opts) {
+  const decl = reachedComponent(expr.callee, opts.calls);
+  if (!decl) return printCall(expr.callee, expr.arguments, indent, opts);
+  if (expr.positional === true && decl.javascript === true) return printPositionalCall(expr, decl, indent, opts);
+  return printCall(expr.callee, namedPropsByLocalName(expr.arguments, decl), indent, opts);
+}
+function reachedComponent(callee, scope) {
+  if (LIBRARY_COMPONENTS$1.has(callee) && scope.enclosing.includes(callee)) return void 0;
+  for (let i = scope.nested.length - 1; i >= 0; i -= 1) {
+    const found = scope.nested[i].get(callee);
+    if (found) return found;
+  }
+  return scope.topLevel.get(callee);
+}
+function namedPropsByLocalName(args, decl) {
+  const localOf = /* @__PURE__ */ new Map();
+  for (const p of decl.params) {
+    if (p.name && p.publicName !== void 0 && p.publicName !== p.name) localOf.set(p.publicName, p.name);
+  }
+  if (localOf.size === 0) return args;
+  const bag = trailingPropsArgument(args, decl.params);
+  if (!bag || !bag.named) return args;
+  const object = args[bag.index];
+  const properties = object.properties.map((prop2) => {
+    if (prop2.spread || prop2.computedKey || prop2.key === "key") return prop2;
+    const local = localOf.get(prop2.key);
+    return local === void 0 ? prop2 : { ...prop2, key: local };
+  });
+  return args.map((arg, i) => i === bag.index ? { ...object, properties } : arg);
+}
+function ownKey(literal) {
+  let value;
+  let dynamic = false;
+  for (const prop2 of literal.properties) {
+    if (prop2.spread || prop2.computedKey) {
+      dynamic = true;
+    } else if (prop2.key === "key") {
+      value = prop2.value;
+      dynamic = false;
+    }
+  }
+  if (dynamic) return "maybe";
+  return value ?? "absent";
+}
+function isSideEffectFree(expr) {
+  switch (expr.kind) {
+    case "Literal":
+    case "Identifier":
+    case "StateRef":
+    case "Lambda":
+      return true;
+    case "Template":
+      return expr.expressions.every(isSideEffectFree);
+    case "Member":
+      return isSideEffectFree(expr.object) && (expr.computed === void 0 || isSideEffectFree(expr.computed));
+    case "Unary":
+      return expr.operator !== "delete" && isSideEffectFree(expr.argument);
+    case "Binary":
+      return isSideEffectFree(expr.left) && isSideEffectFree(expr.right);
+    case "Ternary":
+      return isSideEffectFree(expr.test) && isSideEffectFree(expr.consequent) && isSideEffectFree(expr.alternate);
+    case "Spread":
+      return isSideEffectFree(expr.argument);
+    case "Array":
+      return expr.elements.every(isSideEffectFree);
+    case "Object":
+      return expr.properties.every((p) => isSideEffectFree(p.value) && (p.computedKey === void 0 || isSideEffectFree(p.computedKey)));
+    default:
+      return false;
+  }
+}
+function positionalKey(args, params) {
+  const candidates = positionalKeyArguments(args, params);
+  for (let c = candidates.length - 1; c >= 0; c -= 1) {
+    const index = candidates[c];
+    const own = ownKey(args[index]);
+    if (own === "absent") continue;
+    if (own === "maybe" || !args.slice(index).every(isSideEffectFree)) return { kind: "dynamic", candidates };
+    return { kind: "static", value: own };
+  }
+  return { kind: "none" };
+}
+function printPositionalCall(expr, decl, indent, opts) {
+  const key = positionalKey(expr.arguments, decl.params);
+  if (key.kind === "dynamic") return printPositionalCallOnce(expr, key.candidates, indent, opts);
+  const args = expr.arguments.map((arg) => arg.kind === "Object" ? { kind: "Spread", argument: { kind: "Array", elements: [arg] } } : arg);
+  if (key.kind === "static") args.push({ kind: "Object", properties: [{ key: "key", value: key.value }] });
+  return printCall(expr.callee, args, indent, opts);
+}
+function printPositionalCallOnce(expr, candidates, indent, opts) {
+  const args = expr.arguments;
+  const names = args.map((_, i) => `__arg${i}`);
+  const ref = (i) => ({ kind: "Identifier", name: names[i] });
+  let key;
+  for (const index of candidates) {
+    const own = ownKey(args[index]);
+    if (own === "absent") continue;
+    const read = { kind: "Member", object: ref(index), property: "key" };
+    key = own === "maybe" ? {
+      kind: "Ternary",
+      test: { kind: "Binary", operator: "in", left: { kind: "Literal", value: "key" }, right: ref(index) },
+      consequent: read,
+      alternate: key ?? { kind: "Identifier", name: "undefined" }
+    } : read;
+  }
+  const inner = args.map((arg, i) => arg.kind === "Spread" ? { kind: "Spread", argument: ref(i) } : ref(i));
+  if (key) inner.push({ kind: "Object", properties: [{ key: "key", value: key }] });
+  const call = {
+    kind: "Lambda",
+    params: names.map((name) => ({ name })),
+    body: { kind: "Call", callee: expr.callee, arguments: inner }
+  };
+  const outer = args.map((arg) => arg.kind === "Spread" ? arg.argument : arg);
+  return printExpression({ kind: "Invoke", callee: call, arguments: outer }, indent, opts);
+}
+function printSwitchCase(c, indent, opts) {
+  const padStr = pad(indent, opts);
+  const body = printBlock(c.body, indent + 1, opts);
+  const head = c.test === null ? `${padStr}default:` : `${padStr}case ${afterKeyword(printExpression(c.test, indent, opts))}:`;
+  const caseText = body.length > 0 ? `${head}
+${body}` : head;
+  if (!c.leadingComments || c.leadingComments.length === 0) return caseText;
+  const header = printCommentGroup(c.leadingComments, indent, opts);
+  return `${header.join("\n")}
+${caseText}`;
+}
+function printObjectProp(prop2, indent, opts) {
+  if (prop2.spread) return `...${printExpression(prop2.value, indent, opts)}`;
+  const name = prop2.computedKey ? `[${printExpression(prop2.computedKey, indent, opts)}]` : PLAIN_KEY.test(prop2.key) ? prop2.key : printStringLiteral(prop2.key, opts);
+  if (prop2.method && prop2.value.kind === "Lambda" && prop2.value.body.kind === "Block") {
+    const params = prop2.value.params.map((p) => printParam(p, indent, opts)).join(", ");
+    return `${name}(${params}) ${printExpression(prop2.value.body, indent, opts)}`;
+  }
+  const value = printExpression(prop2.value, indent, opts);
+  if (!prop2.computedKey && prop2.value.kind === "Identifier" && prop2.value.name === prop2.key && PLAIN_KEY.test(prop2.key)) {
+    return prop2.key;
+  }
+  return `${name}: ${value}`;
+}
+function printLiteral(value, opts) {
+  if (value === null) return "null";
+  if (typeof value === "string") return printStringLiteral(value, opts);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return Object.is(value, -0) ? "-0" : String(value);
+}
+function chooseQuote(value, opts) {
+  const other = opts.quote === '"' ? "'" : '"';
+  if (value.includes(opts.quote) && !value.includes(other)) return other;
+  return opts.quote;
+}
+function printStringLiteral(value, opts) {
+  const quote = chooseQuote(value, opts);
+  const needsEscape = quote === '"' ? NEEDS_ESCAPE_DOUBLE.test(value) : NEEDS_ESCAPE_SINGLE.test(value);
+  if (needsEscape) {
+    const quoteEscape = quote === '"' ? /"/g : /'/g;
+    const quoteReplacement = quote === '"' ? '\\"' : "\\'";
+    const escaped = value.replace(/\\/g, "\\\\").replace(quoteEscape, quoteReplacement).replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t");
+    return `${quote}${escaped}${quote}`;
+  }
+  return `${quote}${value}${quote}`;
+}
+function printTemplateChunk(text) {
+  return text.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+}
+function printTemplate(quasis, expressions, indent, opts) {
+  const parts = [];
+  for (let i = 0; i < quasis.length; i += 1) {
+    parts.push(printTemplateChunk(quasis[i] ?? ""));
+    if (i < expressions.length) {
+      parts.push("${");
+      parts.push(printExpression(expressions[i], indent, opts));
+      parts.push("}");
+    }
+  }
+  return `\`${parts.join("")}\``;
+}
 const DSL_MODULE_ID = "aktion-runtime/dsl";
 const AKTION_MODULE_SUFFIXES = [".aktion.ts", ".aktion.js", ".aktion"];
 const RESERVED_AKTION_SUFFIXES = [".aktion.tsx", ".aktion.jsx"];
@@ -45297,6 +46078,7 @@ function isNativeModulePath(path) {
 const LIBRARY_COMPONENTS = new Set(manifest.components.map((c) => c.name));
 const BUILTIN_HOOKS = new Set(manifest.hooks);
 const HANDLE_FACTORIES = new Set(manifest.factories);
+const CACHED_HANDLE_FACTORIES = /* @__PURE__ */ new Set(["store", "form", "query"]);
 const STORE_FACTORIES = /* @__PURE__ */ new Set(["store", "form"]);
 const RUNTIME_STATE_NAMES = /* @__PURE__ */ new Set([
   ...manifest.hooks,
@@ -45381,8 +46163,10 @@ const MESSAGES = {
   E105: (name) => `\`${name}\` is reassigned after a closure captured it. Aktion closures copy values when they are created, so the closure would not see — or keep — the new value. Use a \`$state\` atom, \`$ref(…)\` inside a component, or an object box (\`const box = { value: … }\`).`,
   E106: (name) => `\`${name}\` is used by a closure before it is declared. Aktion closures capture their scope when they are created, so \`${name}\` does not exist yet. Move the declaration of \`${name}\` above the closure; for recursion, declare a module-level \`function ${name}(…)\`.`,
   E107: (name, fn) => `Module-level \`${name}\` is changed${fn ? ` in \`${fn}\`` : ""}, but Aktion rebuilds module-level bindings on every render, so the change is lost on the next render. Keep mutable data in a state atom (\`let $${name} = …\`) or, inside a component, in \`$ref(…)\`.`,
+  E107init: (name) => `Module-level \`${name}\` is changed in place after it was built, but Aktion rebuilds module-level bindings from their initializer on every render, so the change is lost. Build the whole value in the initializer (\`const xs = [1, 2]\`, \`Object.fromEntries(items.map((it) => [it.id, it]))\`, \`new Map([[key, value]])\`), or keep data that changes in a state atom (\`let $${name} = …\`).`,
   E108method: (name, method2) => `\`$${name}.${method2}(…)\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. \`$${name} = [...$${name}, item]\`.`,
   E108key: (name) => `\`$${name}[…]\` is changed in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. \`$${name} = $${name}.map(…)\` or \`$${name} = { ...$${name}, [key]: value }\`.`,
+  E108assign: (name) => `\`Object.assign($${name}, …)\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. \`$${name} = { ...$${name}, ...changes }\`.`,
   E108delete: (name) => `\`delete $${name}…\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. a copy without the key: \`const { [key]: _, ...rest } = $${name}; $${name} = rest\`.`,
   E109: (name) => `Per-instance state \`$${name}\` must be declared at the top level of the component body — inside a block it becomes a global atom.`,
   E110: (hook) => `\`$${hook}(…)\` must be called at the top level of a component or of a \`function $useX\` hook — not inside a callback, a condition, a loop, an action, or a lambda that is not a module-level component.`,
@@ -45396,6 +46180,10 @@ const MESSAGES = {
   E119: "Pass the effect body inline: `$effect(() => load(), [...])` — Aktion only runs an inline function here.",
   E120: '`$effect` dependencies must be an array literal of `$atoms` and trigger strings (`"mount"`, `"every(1000)"`, …).',
   E121: "Returning a cleanup function from an effect has no effect in Aktion — call `cleanup(() => …)` inside the body instead.",
+  E127arms: '`$router(…)` takes its route arms as an object literal written at the call — `$router({ "/": Home(), default: NotFound() })`. Aktion reads the arms from the source, so a value built elsewhere is ignored and the router renders nothing.',
+  E127spread: "Spreads in `$router({ … })` are ignored — Aktion reads the route arms from the source. List every arm in the object literal.",
+  E127computed: 'Computed route paths in `$router({ … })` are ignored — Aktion reads each arm\'s path from the source. Write the path as a string key (`"/users/:id": …`).',
+  E127routes: "A layout arm's `routes` must be an object literal written in place — Aktion reads it from the source, so a value built elsewhere renders no child route.",
   E124: (name, field) => `Destructuring a \`$store\`/\`$form\` handle reads \`undefined\` in Aktion — read the fields as \`${name}.${field}\`.`,
   E125: (written, bare) => `\`${written}\` is not declared — declare it with \`let\` (state: \`let $${bare} = …\` at module level or at the top of the component body).`,
   E126: "Declare components and hooks at module top level.",
@@ -45415,10 +46203,41 @@ function isStoreCall(expr) {
 function isAppCall(expr) {
   return expr.kind === "Invoke" && expr.callee.kind === "StateRef" && expr.callee.name === "app";
 }
-function invokeStart(expr, fallback) {
+class SourceText {
+  constructor(text) {
+    __publicField(this, "lineStarts", [0]);
+    this.text = text;
+    for (let i = 0; i < text.length; i += 1) if (text[i] === "\n") this.lineStarts.push(i + 1);
+  }
+  offsetOf(loc) {
+    const start = this.lineStarts[loc.line - 1];
+    return start === void 0 ? null : start + loc.column - 1;
+  }
+  locationOf(offset) {
+    let lo = 0;
+    let hi = this.lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = lo + hi + 1 >> 1;
+      if (this.lineStarts[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    return { line: lo + 1, column: offset - this.lineStarts[lo] + 1 };
+  }
+}
+function invokeStart(expr, fallback, source) {
   const loc = expr.loc ?? fallback;
   if (expr.callee.kind !== "StateRef" || !expr.loc) return loc;
-  const column = expr.loc.column - expr.callee.name.length - 1;
+  const name = expr.callee.name;
+  const paren = source?.offsetOf(expr.loc);
+  if (source && paren !== null && paren !== void 0 && source.text[paren] === "(") {
+    let end = paren - 1;
+    while (end >= 0 && /\s/.test(source.text[end])) end -= 1;
+    const dollar = end - name.length;
+    if (dollar >= 0 && source.text[dollar] === "$" && source.text.slice(dollar + 1, end + 1) === name) {
+      return { ...expr.loc, ...source.locationOf(dollar) };
+    }
+  }
+  const column = expr.loc.column - name.length - 1;
   return column >= 1 ? { ...expr.loc, column } : loc;
 }
 function forEachPatternLeaf(pattern, visit, visitDefault) {
@@ -45478,7 +46297,8 @@ function commonPrefix(a, b) {
   return i;
 }
 class Analyzer {
-  constructor() {
+  /** The module text, when the caller has it — positions `$name(…)` diagnostics exactly. */
+  constructor(source) {
     __publicField(this, "index", 0);
     __publicField(this, "nextLoop", 0);
     __publicField(this, "moduleScope", newScope(null, null, 0));
@@ -45494,6 +46314,9 @@ class Analyzer {
     __publicField(this, "refs", []);
     __publicField(this, "findings", []);
     __publicField(this, "importedMutations", []);
+    /** Calls whose arguments bind positionally, as in JavaScript (`CallExpr.positional`). */
+    __publicField(this, "positionalCalls", []);
+    this.source = source;
   }
   run(program) {
     this.hoistModule(program.statements);
@@ -45565,8 +46388,9 @@ class Analyzer {
     this.bindings.push(binding);
     return binding;
   }
-  resolve(name, state) {
-    for (let s = this.scope; s !== null; s = s.parent) {
+  /** The binding `name` refers to from `from` (the current scope by default). */
+  resolve(name, state, from = this.scope) {
+    for (let s = from; s !== null; s = s.parent) {
       const found = (state ? s.state : s.plain).get(name);
       if (found) return found;
     }
@@ -45780,7 +46604,9 @@ class Analyzer {
         }
         break;
       case "ExpressionStatement":
-        if (stmt.expression.kind === "Object") this.report("E113", stmt.loc, MESSAGES.E113);
+        if (stmt.expression.kind === "Object" || stmt.expression.kind === "Block") {
+          this.report("E113", stmt.loc, MESSAGES.E113);
+        }
         if (context.moduleTop && isAppCall(stmt.expression)) this.appRoots.add(stmt.expression);
         this.expr(stmt.expression, { hooks: hooks2, value: false });
         break;
@@ -46095,6 +46921,9 @@ class Analyzer {
         if (ARRAY_MUTATORS.has(expr.method) || COLLECTION_MUTATORS.has(expr.method)) {
           this.mutation(expr.object, "method", expr.method, expr.loc);
         }
+        if (isObjectAssign(expr, (n) => this.resolve(n, false) === null) && expr.arguments[0]) {
+          this.mutation(expr.arguments[0], "target", void 0, expr.loc);
+        }
         this.expr(expr.object, asValue);
         for (const arg of expr.arguments) this.expr(arg, neutral);
         break;
@@ -46137,6 +46966,9 @@ class Analyzer {
     if (binding) {
       this.checkPatternArguments(expr, binding);
       if (this.fn === null || this.fn.hookHost) this.renderCalls.push({ binding, loc });
+      if (this.isUserComponent(binding) && expr.arguments.some((arg) => arg.kind === "Object")) {
+        this.positionalCalls.push(expr);
+      }
     }
     const neutral = { hooks: context.hooks, value: false };
     for (const arg of expr.arguments) this.expr(arg, neutral);
@@ -46145,9 +46977,10 @@ class Analyzer {
     const neutral = { hooks: context.hooks, value: false };
     if (expr.callee.kind === "StateRef") {
       const name = expr.callee.name;
-      const start = invokeStart(expr, this.here());
+      const start = invokeStart(expr, this.here(), this.source);
       if (name === "app" && !this.appRoots.has(expr)) this.report("E118", start, MESSAGES.E118);
       if (!context.hooks && this.isHook(name)) this.report("E110", start, MESSAGES.E110(name));
+      if (name === "router" && this.isRuntimeName("router")) this.checkRouterArms(expr, start);
       this.read(name, true, start);
     } else {
       this.expr(expr.callee, { hooks: context.hooks, value: true });
@@ -46200,6 +47033,13 @@ class Analyzer {
     const savedFn = this.fn;
     this.fn = fn;
     this.pushScope();
+    if (expr.selfName) {
+      const loc = expr.loc ?? this.here();
+      const self = this.declare(expr.selfName, false, "local", { loc, ready: start });
+      this.declaring(self, loc, (symbol) => {
+        expr.selfName = symbol;
+      });
+    }
     for (const p of expr.params) this.param(p, false, start);
     if (expr.body.kind === "Block") this.block(expr.body, fn);
     else this.expr(expr.body, { hooks: false, value: false });
@@ -46211,6 +47051,43 @@ class Analyzer {
     if (!binding) return false;
     if (binding.kind === "function") return binding.decl?.kind === "ComponentDeclaration";
     return this.isUserImport(binding) && isPascalCase(binding.name);
+  }
+  /** `$name` is the runtime's own (not shadowed by a user hook or import) — seen from `from`. */
+  isRuntimeName(name, from = this.scope) {
+    const binding = this.resolve(name, true, from);
+    return binding === null || binding.kind === "import" && binding.importSource === DSL_MODULE_ID;
+  }
+  /**
+   * E127 — `$router(…)` reads its arms from the AST, not from a value: the
+   * evaluator matches the properties of the object literal written at the call
+   * (skipping spreads, and comparing each arm's literal key with the path), and
+   * a layout arm's `routes` the same way. Anything else is silently ignored.
+   */
+  checkRouterArms(expr, start) {
+    const arms = expr.arguments[0];
+    if (!arms || arms.kind !== "Object") {
+      this.report("E127", arms?.loc ?? start, MESSAGES.E127arms);
+      return;
+    }
+    const visit = (object) => {
+      for (const prop2 of object.properties) {
+        if (prop2.spread) {
+          this.report("E127", prop2.value.loc ?? start, MESSAGES.E127spread);
+          continue;
+        }
+        if (prop2.computedKey) {
+          this.report("E127", prop2.computedKey.loc ?? start, MESSAGES.E127computed);
+          continue;
+        }
+        if (prop2.value.kind !== "Object") continue;
+        const layout = prop2.value.properties.some((p) => !p.spread && !p.computedKey && p.key === "layout");
+        const routes = prop2.value.properties.find((p) => !p.spread && !p.computedKey && p.key === "routes");
+        if (!layout || !routes) continue;
+        if (routes.value.kind === "Object") visit(routes.value);
+        else this.report("E127", routes.value.loc ?? start, MESSAGES.E127routes);
+      }
+    };
+    visit(arms);
   }
   /** E117 — `{ ...extra }` in the props bag of a library or host component. */
   checkPropsSpread(expr) {
@@ -46247,8 +47124,9 @@ class Analyzer {
   }
   /**
    * An in-place change of what `subject` evaluates to: `obj.k = v`, `list.push(x)`,
-   * `delete o.k`, `a[i]++`. `subject` is the member chain being changed (or the
-   * receiver of a mutating method).
+   * `delete o.k`, `a[i]++`, `Object.assign(o, …)`. `subject` is the member chain
+   * being changed (or the receiver of a mutating method, or the `target` of
+   * `Object.assign`).
    */
   mutation(subject, kind, method2, at) {
     let node = subject;
@@ -46260,7 +47138,7 @@ class Analyzer {
       path = true;
     }
     if (node.kind !== "Identifier" && node.kind !== "StateRef") return;
-    if (kind !== "method" && !path) return;
+    if (kind !== "method" && kind !== "target" && !path) return;
     const state = node.kind === "StateRef";
     const binding = this.resolve(node.name, state);
     if (!binding) return;
@@ -46269,15 +47147,19 @@ class Analyzer {
       if (!(state && this.isUserImport(binding))) return;
     }
     if (!state) {
-      if ((binding.kind === "module" || this.isUserImport(binding)) && this.fn !== null) {
-        this.report("E107", loc, MESSAGES.E107(node.name, this.fnLabel()));
+      if ((binding.kind === "module" || this.isUserImport(binding)) && !this.survivesRebuild(binding)) {
+        this.report(
+          "E107",
+          loc,
+          this.fn !== null ? MESSAGES.E107(node.name, this.fnLabel()) : MESSAGES.E107init(node.name)
+        );
       }
       return;
     }
-    if (kind !== "method") this.fn?.stateWrites.push(node.name);
-    const inPlace = kind === "method" || kind === "delete" || dynamicKey;
+    if (kind !== "method" && kind !== "target") this.fn?.stateWrites.push(node.name);
+    const inPlace = kind === "method" || kind === "target" || kind === "delete" || dynamicKey;
     if (!inPlace) return;
-    const message = kind === "method" ? MESSAGES.E108method(node.name, method2 ?? "") : kind === "delete" ? MESSAGES.E108delete(node.name) : MESSAGES.E108key(node.name);
+    const message = kind === "method" ? MESSAGES.E108method(node.name, method2 ?? "") : kind === "target" ? MESSAGES.E108assign(node.name) : kind === "delete" ? MESSAGES.E108delete(node.name) : MESSAGES.E108key(node.name);
     if (this.isUserImport(binding)) {
       this.importedMutations.push({
         source: binding.importSource,
@@ -46291,6 +47173,33 @@ class Analyzer {
       return;
     }
     if (isDataAtom(binding)) this.report("E108", loc, message);
+  }
+  /**
+   * A module-level binding whose initializer hands back the SAME object on
+   * every render, so an in-place change of it outlives the rebuild (no E107):
+   *
+   *   - a `$store(…)`, `$form(…)` or `$query(…)` handle
+   *     ({@link CACHED_HANDLE_FACTORIES}) — `cart.items = [item]`,
+   *     `signup.values.name = "Ada"`;
+   *   - a host object read through a global — `const root =
+   *     document.documentElement`, then `root.dataset.theme = "dark"`.
+   *
+   * Measured on the `.aktion` control in tests/compiler-module-mutation.test.ts.
+   * An import is judged by its own module, which this one cannot see, so it
+   * never qualifies.
+   */
+  survivesRebuild(binding) {
+    const init = binding.init;
+    if (binding.kind !== "module" || !init) return false;
+    if (init.kind === "Invoke") {
+      return init.callee.kind === "StateRef" && CACHED_HANDLE_FACTORIES.has(init.callee.name) && this.isRuntimeName(init.callee.name, binding.scope);
+    }
+    let root = init;
+    while (root.kind === "Member") {
+      if (root.computed && root.computed.kind !== "Literal") return false;
+      root = root.object;
+    }
+    return root.kind === "Identifier" && !RESERVED_INJECTED.has(root.name) && this.resolve(root.name, false, binding.scope) === null;
   }
   // ── whole-module rules ──
   /** E105 and E106 — closures copy their scope when they are created. */
@@ -46326,7 +47235,9 @@ class Analyzer {
     for (const binding of this.moduleScope.plain.values()) {
       const injected = RESERVED_INJECTED.get(binding.name);
       if (injected) {
-        this.report("E112", binding.loc, MESSAGES.E112(binding.name, injected));
+        if (binding.kind !== "import" || binding.importSource !== DSL_MODULE_ID) {
+          this.report("E112", binding.loc, MESSAGES.E112(binding.name, injected));
+        }
         continue;
       }
       if (!LIBRARY_COMPONENTS.has(binding.name)) continue;
@@ -46355,6 +47266,9 @@ class Analyzer {
       if (atom !== void 0) this.report("W202", loc, MESSAGES.W202(binding.name, atom));
     }
   }
+}
+function isObjectAssign(expr, isFree) {
+  return expr.method === "assign" && expr.object.kind === "Identifier" && expr.object.name === "Object" && isFree("Object");
 }
 function firstField(bindings) {
   for (const b of bindings) {
@@ -46539,6 +47453,18 @@ function findAsyncModifiers(source) {
   const out = [];
   for (let i = 0; i < tokens.length; i += 1) {
     const tok = tokens[i];
+    if (tok.type === "TemplateString") {
+      for (const part of tok.parts ?? []) {
+        if (part.kind !== "expr") continue;
+        for (const loc of findAsyncModifiers(part.source)) {
+          out.push({
+            line: part.line + loc.line - 1,
+            column: loc.line === 1 ? part.column + 2 + (loc.column - 1) : loc.column
+          });
+        }
+      }
+      continue;
+    }
     if (tok.type !== "Keyword" || tok.value !== "async") continue;
     let prev;
     for (let j = i - 1; j >= 0; j -= 1) {
@@ -46562,7 +47488,8 @@ function findAsyncModifiers(source) {
   return out;
 }
 function checkJavaScriptSemantics(program, path, options = {}) {
-  const findings = [...new Analyzer().run(program).findings];
+  const text = options.source !== void 0 ? new SourceText(options.source) : void 0;
+  const findings = [...new Analyzer(text).run(program).findings];
   if (options.source !== void 0) {
     for (const loc of findAsyncModifiers(options.source)) {
       findings.push({ code: "E102", severity: "error", message: MESSAGES.E102, loc });
@@ -46602,6 +47529,8 @@ function lowerJavaScriptSemantics(program) {
     const symbol = ref.binding?.symbol;
     if (symbol !== void 0 && ref.rename) ref.rename(symbol);
   }
+  for (const stmt of program.statements) if (stmt.kind === "ComponentDeclaration") stmt.javascript = true;
+  for (const call of analysis.positionalCalls) call.positional = true;
   liftNestedFunctions(program);
   appendImplicitReturns(program);
   return program;
@@ -46609,7 +47538,7 @@ function lowerJavaScriptSemantics(program) {
 function liftNestedFunctions(program) {
   const lists = [];
   walk(program, ({ node }) => {
-    if (node.kind === "Block") lists.push(node.body);
+    if (node.kind === "Block" && Array.isArray(node.body)) lists.push(node.body);
     else if (node.kind === "SwitchStatement") for (const c of node.cases) lists.push(c.body);
   });
   for (const list of lists) {
@@ -46668,7 +47597,7 @@ const aktionFrontend = {
   }
 };
 function compileJavaScriptModule(code, path, options = {}) {
-  const parseOptions = {};
+  const parseOptions = { statementBlocks: true };
   if (options.softNewlines && options.softNewlines.size > 0) parseOptions.softNewlines = options.softNewlines;
   const parsed = parse(code, parseOptions);
   if (parsed.errors.length > 0) {
@@ -46722,6 +47651,23 @@ function nativeImportMessage(spec, resolvedPath) {
   const stem = name.replace(/\.(?:[cm]?[jt]sx?|json|css|wasm)$/i, "");
   const suggestion = /\.(?:[cm]?ts|tsx)$/i.test(name) ? `${stem}.aktion.ts` : `${stem}.aktion.js`;
   return `"${spec}" is not an Aktion module. Aktion modules end in .aktion, .aktion.ts or .aktion.js — rename it to ${suggestion} to write it as Aktion, or keep it native and pass values in from the host (importing native modules is not supported yet).`;
+}
+function typeOnlyNativeImportMessage(spec, names) {
+  const list = names.join(", ");
+  return `Every name in this import is a type (\`import { type ${names[0] ?? "T"} }\`), so erasing the types leaves \`import {} from "${spec}"\`, which still loads "${spec}" — and Aktion cannot import native code. Write \`import type { ${list} } from "${spec}"\`: a type-only import is erased completely.`;
+}
+function inlineTypeOnlyNames(source, line, column) {
+  let offset = 0;
+  for (let l = 1; l < line; l += 1) {
+    const next = source.indexOf("\n", offset);
+    if (next === -1) return null;
+    offset = next + 1;
+  }
+  const match = /^import\s*\{([^}]*)\}\s*from\b/.exec(source.slice(offset + column - 1));
+  if (!match) return null;
+  const entries = match[1].split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+  if (entries.length === 0 || !entries.every((entry) => /^type\s/.test(entry))) return null;
+  return entries.map((entry) => entry.replace(/^type\s+/, ""));
 }
 function linkProgram(entrySource, entryPath, resolver, options = {}) {
   const frontends = options.frontends ?? defaultFrontends;
@@ -46831,7 +47777,14 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
             "AKT-LINK-JSX"
           );
         } else {
-          fail(path, line, column, nativeImportMessage(stmt.source, resolved), "AKT-LINK-NATIVE");
+          const typeNames = rec.language === "typescript" && stmt.specifiers.length === 0 ? inlineTypeOnlyNames(src, line, column) : null;
+          fail(
+            path,
+            line,
+            column,
+            typeNames ? typeOnlyNativeImportMessage(stmt.source, typeNames) : nativeImportMessage(stmt.source, resolved),
+            "AKT-LINK-NATIVE"
+          );
         }
         continue;
       }
@@ -47100,7 +48053,7 @@ function makeRenamer(rec) {
         renameExpr(expr.argument);
         return;
       case "Lambda":
-        push(paramNames(expr.params));
+        push(expr.selfName ? [expr.selfName, ...paramNames(expr.params)] : paramNames(expr.params));
         renameParamDefaults(expr.params);
         renameExpr(expr.body);
         pop();

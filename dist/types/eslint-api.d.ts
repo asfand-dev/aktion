@@ -35,7 +35,7 @@ import { ESLint, Linter } from 'eslint';
  *
  * export default [
  *   // The two portable blocks this package documents — processor wiring
- *   // plus the eight DSL-general rule overrides (see `aktionRecommendedRules`
+ *   // plus the ten DSL-general rule overrides (see `aktionRecommendedRules`
  *   // for the full citations).
  *   ...aktionEslint.configs.recommended,
  *   {
@@ -71,9 +71,11 @@ import { ESLint, Linter } from 'eslint';
  * already applies to that extension lint them as they are. What they need is
  * a different set of overrides — Aktion still parses and evaluates the
  * erased code with its own grammar and semantics (see
- * `aktionTypeScriptRules`) — plus `aktion/props-literal`, a type-aware rule
- * that catches a props bag TypeScript accepts but Aktion never reads.
- * `aktionTypeScriptConfig` (also `configs.typescript`) applies both to
+ * `aktionTypeScriptRules`) — plus two rules of this package for objects
+ * Aktion reads by syntax where TypeScript sees only their type:
+ * `aktion/props-literal` (type-aware), for a props bag TypeScript accepts but
+ * Aktion never reads, and `aktion/router-literal`, for a `$router` table.
+ * `aktionTypeScriptConfig` (also `configs.typescript`) applies all of them to
  * `**\/*.aktion.ts` and `**\/*.aktion.js`:
  *
  * ```js
@@ -86,9 +88,14 @@ import { ESLint, Linter } from 'eslint';
  *   unicorn.configs.recommended,
  *   {
  *     // `aktion/props-literal` reads the type checker; without type
- *     // information it reports nothing.
+ *     // information it reports nothing. Root config files (this one,
+ *     // `vite.config.ts`) sit outside a scaffold's tsconfig `include`, so the
+ *     // project service must be allowed a default project for them.
  *     languageOptions: {
- *       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+ *       parserOptions: {
+ *         projectService: { allowDefaultProject: ["*.config.js", "*.config.ts"] },
+ *         tsconfigRootDir: import.meta.dirname,
+ *       },
  *     },
  *   },
  *   // Last, so its overrides win over the rule sets above.
@@ -96,16 +103,19 @@ import { ESLint, Linter } from 'eslint';
  * ];
  * ```
  *
- * Unlike `configs.recommended`, this preset enables one plugin rule
- * (`unicorn/switch-case-braces`, reconfigured to `avoid`), so it needs
- * `eslint-plugin-unicorn` registered as `unicorn`; without it, follow it with
- * `{ files: ["**\/*.aktion.ts", "**\/*.aktion.js"], rules: {
- * "unicorn/switch-case-braces": "off" } }`. The rule is also exported as
- * `aktionPropsLiteralRule`.
+ * Unlike `configs.recommended`, this preset also switches rules ON, as
+ * errors that override the consumer's own settings for these files: core
+ * `object-shorthand` in `properties` mode and `unicorn/switch-case-braces` in
+ * `avoid` mode (see `aktionTypeScriptRules`). The unicorn one needs
+ * `eslint-plugin-unicorn` registered as `unicorn`; without it, follow the
+ * preset with `{ files: ["**\/*.aktion.ts", "**\/*.aktion.js"], rules: {
+ * "unicorn/switch-case-braces": "off" } }`. The two rules are also exported
+ * as `aktionPropsLiteralRule` and `aktionRouterLiteralRule`.
  */
 export { aktionProcessor } from './eslint/processor.js';
 export { aktionRecommendedRules, aktionTypeScriptRules } from './eslint/rules.js';
 export { aktionPropsLiteralRule } from './eslint/props-literal.js';
+export { aktionRouterLiteralRule } from './eslint/router-literal.js';
 export { findBareExportInsertions, type ExportInsertion } from './eslint/scan.js';
 export { applyInsertions, computeLineStarts, lineColumnToOffset, offsetToLineColumn, rangeOverlapsInsertion, toOriginalOffset, type Insertion, } from './eslint/remap.js';
 /**
@@ -114,7 +124,7 @@ export { applyInsertions, computeLineStarts, lineColumnToOffset, offsetToLineCol
  * `configs.recommended`).
  *
  * `configs.recommended` covers the two DSL-general blocks — routing `.aktion`
- * files through the processor, and the eight rule overrides every consumer
+ * files through the processor, and the ten rule overrides every consumer
  * needs — but deliberately stops short of wiring a parser for the processor's
  * virtual `.ts` block: `aktion-runtime` has no opinion on, and no dependency
  * on, which JS/TS parser a consumer uses. Add that block yourself (see the
@@ -124,23 +134,23 @@ export { applyInsertions, computeLineStarts, lineColumnToOffset, offsetToLineCol
  * already provides.
  *
  * `configs.typescript` (`aktionTypeScriptConfig`) is the counterpart for
- * `.aktion.ts`/`.aktion.js` modules, and `rules["props-literal"]` is the
- * plugin's one rule, addressed as `aktion/props-literal`.
+ * `.aktion.ts`/`.aktion.js` modules, and `rules` holds the plugin's two rules,
+ * addressed as `aktion/props-literal` and `aktion/router-literal`.
  */
 declare const aktionEslintPlugin: ESLint.Plugin;
 /**
  * The flat-config preset for `.aktion.ts` / `.aktion.js` modules: registers
  * the plugin (by reference, like `configs.recommended`) and applies
- * `aktionTypeScriptRules` plus `aktion/props-literal` to exactly those two
- * extensions — not to the processor's virtual `**\/*.aktion/*.ts` blocks
+ * `aktionTypeScriptRules` plus `aktion/props-literal` and
+ * `aktion/router-literal` to exactly those two extensions — not to the processor's virtual `**\/*.aktion/*.ts` blocks
  * (whose basename is `0_eslint-aktion.ts`) and not to host `.ts`/`.js` code.
  *
  * It sets no parser and no `parserOptions`: these are real `.ts`/`.js` files
  * the consumer's own TypeScript/JavaScript blocks already cover, and
  * `aktion/props-literal` simply does nothing where those blocks provide no
- * type information. Spread it AFTER the consumer's rule sets so its overrides
- * win, and see `aktionTypeScriptRules` for the one entry that needs
- * `eslint-plugin-unicorn`.
+ * type information (`aktion/router-literal` needs none). Spread it AFTER the consumer's rule sets so its overrides
+ * win, and see `aktionTypeScriptRules` for the two entries it switches on and
+ * the one that needs `eslint-plugin-unicorn`.
  */
 export declare const aktionTypeScriptConfig: Linter.Config[];
 export default aktionEslintPlugin;

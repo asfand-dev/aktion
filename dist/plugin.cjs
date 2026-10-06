@@ -639,6 +639,7 @@ function isNode(value) {
   const first = kind.charCodeAt(0);
   return first >= 65 && first <= 90;
 }
+const NON_CHILD_KEYS = /* @__PURE__ */ new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
 function walk(program, visit) {
   for (const stmt of program.statements) visitNode(stmt, null, null, null, 0, visit);
 }
@@ -648,7 +649,7 @@ function walkNode(root, visit) {
 function visitNode(node, parent, key, index, depth, visit) {
   if (visit({ node, parent, key, index, depth }) === false) return;
   for (const childKey of Object.keys(node)) {
-    if (childKey === "loc") continue;
+    if (NON_CHILD_KEYS.has(childKey)) continue;
     const value = node[childKey];
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i += 1) {
@@ -666,7 +667,7 @@ function visitNode(node, parent, key, index, depth, visit) {
 }
 function visitRecord(record, owner, key, depth, visit) {
   for (const inner of Object.keys(record)) {
-    if (inner === "loc") continue;
+    if (NON_CHILD_KEYS.has(inner)) continue;
     const value = record[inner];
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i += 1) {
@@ -695,7 +696,7 @@ function parse(source, options = {}) {
     softNewlines: options.softNewlines
   });
   const openLiteral = tokens[tokens.length - 2]?.open === true;
-  const ctx = new ParserContext(tokens, comments, options.softNewlines);
+  const ctx = new ParserContext(tokens, comments, options.softNewlines, options.statementBlocks === true);
   const statements = [];
   const errors = [];
   while (!ctx.isEnd()) {
@@ -894,6 +895,18 @@ function parseStatementImpl(ctx, _topLevel) {
       case "try":
         return parseTryStatement(ctx);
     }
+  }
+  if (ctx.statementBlocks && head.type === "Punctuation" && head.value === "{") {
+    const start = ctx.snapshot();
+    try {
+      return parseExpressionStatement(ctx);
+    } catch {
+      ctx.restore(start);
+      ctx.takePending();
+    }
+    const block = parseBlock(ctx);
+    skipTerminator(ctx);
+    return { kind: "ExpressionStatement", expression: block, loc: { line: head.line, column: head.column } };
   }
   const saved = ctx.snapshot();
   if (couldStartAssignment(ctx)) {
@@ -1532,10 +1545,11 @@ function parseReturn(ctx) {
 }
 const EOF_TOKEN = { type: "EOF", value: "", line: 0, column: 0 };
 class ParserContext {
-  constructor(tokens, comments = [], softNewlines) {
+  constructor(tokens, comments = [], softNewlines, statementBlocks = false) {
     this.tokens = tokens;
     this.comments = comments;
     this.softNewlines = softNewlines;
+    this.statementBlocks = statementBlocks;
   }
   index = 0;
   /**
@@ -1968,6 +1982,35 @@ function rebaseTemplateLocations(root, line, column) {
     loc.line = line + (loc.line - 1);
   });
 }
+function rebaseTemplatePosition(pos, line, column) {
+  if (pos.line !== 1) return { line: line + (pos.line - 1), column: pos.column };
+  const exprStartColumn = column + "${".length;
+  return { line, column: Math.max(exprStartColumn, exprStartColumn + (pos.column - (TEMPLATE_SUB_PREFIX.length + 1))) };
+}
+function interpolationError(sub, source, line, column) {
+  if (source.trim() === "") {
+    return {
+      message: "Empty `${}` in a template literal — write an expression inside it, or remove it.",
+      line,
+      column
+    };
+  }
+  const first = sub.errors[0];
+  if (first) {
+    const at = rebaseTemplatePosition(first, line, column);
+    const message = first.message.startsWith("Unexpected token EOF") ? "Unexpected end of the `${…}` interpolation — it needs a complete expression." : first.message;
+    return { message, ...at };
+  }
+  if (sub.statements.length !== 1 || sub.statements[0].kind !== "Assignment") {
+    const loc = sub.statements[1]?.loc;
+    const at = loc ? rebaseTemplatePosition(loc, line, column) : { line, column };
+    return {
+      message: "A `${…}` interpolation holds a single expression — move the other statements out of the template.",
+      ...at
+    };
+  }
+  return null;
+}
 function parseTernary(ctx) {
   const test = parseLogicalOr(ctx);
   if (consumeNewlinesIfNext(ctx, (t) => t.type === "Punctuation" && t.value === "?")) {
@@ -2379,13 +2422,14 @@ function parsePrimary(ctx) {
       if (looksLikeFunctionExpr) {
         const start = tok;
         ctx.consume();
-        if (ctx.peek().type === "Identifier") ctx.consume();
+        const selfName = ctx.peek().type === "Identifier" ? ctx.consume().value : void 0;
         const params = parseFunctionParams(ctx);
         const body = parseBlock(ctx);
         return {
           kind: "Lambda",
           params,
           body,
+          ...selfName !== void 0 ? { selfName } : {},
           loc: { line: start.line, column: start.column }
         };
       }
@@ -2448,6 +2492,10 @@ function parsePrimary(ctx) {
       }
       const softNewlines = part.offset === void 0 ? void 0 : ctx.softNewlinesWithin(part.offset, part.source.length, TEMPLATE_SUB_PREFIX.length);
       const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`, softNewlines ? { softNewlines } : {});
+      if (tok.open !== true) {
+        const problem = interpolationError(sub, part.source, part.line, part.column);
+        if (problem) throw problem;
+      }
       const firstStmt = sub.statements[0];
       if (firstStmt && firstStmt.kind === "Assignment") {
         rebaseTemplateLocations(firstStmt.expression, part.line, part.column);
@@ -3073,7 +3121,9 @@ function parseObjectProps(ctx) {
     if (keyTok.type === "Punctuation" && keyTok.value === "[") {
       ctx.consume();
       skipWhitespace(ctx);
+      const keyStart = ctx.peek();
       computedKey = parseExpression(ctx);
+      if (!computedKey.loc) computedKey.loc = { line: keyStart.line, column: keyStart.column };
       skipWhitespace(ctx);
       ctx.expect("Punctuation", "]");
       key = "";
@@ -3656,12 +3706,12 @@ const components = [
       "items",
       "size",
       "fullWidth",
-      "ariaLabel"
+      "ariaLabel",
+      "ariaLabelledBy"
     ],
     positional: 0,
     aliases: {
       full: "fullWidth",
-      ariaLabelledBy: "ariaLabel",
       label: "ariaLabel"
     }
   },
@@ -4180,11 +4230,12 @@ const components = [
       "highlightColumn",
       "featureLabel",
       "caption",
-      "stickyFirstColumn"
+      "stickyFirstColumn",
+      "ariaLabel"
     ],
     positional: 0,
     aliases: {
-      ariaLabel: "caption"
+      arialabel: "ariaLabel"
     }
   },
   {
@@ -8295,9 +8346,10 @@ function isAktionModulePath(path) {
 function isNativeModulePath(path) {
   return moduleLanguage(path) === null && !isReservedAktionPath(path);
 }
-const LIBRARY_COMPONENTS = new Set(manifest.components.map((c) => c.name));
+const LIBRARY_COMPONENTS$1 = new Set(manifest.components.map((c) => c.name));
 const BUILTIN_HOOKS = new Set(manifest.hooks);
 const HANDLE_FACTORIES = new Set(manifest.factories);
+const CACHED_HANDLE_FACTORIES = /* @__PURE__ */ new Set(["store", "form", "query"]);
 const STORE_FACTORIES = /* @__PURE__ */ new Set(["store", "form"]);
 const RUNTIME_STATE_NAMES = /* @__PURE__ */ new Set([
   ...manifest.hooks,
@@ -8382,8 +8434,10 @@ const MESSAGES = {
   E105: (name) => `\`${name}\` is reassigned after a closure captured it. Aktion closures copy values when they are created, so the closure would not see — or keep — the new value. Use a \`$state\` atom, \`$ref(…)\` inside a component, or an object box (\`const box = { value: … }\`).`,
   E106: (name) => `\`${name}\` is used by a closure before it is declared. Aktion closures capture their scope when they are created, so \`${name}\` does not exist yet. Move the declaration of \`${name}\` above the closure; for recursion, declare a module-level \`function ${name}(…)\`.`,
   E107: (name, fn) => `Module-level \`${name}\` is changed${fn ? ` in \`${fn}\`` : ""}, but Aktion rebuilds module-level bindings on every render, so the change is lost on the next render. Keep mutable data in a state atom (\`let $${name} = …\`) or, inside a component, in \`$ref(…)\`.`,
+  E107init: (name) => `Module-level \`${name}\` is changed in place after it was built, but Aktion rebuilds module-level bindings from their initializer on every render, so the change is lost. Build the whole value in the initializer (\`const xs = [1, 2]\`, \`Object.fromEntries(items.map((it) => [it.id, it]))\`, \`new Map([[key, value]])\`), or keep data that changes in a state atom (\`let $${name} = …\`).`,
   E108method: (name, method) => `\`$${name}.${method}(…)\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. \`$${name} = [...$${name}, item]\`.`,
   E108key: (name) => `\`$${name}[…]\` is changed in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. \`$${name} = $${name}.map(…)\` or \`$${name} = { ...$${name}, [key]: value }\`.`,
+  E108assign: (name) => `\`Object.assign($${name}, …)\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. \`$${name} = { ...$${name}, ...changes }\`.`,
   E108delete: (name) => `\`delete $${name}…\` changes state in place, and Aktion only re-renders when a \`$\` atom is assigned. Assign a new value instead, e.g. a copy without the key: \`const { [key]: _, ...rest } = $${name}; $${name} = rest\`.`,
   E109: (name) => `Per-instance state \`$${name}\` must be declared at the top level of the component body — inside a block it becomes a global atom.`,
   E110: (hook) => `\`$${hook}(…)\` must be called at the top level of a component or of a \`function $useX\` hook — not inside a callback, a condition, a loop, an action, or a lambda that is not a module-level component.`,
@@ -8397,6 +8451,10 @@ const MESSAGES = {
   E119: "Pass the effect body inline: `$effect(() => load(), [...])` — Aktion only runs an inline function here.",
   E120: '`$effect` dependencies must be an array literal of `$atoms` and trigger strings (`"mount"`, `"every(1000)"`, …).',
   E121: "Returning a cleanup function from an effect has no effect in Aktion — call `cleanup(() => …)` inside the body instead.",
+  E127arms: '`$router(…)` takes its route arms as an object literal written at the call — `$router({ "/": Home(), default: NotFound() })`. Aktion reads the arms from the source, so a value built elsewhere is ignored and the router renders nothing.',
+  E127spread: "Spreads in `$router({ … })` are ignored — Aktion reads the route arms from the source. List every arm in the object literal.",
+  E127computed: 'Computed route paths in `$router({ … })` are ignored — Aktion reads each arm\'s path from the source. Write the path as a string key (`"/users/:id": …`).',
+  E127routes: "A layout arm's `routes` must be an object literal written in place — Aktion reads it from the source, so a value built elsewhere renders no child route.",
   E124: (name, field) => `Destructuring a \`$store\`/\`$form\` handle reads \`undefined\` in Aktion — read the fields as \`${name}.${field}\`.`,
   E125: (written, bare) => `\`${written}\` is not declared — declare it with \`let\` (state: \`let $${bare} = …\` at module level or at the top of the component body).`,
   E126: "Declare components and hooks at module top level.",
@@ -8416,10 +8474,41 @@ function isStoreCall(expr) {
 function isAppCall(expr) {
   return expr.kind === "Invoke" && expr.callee.kind === "StateRef" && expr.callee.name === "app";
 }
-function invokeStart(expr, fallback) {
+class SourceText {
+  constructor(text) {
+    this.text = text;
+    for (let i = 0; i < text.length; i += 1) if (text[i] === "\n") this.lineStarts.push(i + 1);
+  }
+  lineStarts = [0];
+  offsetOf(loc) {
+    const start = this.lineStarts[loc.line - 1];
+    return start === void 0 ? null : start + loc.column - 1;
+  }
+  locationOf(offset) {
+    let lo = 0;
+    let hi = this.lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = lo + hi + 1 >> 1;
+      if (this.lineStarts[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    return { line: lo + 1, column: offset - this.lineStarts[lo] + 1 };
+  }
+}
+function invokeStart(expr, fallback, source) {
   const loc = expr.loc ?? fallback;
   if (expr.callee.kind !== "StateRef" || !expr.loc) return loc;
-  const column = expr.loc.column - expr.callee.name.length - 1;
+  const name = expr.callee.name;
+  const paren = source?.offsetOf(expr.loc);
+  if (source && paren !== null && paren !== void 0 && source.text[paren] === "(") {
+    let end = paren - 1;
+    while (end >= 0 && /\s/.test(source.text[end])) end -= 1;
+    const dollar = end - name.length;
+    if (dollar >= 0 && source.text[dollar] === "$" && source.text.slice(dollar + 1, end + 1) === name) {
+      return { ...expr.loc, ...source.locationOf(dollar) };
+    }
+  }
+  const column = expr.loc.column - name.length - 1;
   return column >= 1 ? { ...expr.loc, column } : loc;
 }
 function forEachPatternLeaf(pattern, visit, visitDefault) {
@@ -8479,6 +8568,10 @@ function commonPrefix(a, b) {
   return i;
 }
 class Analyzer {
+  /** The module text, when the caller has it — positions `$name(…)` diagnostics exactly. */
+  constructor(source) {
+    this.source = source;
+  }
   index = 0;
   nextLoop = 0;
   moduleScope = newScope(null, null, 0);
@@ -8494,6 +8587,8 @@ class Analyzer {
   refs = [];
   findings = [];
   importedMutations = [];
+  /** Calls whose arguments bind positionally, as in JavaScript (`CallExpr.positional`). */
+  positionalCalls = [];
   run(program) {
     this.hoistModule(program.statements);
     for (const stmt of program.statements) this.stmt(stmt, { moduleTop: true, bodyOf: null });
@@ -8564,8 +8659,9 @@ class Analyzer {
     this.bindings.push(binding);
     return binding;
   }
-  resolve(name, state) {
-    for (let s = this.scope; s !== null; s = s.parent) {
+  /** The binding `name` refers to from `from` (the current scope by default). */
+  resolve(name, state, from = this.scope) {
+    for (let s = from; s !== null; s = s.parent) {
       const found = (state ? s.state : s.plain).get(name);
       if (found) return found;
     }
@@ -8779,7 +8875,9 @@ class Analyzer {
         }
         break;
       case "ExpressionStatement":
-        if (stmt.expression.kind === "Object") this.report("E113", stmt.loc, MESSAGES.E113);
+        if (stmt.expression.kind === "Object" || stmt.expression.kind === "Block") {
+          this.report("E113", stmt.loc, MESSAGES.E113);
+        }
         if (context.moduleTop && isAppCall(stmt.expression)) this.appRoots.add(stmt.expression);
         this.expr(stmt.expression, { hooks: hooks2, value: false });
         break;
@@ -9094,6 +9192,9 @@ class Analyzer {
         if (ARRAY_MUTATORS.has(expr.method) || COLLECTION_MUTATORS.has(expr.method)) {
           this.mutation(expr.object, "method", expr.method, expr.loc);
         }
+        if (isObjectAssign(expr, (n) => this.resolve(n, false) === null) && expr.arguments[0]) {
+          this.mutation(expr.arguments[0], "target", void 0, expr.loc);
+        }
         this.expr(expr.object, asValue);
         for (const arg of expr.arguments) this.expr(arg, neutral);
         break;
@@ -9136,6 +9237,9 @@ class Analyzer {
     if (binding) {
       this.checkPatternArguments(expr, binding);
       if (this.fn === null || this.fn.hookHost) this.renderCalls.push({ binding, loc });
+      if (this.isUserComponent(binding) && expr.arguments.some((arg) => arg.kind === "Object")) {
+        this.positionalCalls.push(expr);
+      }
     }
     const neutral = { hooks: context.hooks, value: false };
     for (const arg of expr.arguments) this.expr(arg, neutral);
@@ -9144,9 +9248,10 @@ class Analyzer {
     const neutral = { hooks: context.hooks, value: false };
     if (expr.callee.kind === "StateRef") {
       const name = expr.callee.name;
-      const start = invokeStart(expr, this.here());
+      const start = invokeStart(expr, this.here(), this.source);
       if (name === "app" && !this.appRoots.has(expr)) this.report("E118", start, MESSAGES.E118);
       if (!context.hooks && this.isHook(name)) this.report("E110", start, MESSAGES.E110(name));
+      if (name === "router" && this.isRuntimeName("router")) this.checkRouterArms(expr, start);
       this.read(name, true, start);
     } else {
       this.expr(expr.callee, { hooks: context.hooks, value: true });
@@ -9199,6 +9304,13 @@ class Analyzer {
     const savedFn = this.fn;
     this.fn = fn;
     this.pushScope();
+    if (expr.selfName) {
+      const loc = expr.loc ?? this.here();
+      const self = this.declare(expr.selfName, false, "local", { loc, ready: start });
+      this.declaring(self, loc, (symbol) => {
+        expr.selfName = symbol;
+      });
+    }
     for (const p of expr.params) this.param(p, false, start);
     if (expr.body.kind === "Block") this.block(expr.body, fn);
     else this.expr(expr.body, { hooks: false, value: false });
@@ -9210,6 +9322,43 @@ class Analyzer {
     if (!binding) return false;
     if (binding.kind === "function") return binding.decl?.kind === "ComponentDeclaration";
     return this.isUserImport(binding) && isPascalCase(binding.name);
+  }
+  /** `$name` is the runtime's own (not shadowed by a user hook or import) — seen from `from`. */
+  isRuntimeName(name, from = this.scope) {
+    const binding = this.resolve(name, true, from);
+    return binding === null || binding.kind === "import" && binding.importSource === DSL_MODULE_ID;
+  }
+  /**
+   * E127 — `$router(…)` reads its arms from the AST, not from a value: the
+   * evaluator matches the properties of the object literal written at the call
+   * (skipping spreads, and comparing each arm's literal key with the path), and
+   * a layout arm's `routes` the same way. Anything else is silently ignored.
+   */
+  checkRouterArms(expr, start) {
+    const arms = expr.arguments[0];
+    if (!arms || arms.kind !== "Object") {
+      this.report("E127", arms?.loc ?? start, MESSAGES.E127arms);
+      return;
+    }
+    const visit = (object) => {
+      for (const prop of object.properties) {
+        if (prop.spread) {
+          this.report("E127", prop.value.loc ?? start, MESSAGES.E127spread);
+          continue;
+        }
+        if (prop.computedKey) {
+          this.report("E127", prop.computedKey.loc ?? start, MESSAGES.E127computed);
+          continue;
+        }
+        if (prop.value.kind !== "Object") continue;
+        const layout = prop.value.properties.some((p) => !p.spread && !p.computedKey && p.key === "layout");
+        const routes = prop.value.properties.find((p) => !p.spread && !p.computedKey && p.key === "routes");
+        if (!layout || !routes) continue;
+        if (routes.value.kind === "Object") visit(routes.value);
+        else this.report("E127", routes.value.loc ?? start, MESSAGES.E127routes);
+      }
+    };
+    visit(arms);
   }
   /** E117 — `{ ...extra }` in the props bag of a library or host component. */
   checkPropsSpread(expr) {
@@ -9246,8 +9395,9 @@ class Analyzer {
   }
   /**
    * An in-place change of what `subject` evaluates to: `obj.k = v`, `list.push(x)`,
-   * `delete o.k`, `a[i]++`. `subject` is the member chain being changed (or the
-   * receiver of a mutating method).
+   * `delete o.k`, `a[i]++`, `Object.assign(o, …)`. `subject` is the member chain
+   * being changed (or the receiver of a mutating method, or the `target` of
+   * `Object.assign`).
    */
   mutation(subject, kind, method, at) {
     let node = subject;
@@ -9259,7 +9409,7 @@ class Analyzer {
       path = true;
     }
     if (node.kind !== "Identifier" && node.kind !== "StateRef") return;
-    if (kind !== "method" && !path) return;
+    if (kind !== "method" && kind !== "target" && !path) return;
     const state = node.kind === "StateRef";
     const binding = this.resolve(node.name, state);
     if (!binding) return;
@@ -9268,15 +9418,19 @@ class Analyzer {
       if (!(state && this.isUserImport(binding))) return;
     }
     if (!state) {
-      if ((binding.kind === "module" || this.isUserImport(binding)) && this.fn !== null) {
-        this.report("E107", loc, MESSAGES.E107(node.name, this.fnLabel()));
+      if ((binding.kind === "module" || this.isUserImport(binding)) && !this.survivesRebuild(binding)) {
+        this.report(
+          "E107",
+          loc,
+          this.fn !== null ? MESSAGES.E107(node.name, this.fnLabel()) : MESSAGES.E107init(node.name)
+        );
       }
       return;
     }
-    if (kind !== "method") this.fn?.stateWrites.push(node.name);
-    const inPlace = kind === "method" || kind === "delete" || dynamicKey;
+    if (kind !== "method" && kind !== "target") this.fn?.stateWrites.push(node.name);
+    const inPlace = kind === "method" || kind === "target" || kind === "delete" || dynamicKey;
     if (!inPlace) return;
-    const message = kind === "method" ? MESSAGES.E108method(node.name, method ?? "") : kind === "delete" ? MESSAGES.E108delete(node.name) : MESSAGES.E108key(node.name);
+    const message = kind === "method" ? MESSAGES.E108method(node.name, method ?? "") : kind === "target" ? MESSAGES.E108assign(node.name) : kind === "delete" ? MESSAGES.E108delete(node.name) : MESSAGES.E108key(node.name);
     if (this.isUserImport(binding)) {
       this.importedMutations.push({
         source: binding.importSource,
@@ -9290,6 +9444,33 @@ class Analyzer {
       return;
     }
     if (isDataAtom(binding)) this.report("E108", loc, message);
+  }
+  /**
+   * A module-level binding whose initializer hands back the SAME object on
+   * every render, so an in-place change of it outlives the rebuild (no E107):
+   *
+   *   - a `$store(…)`, `$form(…)` or `$query(…)` handle
+   *     ({@link CACHED_HANDLE_FACTORIES}) — `cart.items = [item]`,
+   *     `signup.values.name = "Ada"`;
+   *   - a host object read through a global — `const root =
+   *     document.documentElement`, then `root.dataset.theme = "dark"`.
+   *
+   * Measured on the `.aktion` control in tests/compiler-module-mutation.test.ts.
+   * An import is judged by its own module, which this one cannot see, so it
+   * never qualifies.
+   */
+  survivesRebuild(binding) {
+    const init = binding.init;
+    if (binding.kind !== "module" || !init) return false;
+    if (init.kind === "Invoke") {
+      return init.callee.kind === "StateRef" && CACHED_HANDLE_FACTORIES.has(init.callee.name) && this.isRuntimeName(init.callee.name, binding.scope);
+    }
+    let root = init;
+    while (root.kind === "Member") {
+      if (root.computed && root.computed.kind !== "Literal") return false;
+      root = root.object;
+    }
+    return root.kind === "Identifier" && !RESERVED_INJECTED.has(root.name) && this.resolve(root.name, false, binding.scope) === null;
   }
   // ── whole-module rules ──
   /** E105 and E106 — closures copy their scope when they are created. */
@@ -9325,10 +9506,12 @@ class Analyzer {
     for (const binding of this.moduleScope.plain.values()) {
       const injected = RESERVED_INJECTED.get(binding.name);
       if (injected) {
-        this.report("E112", binding.loc, MESSAGES.E112(binding.name, injected));
+        if (binding.kind !== "import" || binding.importSource !== DSL_MODULE_ID) {
+          this.report("E112", binding.loc, MESSAGES.E112(binding.name, injected));
+        }
         continue;
       }
-      if (!LIBRARY_COMPONENTS.has(binding.name)) continue;
+      if (!LIBRARY_COMPONENTS$1.has(binding.name)) continue;
       if (binding.kind === "function" || binding.kind === "import") continue;
       if (binding.init?.kind === "Lambda") continue;
       this.report("E112", binding.loc, MESSAGES.E112(binding.name, `it is the built-in \`${binding.name}\` component`));
@@ -9354,6 +9537,9 @@ class Analyzer {
       if (atom !== void 0) this.report("W202", loc, MESSAGES.W202(binding.name, atom));
     }
   }
+}
+function isObjectAssign(expr, isFree) {
+  return expr.method === "assign" && expr.object.kind === "Identifier" && expr.object.name === "Object" && isFree("Object");
 }
 function firstField(bindings) {
   for (const b of bindings) {
@@ -9538,6 +9724,18 @@ function findAsyncModifiers(source) {
   const out = [];
   for (let i = 0; i < tokens.length; i += 1) {
     const tok = tokens[i];
+    if (tok.type === "TemplateString") {
+      for (const part of tok.parts ?? []) {
+        if (part.kind !== "expr") continue;
+        for (const loc of findAsyncModifiers(part.source)) {
+          out.push({
+            line: part.line + loc.line - 1,
+            column: loc.line === 1 ? part.column + 2 + (loc.column - 1) : loc.column
+          });
+        }
+      }
+      continue;
+    }
     if (tok.type !== "Keyword" || tok.value !== "async") continue;
     let prev;
     for (let j = i - 1; j >= 0; j -= 1) {
@@ -9561,7 +9759,8 @@ function findAsyncModifiers(source) {
   return out;
 }
 function checkJavaScriptSemantics(program, path, options = {}) {
-  const findings = [...new Analyzer().run(program).findings];
+  const text = options.source !== void 0 ? new SourceText(options.source) : void 0;
+  const findings = [...new Analyzer(text).run(program).findings];
   if (options.source !== void 0) {
     for (const loc of findAsyncModifiers(options.source)) {
       findings.push({ code: "E102", severity: "error", message: MESSAGES.E102, loc });
@@ -9601,6 +9800,8 @@ function lowerJavaScriptSemantics(program) {
     const symbol = ref.binding?.symbol;
     if (symbol !== void 0 && ref.rename) ref.rename(symbol);
   }
+  for (const stmt of program.statements) if (stmt.kind === "ComponentDeclaration") stmt.javascript = true;
+  for (const call of analysis.positionalCalls) call.positional = true;
   liftNestedFunctions(program);
   appendImplicitReturns(program);
   return program;
@@ -9608,7 +9809,7 @@ function lowerJavaScriptSemantics(program) {
 function liftNestedFunctions(program) {
   const lists = [];
   walk(program, ({ node }) => {
-    if (node.kind === "Block") lists.push(node.body);
+    if (node.kind === "Block" && Array.isArray(node.body)) lists.push(node.body);
     else if (node.kind === "SwitchStatement") for (const c of node.cases) lists.push(c.body);
   });
   for (const list of lists) {
@@ -9667,7 +9868,7 @@ const aktionFrontend = {
   }
 };
 function compileJavaScriptModule(code, path, options = {}) {
-  const parseOptions = {};
+  const parseOptions = { statementBlocks: true };
   if (options.softNewlines && options.softNewlines.size > 0) parseOptions.softNewlines = options.softNewlines;
   const parsed = parse(code, parseOptions);
   if (parsed.errors.length > 0) {
@@ -9721,6 +9922,23 @@ function nativeImportMessage(spec, resolvedPath) {
   const stem = name.replace(/\.(?:[cm]?[jt]sx?|json|css|wasm)$/i, "");
   const suggestion = /\.(?:[cm]?ts|tsx)$/i.test(name) ? `${stem}.aktion.ts` : `${stem}.aktion.js`;
   return `"${spec}" is not an Aktion module. Aktion modules end in .aktion, .aktion.ts or .aktion.js — rename it to ${suggestion} to write it as Aktion, or keep it native and pass values in from the host (importing native modules is not supported yet).`;
+}
+function typeOnlyNativeImportMessage(spec, names) {
+  const list = names.join(", ");
+  return `Every name in this import is a type (\`import { type ${names[0] ?? "T"} }\`), so erasing the types leaves \`import {} from "${spec}"\`, which still loads "${spec}" — and Aktion cannot import native code. Write \`import type { ${list} } from "${spec}"\`: a type-only import is erased completely.`;
+}
+function inlineTypeOnlyNames(source, line, column) {
+  let offset = 0;
+  for (let l = 1; l < line; l += 1) {
+    const next = source.indexOf("\n", offset);
+    if (next === -1) return null;
+    offset = next + 1;
+  }
+  const match = /^import\s*\{([^}]*)\}\s*from\b/.exec(source.slice(offset + column - 1));
+  if (!match) return null;
+  const entries = match[1].split(",").map((entry) => entry.trim()).filter((entry) => entry !== "");
+  if (entries.length === 0 || !entries.every((entry) => /^type\s/.test(entry))) return null;
+  return entries.map((entry) => entry.replace(/^type\s+/, ""));
 }
 function linkProgram(entrySource, entryPath, resolver, options = {}) {
   const frontends = options.frontends ?? defaultFrontends;
@@ -9830,7 +10048,14 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
             "AKT-LINK-JSX"
           );
         } else {
-          fail(path, line, column, nativeImportMessage(stmt.source, resolved), "AKT-LINK-NATIVE");
+          const typeNames = rec.language === "typescript" && stmt.specifiers.length === 0 ? inlineTypeOnlyNames(src, line, column) : null;
+          fail(
+            path,
+            line,
+            column,
+            typeNames ? typeOnlyNativeImportMessage(stmt.source, typeNames) : nativeImportMessage(stmt.source, resolved),
+            "AKT-LINK-NATIVE"
+          );
         }
         continue;
       }
@@ -10099,7 +10324,7 @@ function makeRenamer(rec) {
         renameExpr(expr.argument);
         return;
       case "Lambda":
-        push(paramNames(expr.params));
+        push(expr.selfName ? [expr.selfName, ...paramNames(expr.params)] : paramNames(expr.params));
         renameParamDefaults(expr.params);
         renameExpr(expr.body);
         pop();
@@ -10254,12 +10479,117 @@ function makeRenamer(rec) {
   }
   return { renameTopLevel };
 }
-const SAFE_IDENT = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+function componentParamPublicName(param) {
+  return param.publicName ?? param.name;
+}
+function hasRestParam(params) {
+  return params.length > 0 && params[params.length - 1].rest === true;
+}
+const IDENTIFIER_KEY = /^[A-Za-z_$][\w$]*$/;
+function trailingPropsArgument(args, params) {
+  let index = -1;
+  for (let i = args.length - 1; i >= 0; i -= 1) {
+    if (args[i].kind === "Object") {
+      index = i;
+      break;
+    }
+  }
+  if (index < 0) return null;
+  const object = args[index];
+  const publicNames = new Set(params.map(componentParamPublicName));
+  let named = false;
+  let keys = 0;
+  let identifierKeys = true;
+  for (const prop of object.properties) {
+    if (prop.spread) continue;
+    keys += 1;
+    if (prop.key === "key" || publicNames.has(prop.key)) named = true;
+    if (!IDENTIFIER_KEY.test(prop.key)) identifierKeys = false;
+  }
+  if (!named && identifierKeys && keys > 0 && !hasRestParam(params) && args.length - 1 >= params.length) {
+    named = true;
+  }
+  return { index, named };
+}
+function positionalKeyArguments(args, params) {
+  const out = [];
+  const rest = hasRestParam(params);
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg.kind !== "Object") continue;
+    const keyOnly = i === args.length - 1 && arg.properties.length === 1 && !arg.properties[0].spread && arg.properties[0].key === "key";
+    if (keyOnly || i >= params.length && !rest) out.push(i);
+  }
+  return out;
+}
 const PLAIN_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const NEEDS_ESCAPE_DOUBLE = /[\\"\n\r\t]/;
 const NEEDS_ESCAPE_SINGLE = /[\\'\n\r\t]/;
+const PREC = {
+  /**
+   * Arrow and `function` expressions, and an assignment: a concise arrow body
+   * runs to the end of the enclosing expression, so these print bare only in
+   * a full-expression position (an argument, element, property value,
+   * statement expression, ternary branch, interpolation, …).
+   */
+  lambda: 0,
+  ternary: 1,
+  /** `||` and `??` share one level in this grammar (`parseLogicalOr`). */
+  logicalOr: 2,
+  logicalAnd: 3,
+  bitwiseOr: 4,
+  bitwiseXor: 5,
+  bitwiseAnd: 6,
+  equality: 7,
+  /** `<` `>` `<=` `>=` `in` `instanceof`. */
+  relational: 8,
+  shift: 9,
+  additive: 10,
+  multiplicative: 11,
+  /** `**`, right-associative; its base is a unary operand (`parseExponent`). */
+  exponent: 12,
+  /** Prefix operators: `!x`, `-x`, `typeof x`, `++x`, `await x`. */
+  unary: 13,
+  /** `x++` / `x--`. */
+  postfix: 14,
+  /** Member access, calls, `new X()`, and every primary. */
+  member: 15
+};
+const BINARY_PRECEDENCE = {
+  "||": PREC.logicalOr,
+  "??": PREC.logicalOr,
+  "&&": PREC.logicalAnd,
+  "|": PREC.bitwiseOr,
+  "^": PREC.bitwiseXor,
+  "&": PREC.bitwiseAnd,
+  "==": PREC.equality,
+  "!=": PREC.equality,
+  "===": PREC.equality,
+  "!==": PREC.equality,
+  "<": PREC.relational,
+  ">": PREC.relational,
+  "<=": PREC.relational,
+  ">=": PREC.relational,
+  in: PREC.relational,
+  instanceof: PREC.relational,
+  "<<": PREC.shift,
+  ">>": PREC.shift,
+  ">>>": PREC.shift,
+  "+": PREC.additive,
+  "-": PREC.additive,
+  "*": PREC.multiplicative,
+  "/": PREC.multiplicative,
+  "%": PREC.multiplicative,
+  "**": PREC.exponent
+};
+const LIBRARY_COMPONENTS = new Set(manifest.components.map((c) => c.name));
+function componentsOf(statements) {
+  const out = /* @__PURE__ */ new Map();
+  for (const stmt of statements) if (stmt.kind === "ComponentDeclaration") out.set(stmt.name, stmt);
+  return out;
+}
 const DEFAULT_INDENT_WIDTH = 2;
-function resolveFormatOptions(options) {
+function resolveFormatOptions(program, options) {
   const unit = (() => {
     const width = DEFAULT_INDENT_WIDTH;
     if (!Number.isInteger(width) || width < 0) {
@@ -10273,7 +10603,8 @@ function resolveFormatOptions(options) {
     unit,
     quote: '"',
     trailingComma: false,
-    objectCurlySpacing: true
+    objectCurlySpacing: true,
+    calls: { topLevel: componentsOf(program.statements), nested: [], enclosing: [] }
   };
 }
 function pad(indent, opts) {
@@ -10292,7 +10623,7 @@ function printPattern(pattern, indent, opts) {
   return `${open}${parts.join(", ")}${close}`;
 }
 function printProgram(program, options) {
-  const opts = resolveFormatOptions();
+  const opts = resolveFormatOptions(program);
   const lines = [];
   let prev = null;
   for (const stmt of program.statements) {
@@ -10367,7 +10698,13 @@ function printStatement(stmt, indent, opts) {
     case "ComponentDeclaration": {
       const params = printDeclParams(stmt.params, opts);
       const head = `${padStr}${exp}function ${stmt.name}(${params}) {`;
-      const body = printBlockBody(stmt.body, indent + 1, opts);
+      opts.calls.enclosing.push(stmt.name);
+      let body;
+      try {
+        body = printBlockBody(stmt.body, indent + 1, opts);
+      } finally {
+        opts.calls.enclosing.pop();
+      }
       return body.length > 0 ? `${head}
 ${body}
 ${padStr}}` : `${head}
@@ -10404,11 +10741,12 @@ ${padStr}}`;
       return `${padStr}await ${printExpression(stmt.argument, indent, opts)}`;
     }
     case "Return": {
-      return stmt.argument ? `${padStr}return ${printExpression(stmt.argument, indent, opts)}` : `${padStr}return`;
+      return stmt.argument ? `${padStr}return ${afterKeyword(printExpression(stmt.argument, indent, opts))}` : `${padStr}return`;
     }
     case "ExpressionStatement": {
-      const prefix = stmt.exportDefault ? "export default " : "";
-      return `${padStr}${prefix}${printExpression(stmt.expression, indent, opts)}`;
+      if (stmt.exportDefault) return `${padStr}export default ${printExpression(stmt.expression, indent, opts)}`;
+      const text = printExpression(stmt.expression, indent, opts);
+      return /^(?:function\b|await\b|\{)/.test(text) ? `${padStr}(${text})` : `${padStr}${text}`;
     }
     case "IfStatement": {
       const test = printExpression(stmt.test, indent, opts);
@@ -10429,7 +10767,7 @@ ${cases}
 ${padStr}}`;
     }
     case "ForOfStatement": {
-      const iter = printExpression(stmt.iterable, indent, opts);
+      const iter = afterKeyword(printExpression(stmt.iterable, indent, opts));
       const body = `{
 ${printBlockBody(stmt.body, indent + 1, opts)}
 ${padStr}}`;
@@ -10460,7 +10798,7 @@ ${padStr}}`;
       return `${padStr}do ${body} while (${test})`;
     }
     case "ForInStatement": {
-      const iter = printExpression(stmt.iterable, indent, opts);
+      const iter = afterKeyword(printExpression(stmt.iterable, indent, opts));
       const body = `{
 ${printBlockBody(stmt.body, indent + 1, opts)}
 ${padStr}}`;
@@ -10476,7 +10814,7 @@ ${padStr}}`;
     case "ContinueStatement":
       return `${padStr}continue`;
     case "ThrowStatement":
-      return `${padStr}throw ${printExpression(stmt.argument, indent, opts)}`;
+      return `${padStr}throw ${afterKeyword(printExpression(stmt.argument, indent, opts))}`;
     case "TryStatement": {
       const block = `{
 ${printBlockBody(stmt.block, indent + 1, opts)}
@@ -10515,7 +10853,14 @@ function printTrigger(t, opts) {
   return "";
 }
 function printBlock(stmts, indent, opts) {
-  return stmts.map((s) => printStatementWithComments(s, indent, opts, false)).join("\n");
+  const nested = componentsOf(stmts);
+  if (nested.size === 0) return stmts.map((s) => printStatementWithComments(s, indent, opts, false)).join("\n");
+  opts.calls.nested.push(nested);
+  try {
+    return stmts.map((s) => printStatementWithComments(s, indent, opts, false)).join("\n");
+  } finally {
+    opts.calls.nested.pop();
+  }
 }
 function printBlockBody(block, indent, opts) {
   if (block.body.length === 0 && block.innerComments && block.innerComments.length > 0) {
@@ -10530,19 +10875,19 @@ function printDesugaredOperator(expr, indent, opts) {
       const [target, value, opNode] = expr.arguments;
       const op = literalOperator(opNode);
       if (!target || !value || op === null) return null;
-      return `${printExpression(target, indent, opts)} ${op} ${printExpression(value, indent, opts)}`;
+      return `${printOperand(target, PREC.member, indent, opts)} ${op} ${printExpression(value, indent, opts)}`;
     }
     case "__rui_postfix__": {
       const [target, opNode] = expr.arguments;
       const op = literalOperator(opNode);
       if (!target || op === null) return null;
-      return `${printExpression(target, indent, opts)}${op}`;
+      return `${printOperand(target, PREC.member, indent, opts)}${op}`;
     }
     case "__rui_prefix__": {
       const [target, opNode] = expr.arguments;
       const op = literalOperator(opNode);
       if (!target || op === null) return null;
-      return `${op}${printExpression(target, indent, opts)}`;
+      return `${op}${printOperand(target, PREC.unary, indent, opts)}`;
     }
     case "__rui_await__": {
       const [argument] = expr.arguments;
@@ -10552,6 +10897,56 @@ function printDesugaredOperator(expr, indent, opts) {
     default:
       return null;
   }
+}
+function precedenceOf(expr) {
+  switch (expr.kind) {
+    case "Lambda":
+      return PREC.lambda;
+    case "Ternary":
+      return PREC.ternary;
+    case "Binary":
+      return BINARY_PRECEDENCE[expr.operator];
+    case "Unary":
+      return PREC.unary;
+    case "BuiltinCall":
+      switch (expr.name) {
+        case "__rui_assign__":
+          return PREC.lambda;
+        case "__rui_prefix__":
+        case "__rui_await__":
+          return PREC.unary;
+        case "__rui_postfix__":
+          return PREC.postfix;
+        default:
+          return PREC.member;
+      }
+    default:
+      return PREC.member;
+  }
+}
+function printOperand(expr, min, indent, opts) {
+  const text = printExpression(expr, indent, opts);
+  return precedenceOf(expr) < min ? `(${text})` : text;
+}
+function printReceiver(expr, indent, opts) {
+  const text = printExpression(expr, indent, opts);
+  const group = precedenceOf(expr) < PREC.member || expr.kind === "Literal" && typeof expr.value === "number";
+  return group ? `(${text})` : text;
+}
+function isNegativeNumber(expr) {
+  return expr.kind === "Literal" && typeof expr.value === "number" && (expr.value < 0 || Object.is(expr.value, -0));
+}
+function afterKeyword(text) {
+  return /^-[\d.]/.test(text) ? `(${text})` : text;
+}
+function mixesNullish(operator, operand) {
+  if (operand.kind !== "Binary") return false;
+  if (operator === "??") return operand.operator === "||" || operand.operator === "&&";
+  return (operator === "||" || operator === "&&") && operand.operator === "??";
+}
+function isNewCallee(expr) {
+  if (expr.kind === "Identifier" || expr.kind === "StateRef") return true;
+  return expr.kind === "Member" && expr.optional !== true && isNewCallee(expr.object);
 }
 function printExpression(expr, indent, opts) {
   switch (expr.kind) {
@@ -10586,7 +10981,7 @@ ${body}${trailingComma}
 ${pad(indent, opts)}}`;
     }
     case "Member": {
-      const obj = printExpression(expr.object, indent, opts);
+      const obj = printReceiver(expr.object, indent, opts);
       const dot = expr.optional ? "?." : ".";
       if (expr.property) return `${obj}${dot}${expr.property}`;
       if (expr.computed) {
@@ -10595,26 +10990,45 @@ ${pad(indent, opts)}}`;
       }
       return obj;
     }
-    case "Unary":
-      return `${expr.operator}${printExpression(expr.argument, indent, opts)}`;
-    case "Binary":
-      return `${printExpression(expr.left, indent, opts)} ${expr.operator} ${printExpression(expr.right, indent, opts)}`;
-    case "Ternary":
-      return `${printExpression(expr.test, indent, opts)} ? ${printExpression(expr.consequent, indent, opts)} : ${printExpression(expr.alternate, indent, opts)}`;
+    case "Unary": {
+      const argument = printOperand(expr.argument, PREC.unary, indent, opts);
+      if (/^[a-z]/.test(expr.operator)) return `${expr.operator} ${afterKeyword(argument)}`;
+      const spaced = (expr.operator === "-" || expr.operator === "+") && argument.startsWith(expr.operator) || expr.operator === "-" && /^[\d.]/.test(argument);
+      return `${expr.operator}${spaced ? " " : ""}${argument}`;
+    }
+    case "Binary": {
+      const precedence = BINARY_PRECEDENCE[expr.operator];
+      const exponent = expr.operator === "**";
+      const leftText = printExpression(expr.left, indent, opts);
+      const rightText = printExpression(expr.right, indent, opts);
+      const groupLeft = precedenceOf(expr.left) < (exponent ? PREC.postfix : precedence) || mixesNullish(expr.operator, expr.left) || exponent && isNegativeNumber(expr.left);
+      const groupRight = precedenceOf(expr.right) < (exponent ? precedence : precedence + 1) || mixesNullish(expr.operator, expr.right);
+      const left = groupLeft ? `(${leftText})` : leftText;
+      const right = groupRight ? `(${rightText})` : rightText;
+      const keyword = expr.operator === "in" || expr.operator === "instanceof";
+      return `${left} ${expr.operator} ${keyword ? afterKeyword(right) : right}`;
+    }
+    case "Ternary": {
+      const test = printOperand(expr.test, PREC.logicalOr, indent, opts);
+      return `${test} ? ${printExpression(expr.consequent, indent, opts)} : ${printExpression(expr.alternate, indent, opts)}`;
+    }
     case "Call":
-      return printCall(expr.callee, expr.arguments, indent, opts);
+      return printCallExpr(expr, indent, opts);
     case "MethodCall": {
-      const target = printExpression(expr.object, indent, opts);
+      const target = printReceiver(expr.object, indent, opts);
       const sep = expr.optional ? "?." : ".";
       return printCall(`${target}${sep}${expr.method}`, expr.arguments, indent, opts);
     }
     case "Invoke": {
-      const callee = printExpression(expr.callee, indent, opts);
+      const byName = expr.callee.kind === "Identifier" || expr.callee.kind === "Member" && expr.callee.property !== void 0;
+      const receiver = printReceiver(expr.callee, indent, opts);
+      const callee = byName ? `(${receiver})` : receiver;
       const sep = expr.optional ? "?." : "";
       return printCall(`${callee}${sep}`, expr.arguments, indent, opts);
     }
     case "New": {
-      const callee = printExpression(expr.callee, indent, opts);
+      const text = printExpression(expr.callee, indent, opts);
+      const callee = isNewCallee(expr.callee) ? text : `(${text})`;
       return `new ${printCall(callee, expr.arguments, indent, opts)}`;
     }
     case "BuiltinCall":
@@ -10623,17 +11037,25 @@ ${pad(indent, opts)}}`;
       return printTemplate(expr.quasis, expr.expressions, indent, opts);
     case "Spread":
       return `...${printExpression(expr.argument, indent, opts)}`;
-    case "Lambda": {
-      const params = expr.params.map((p) => printParam(p, indent, opts)).join(", ");
-      const only = expr.params.length === 1 ? expr.params[0] : void 0;
-      const head = only && !only.defaultValue && !only.rest && !only.pattern ? only.name : `(${params})`;
-      return `${head} => ${printExpression(expr.body, indent, opts)}`;
-    }
+    case "Lambda":
+      return printLambda(expr, indent, opts);
     case "Block":
       return `{
 ${printBlockBody(expr, indent + 1, opts)}
 ${pad(indent, opts)}}`;
   }
+}
+function printLambda(expr, indent, opts) {
+  const params = expr.params.map((p) => printParam(p, indent, opts)).join(", ");
+  if (expr.selfName !== void 0) {
+    const body2 = expr.body.kind === "Block" ? expr.body : { kind: "Block", body: [{ kind: "Return", argument: expr.body }] };
+    return `function ${expr.selfName}(${params}) ${printExpression(body2, indent, opts)}`;
+  }
+  const only = expr.params.length === 1 ? expr.params[0] : void 0;
+  const head = only && !only.defaultValue && !only.rest && !only.pattern ? only.name : `(${params})`;
+  if (expr.body.kind === "Block") return `${head} => ${printExpression(expr.body, indent, opts)}`;
+  const body = printExpression(expr.body, indent, opts);
+  return `${head} => ${body.startsWith("{") ? `(${body})` : body}`;
 }
 function printCall(callee, args, indent, opts) {
   if (args.length === 0) return `${callee}()`;
@@ -10645,10 +11067,125 @@ function printCall(callee, args, indent, opts) {
 ${parts.map((s) => `${innerPad}${s}`).join(",\n")}
 ${pad(indent, opts)})`;
 }
+function printCallExpr(expr, indent, opts) {
+  const decl = reachedComponent(expr.callee, opts.calls);
+  if (!decl) return printCall(expr.callee, expr.arguments, indent, opts);
+  if (expr.positional === true && decl.javascript === true) return printPositionalCall(expr, decl, indent, opts);
+  return printCall(expr.callee, namedPropsByLocalName(expr.arguments, decl), indent, opts);
+}
+function reachedComponent(callee, scope) {
+  if (LIBRARY_COMPONENTS.has(callee) && scope.enclosing.includes(callee)) return void 0;
+  for (let i = scope.nested.length - 1; i >= 0; i -= 1) {
+    const found = scope.nested[i].get(callee);
+    if (found) return found;
+  }
+  return scope.topLevel.get(callee);
+}
+function namedPropsByLocalName(args, decl) {
+  const localOf = /* @__PURE__ */ new Map();
+  for (const p of decl.params) {
+    if (p.name && p.publicName !== void 0 && p.publicName !== p.name) localOf.set(p.publicName, p.name);
+  }
+  if (localOf.size === 0) return args;
+  const bag = trailingPropsArgument(args, decl.params);
+  if (!bag || !bag.named) return args;
+  const object = args[bag.index];
+  const properties = object.properties.map((prop) => {
+    if (prop.spread || prop.computedKey || prop.key === "key") return prop;
+    const local = localOf.get(prop.key);
+    return local === void 0 ? prop : { ...prop, key: local };
+  });
+  return args.map((arg, i) => i === bag.index ? { ...object, properties } : arg);
+}
+function ownKey(literal) {
+  let value;
+  let dynamic = false;
+  for (const prop of literal.properties) {
+    if (prop.spread || prop.computedKey) {
+      dynamic = true;
+    } else if (prop.key === "key") {
+      value = prop.value;
+      dynamic = false;
+    }
+  }
+  if (dynamic) return "maybe";
+  return value ?? "absent";
+}
+function isSideEffectFree(expr) {
+  switch (expr.kind) {
+    case "Literal":
+    case "Identifier":
+    case "StateRef":
+    case "Lambda":
+      return true;
+    case "Template":
+      return expr.expressions.every(isSideEffectFree);
+    case "Member":
+      return isSideEffectFree(expr.object) && (expr.computed === void 0 || isSideEffectFree(expr.computed));
+    case "Unary":
+      return expr.operator !== "delete" && isSideEffectFree(expr.argument);
+    case "Binary":
+      return isSideEffectFree(expr.left) && isSideEffectFree(expr.right);
+    case "Ternary":
+      return isSideEffectFree(expr.test) && isSideEffectFree(expr.consequent) && isSideEffectFree(expr.alternate);
+    case "Spread":
+      return isSideEffectFree(expr.argument);
+    case "Array":
+      return expr.elements.every(isSideEffectFree);
+    case "Object":
+      return expr.properties.every((p) => isSideEffectFree(p.value) && (p.computedKey === void 0 || isSideEffectFree(p.computedKey)));
+    default:
+      return false;
+  }
+}
+function positionalKey(args, params) {
+  const candidates = positionalKeyArguments(args, params);
+  for (let c = candidates.length - 1; c >= 0; c -= 1) {
+    const index = candidates[c];
+    const own = ownKey(args[index]);
+    if (own === "absent") continue;
+    if (own === "maybe" || !args.slice(index).every(isSideEffectFree)) return { kind: "dynamic", candidates };
+    return { kind: "static", value: own };
+  }
+  return { kind: "none" };
+}
+function printPositionalCall(expr, decl, indent, opts) {
+  const key = positionalKey(expr.arguments, decl.params);
+  if (key.kind === "dynamic") return printPositionalCallOnce(expr, key.candidates, indent, opts);
+  const args = expr.arguments.map((arg) => arg.kind === "Object" ? { kind: "Spread", argument: { kind: "Array", elements: [arg] } } : arg);
+  if (key.kind === "static") args.push({ kind: "Object", properties: [{ key: "key", value: key.value }] });
+  return printCall(expr.callee, args, indent, opts);
+}
+function printPositionalCallOnce(expr, candidates, indent, opts) {
+  const args = expr.arguments;
+  const names = args.map((_, i) => `__arg${i}`);
+  const ref = (i) => ({ kind: "Identifier", name: names[i] });
+  let key;
+  for (const index of candidates) {
+    const own = ownKey(args[index]);
+    if (own === "absent") continue;
+    const read = { kind: "Member", object: ref(index), property: "key" };
+    key = own === "maybe" ? {
+      kind: "Ternary",
+      test: { kind: "Binary", operator: "in", left: { kind: "Literal", value: "key" }, right: ref(index) },
+      consequent: read,
+      alternate: key ?? { kind: "Identifier", name: "undefined" }
+    } : read;
+  }
+  const inner = args.map((arg, i) => arg.kind === "Spread" ? { kind: "Spread", argument: ref(i) } : ref(i));
+  if (key) inner.push({ kind: "Object", properties: [{ key: "key", value: key }] });
+  const call = {
+    kind: "Lambda",
+    params: names.map((name) => ({ name })),
+    body: { kind: "Call", callee: expr.callee, arguments: inner }
+  };
+  const outer = args.map((arg) => arg.kind === "Spread" ? arg.argument : arg);
+  return printExpression({ kind: "Invoke", callee: call, arguments: outer }, indent, opts);
+}
 function printSwitchCase(c, indent, opts) {
   const padStr = pad(indent, opts);
   const body = printBlock(c.body, indent + 1, opts);
-  const head = c.test === null ? `${padStr}default:` : `${padStr}case ${printExpression(c.test, indent, opts)}:`;
+  const head = c.test === null ? `${padStr}default:` : `${padStr}case ${afterKeyword(printExpression(c.test, indent, opts))}:`;
   const caseText = body.length > 0 ? `${head}
 ${body}` : head;
   if (!c.leadingComments || c.leadingComments.length === 0) return caseText;
@@ -10658,23 +11195,22 @@ ${caseText}`;
 }
 function printObjectProp(prop, indent, opts) {
   if (prop.spread) return `...${printExpression(prop.value, indent, opts)}`;
+  const name = prop.computedKey ? `[${printExpression(prop.computedKey, indent, opts)}]` : PLAIN_KEY.test(prop.key) ? prop.key : printStringLiteral(prop.key, opts);
   if (prop.method && prop.value.kind === "Lambda" && prop.value.body.kind === "Block") {
-    const name = prop.computedKey ? `[${printExpression(prop.computedKey, indent, opts)}]` : PLAIN_KEY.test(prop.key) ? prop.key : printStringLiteral(prop.key, opts);
     const params = prop.value.params.map((p) => printParam(p, indent, opts)).join(", ");
     return `${name}(${params}) ${printExpression(prop.value.body, indent, opts)}`;
   }
   const value = printExpression(prop.value, indent, opts);
-  if (prop.value.kind === "Identifier" && prop.value.name === prop.key && SAFE_IDENT.test(prop.key)) {
+  if (!prop.computedKey && prop.value.kind === "Identifier" && prop.value.name === prop.key && PLAIN_KEY.test(prop.key)) {
     return prop.key;
   }
-  const key = SAFE_IDENT.test(prop.key) ? prop.key : printStringLiteral(prop.key, opts);
-  return `${key}: ${value}`;
+  return `${name}: ${value}`;
 }
 function printLiteral(value, opts) {
   if (value === null) return "null";
   if (typeof value === "string") return printStringLiteral(value, opts);
   if (typeof value === "boolean") return value ? "true" : "false";
-  return String(value);
+  return Object.is(value, -0) ? "-0" : String(value);
 }
 function chooseQuote(value, opts) {
   const other = opts.quote === '"' ? "'" : '"';
@@ -10692,10 +11228,13 @@ function printStringLiteral(value, opts) {
   }
   return `${quote}${value}${quote}`;
 }
+function printTemplateChunk(text) {
+  return text.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+}
 function printTemplate(quasis, expressions, indent, opts) {
   const parts = [];
   for (let i = 0; i < quasis.length; i += 1) {
-    parts.push(quasis[i] ?? "");
+    parts.push(printTemplateChunk(quasis[i] ?? ""));
     if (i < expressions.length) {
       parts.push("${");
       parts.push(printExpression(expressions[i], indent, opts));
@@ -10937,67 +11476,179 @@ const SKIPPED_DIRECTORIES = /* @__PURE__ */ new Set(["node_modules", ".git", "di
 function declarationFileName(modulePath) {
   return modulePath.replace(/\.aktion$/i, ".d.aktion.ts");
 }
+const RESERVED_WORDS = new Set(
+  "break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield await".split(" ")
+);
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+const propertyName = (key) => IDENTIFIER.test(key) ? key : JSON.stringify(key);
+function aktionExportNames(program) {
+  const names = /* @__PURE__ */ new Set();
+  for (const stmt of program.statements) {
+    const name = exportName(stmt);
+    if (name !== null) names.add(name);
+  }
+  return [...names];
+}
+function exportName(stmt) {
+  switch (stmt.kind) {
+    case "ComponentDeclaration":
+    case "ActionDeclaration":
+      return stmt.exported ? stmt.name : null;
+    case "HookDeclaration":
+      return stmt.exported ? `$${stmt.name}` : null;
+    case "Assignment":
+      return stmt.exported ? stmt.isState ? `$${stmt.identifier}` : stmt.identifier : null;
+    default:
+      return null;
+  }
+}
 function aktionDeclarationText(source, sourceName = "module.aktion") {
   const program = parse(source);
-  const lines = [];
-  let usesNode = false;
+  const assigned = assignedValues(program);
+  const taken = new Set(aktionExportNames(program));
+  const byName = /* @__PURE__ */ new Map();
   for (const stmt of program.statements) {
-    const line = declare(stmt);
-    if (line === null) continue;
-    if (line.includes("AktionNode")) usesNode = true;
-    lines.push(line);
+    const declared = declare(stmt, assigned, taken);
+    if (declared === null) continue;
+    byName.delete(declared.name);
+    byName.set(declared.name, declared);
   }
-  const types = usesNode ? "AktionNode, CompiledProgram" : "CompiledProgram";
+  const uses = /* @__PURE__ */ new Set(["CompiledProgram"]);
+  const lines = [];
+  for (const declared of byName.values()) {
+    for (const type of declared.uses) uses.add(type);
+    lines.push(...declared.lines);
+  }
+  const local = unusedName("compiled", taken);
   const text = [
     `${DECLARATION_HEADER} from ${sourceName} — do not edit.`,
-    `import type { ${types} } from "aktion-runtime/dsl";`,
+    `import type { ${[...uses].sort().join(", ")} } from "aktion-runtime/dsl";`,
     "",
     ...lines,
     ...lines.length > 0 ? [""] : [],
-    "declare const compiled: CompiledProgram;",
-    "export default compiled;",
+    `declare const ${local}: CompiledProgram;`,
+    `export default ${local};`,
     ""
   ].join("\n");
   return { text, errors: program.errors };
 }
-function declare(stmt) {
+function declare(stmt, assigned, taken) {
+  const name = exportName(stmt);
+  if (name === null) return null;
+  const uses = /* @__PURE__ */ new Set();
   switch (stmt.kind) {
     case "ComponentDeclaration":
-      if (!stmt.exported) return null;
-      return `export declare function ${stmt.name}(${parameters(stmt.params, true)}): AktionNode;`;
+      return { name, lines: componentOverloads(stmt.name, stmt.params, uses), uses };
     case "ActionDeclaration":
-      if (!stmt.exported) return null;
-      return `export declare function ${stmt.name}(${parameters(stmt.params, false)}): any;`;
     case "HookDeclaration":
-      if (!stmt.exported) return null;
-      return `export declare function $${stmt.name}(...args: any[]): any;`;
+      return { name, lines: [`export declare function ${name}(${parameterList(stmt.params)}): any;`], uses };
     case "Assignment": {
-      if (!stmt.exported) return null;
-      if (stmt.isState) return `export declare let $${stmt.identifier}: ${valueType(stmt.expression)};`;
-      const keyword = stmt.declaration === "let" || stmt.declaration === "var" ? "let" : "const";
-      return `export declare ${keyword} ${stmt.identifier}: ${valueType(stmt.expression)};`;
+      const mutable = stmt.isState || stmt.declaration === "let" || stmt.declaration === "var";
+      const type = mutable ? bindingType(stmt.expression, assigned.get(name) ?? [], uses) : valueType(stmt.expression, uses);
+      return { name, lines: exportBinding(name, mutable ? "let" : "const", type, taken), uses };
     }
     default:
       return null;
   }
 }
-function parameters(params, component) {
-  const names = /* @__PURE__ */ new Set();
-  const out = params.map((p, i) => {
-    const name = p.name || `p${i}`;
-    names.add(name);
-    return p.rest ? `...${name}: any[]` : `${name}?: any`;
-  });
-  if (component && !params.some((p) => p.rest)) {
-    let rest = "rest";
-    while (names.has(rest)) rest = `_${rest}`;
-    out.push(`...${rest}: any[]`);
-  }
-  return out.join(", ");
+function unusedName(base, taken) {
+  let name = base;
+  while (taken.has(name) || RESERVED_WORDS.has(name)) name = `_${name}`;
+  taken.add(name);
+  return name;
 }
-function valueType(expr) {
+function exportBinding(name, keyword, type, taken) {
+  if (!RESERVED_WORDS.has(name)) return [`export declare ${keyword} ${name}: ${type};`];
+  const local = unusedName(name, taken);
+  return [`declare ${keyword} ${local}: ${type};`, `export { ${local} as ${name} };`];
+}
+function parameterNames(params) {
+  const taken = new Set(params.map((p) => p.name).filter((n) => n !== ""));
+  return params.map((p, i) => {
+    let name = p.name || `p${i}`;
+    if (p.name !== "" && !RESERVED_WORDS.has(name)) return name;
+    while (taken.has(name) || RESERVED_WORDS.has(name)) name = `_${name}`;
+    taken.add(name);
+    return name;
+  });
+}
+function parameterType(param) {
+  if (param.pattern || !param.defaultValue) return "any";
+  const type = valueType(param.defaultValue, /* @__PURE__ */ new Set());
+  return type === "string" || type === "number" || type === "boolean" ? `${type} | null` : "any";
+}
+const optionalType = (type) => type === "any" ? "any" : `${type} | undefined`;
+function parameterList(params) {
+  const names = parameterNames(params);
+  return params.map((p, i) => p.rest ? `...${names[i]}: any[]` : `${names[i]}?: ${parameterType(p)}`).join(", ");
+}
+function componentOverloads(name, params, uses) {
+  uses.add("AktionNode");
+  const result = `AktionNode<${JSON.stringify(name)}>`;
+  const names = parameterNames(params);
+  const types = params.map(parameterType);
+  if (params.some((p) => p.rest)) {
+    const list = params.map((p, i) => p.rest ? `...${names[i]}: any[]` : `${names[i]}?: ${types[i]}`).join(", ");
+    return [`export declare function ${name}(${list}): ${result};`];
+  }
+  uses.add("Children");
+  uses.add("Key");
+  let children = "children";
+  while (names.includes(children)) children = `_${children}`;
+  let propsName = "props";
+  while (names.includes(propsName) || propsName === children) propsName = `_${propsName}`;
+  const rest = `...${children}: Children[]`;
+  const keys = params.map((p) => p.pattern || (p.publicName ?? p.name) === "key" ? null : p.publicName ?? p.name);
+  const props = `${name}Props`;
+  const given = (from, to) => names.slice(from, to).map((n, i) => `${n}: ${optionalType(types[from + i])}`);
+  const bag = (m) => {
+    const parts = [props];
+    const repeated = keys.slice(0, m).filter((key) => key !== null);
+    if (repeated.length > 0) parts.push(`{ ${repeated.map((key) => `readonly ${propertyName(key)}?: never`).join("; ")} }`);
+    if (m < params.length) {
+      const members = ["{ readonly key: Key }"];
+      for (let i = m; i < params.length; i += 1) {
+        const key = keys[i];
+        if (key !== null && key !== void 0) members.push(`{ readonly ${propertyName(key)}: ${optionalType(types[i])} }`);
+      }
+      parts.push(members.length === 1 ? members[0] : `(${members.join(" | ")})`);
+    }
+    return parts.join(" & ");
+  };
+  const lines = [
+    `/** Named props of \`${name}\`: its parameters by name, \`key\`, and named slots (any other key). */`,
+    `export interface ${props} {`,
+    "  readonly key?: Key;",
+    ...keys.flatMap((key, i) => key === null ? [] : [`  readonly ${propertyName(key)}?: ${types[i]};`]),
+    "  readonly [slot: string]: unknown;",
+    "}",
+    `export declare function ${name}(${[...names.map((n, i) => `${n}?: ${types[i]}`), rest].join(", ")}): ${result};`
+  ];
+  for (let m = 0; m <= params.length; m += 1) {
+    for (let k = 0; k <= m; k += 1) {
+      const list = [...given(0, k), `${propsName}: ${bag(m)}`, ...given(k, m)];
+      if (m === params.length) list.push(rest);
+      lines.push(`export declare function ${name}(${list.join(", ")}): ${result};`);
+    }
+  }
+  lines.push(
+    `export declare function ${name}(...args: [${[...given(0, params.length), rest, `${propsName}: ${bag(params.length)}`].join(", ")}]): ${result};`
+  );
+  return lines;
+}
+const RESOURCE_TYPES = {
+  http: "HttpResource",
+  mutation: "MutationResource",
+  socket: "SocketResource",
+  sse: "SseResource",
+  script: "ScriptResource"
+};
+const PRIMITIVES = /* @__PURE__ */ new Set(["string", "number", "boolean"]);
+const grouped = (type) => type.startsWith("(") && type.includes("=>") ? `(${type})` : type;
+function valueType(expr, uses) {
   switch (expr.kind) {
     case "Literal":
+      if (expr.value === null) return "null";
       return typeof expr.value === "string" || typeof expr.value === "number" || typeof expr.value === "boolean" ? typeof expr.value : "any";
     case "Template":
       return "string";
@@ -11008,9 +11659,164 @@ function valueType(expr) {
       return expr.operator === "!" ? "boolean" : "any";
     case "Lambda":
       return "(...args: any[]) => any";
+    case "Array":
+      return arrayType([expr], uses);
+    case "Object":
+      return isShape(expr) ? objectType([expr], uses) : "any";
+    case "Invoke":
+      return expr.callee.kind === "StateRef" ? resourceType(expr.callee.name, expr.arguments, uses) : "any";
     default:
       return "any";
   }
+}
+const isShape = (expr) => expr.properties.every((p) => !p.spread && !p.computedKey);
+function unionTypes(exprs, uses) {
+  const objects = [];
+  const arrays = [];
+  const slots = [];
+  for (const expr of exprs) {
+    if (expr.kind === "Object" && isShape(expr)) {
+      if (objects.length === 0) slots.push(objects);
+      objects.push(expr);
+    } else if (expr.kind === "Array") {
+      if (arrays.length === 0) slots.push(arrays);
+      arrays.push(expr);
+    } else {
+      slots.push(valueType(expr, uses));
+    }
+  }
+  const types = slots.map(
+    (slot) => typeof slot === "string" ? slot : slot === objects ? objectType(objects, uses) : arrayType(arrays, uses)
+  );
+  return [...new Set(types)];
+}
+function arrayType(arrays, uses) {
+  const elements = arrays.flatMap((a) => a.elements);
+  if (arrays.some((a) => a.elements.length === 0) || elements.some((e) => e.kind === "Spread")) return "any[]";
+  const union = unionTypes(elements, uses);
+  if (union.includes("any")) return "any[]";
+  return union.length === 1 && IDENTIFIER.test(union[0]) ? `${union[0]}[]` : `Array<${union.map(grouped).join(" | ")}>`;
+}
+function objectType(objects, uses) {
+  const values = /* @__PURE__ */ new Map();
+  for (const obj of objects) {
+    for (const prop of obj.properties) {
+      const list = values.get(prop.key) ?? [];
+      list.push(prop.value);
+      values.set(prop.key, list);
+    }
+  }
+  if (values.size === 0) return "Record<string, any>";
+  const fields = [];
+  for (const [key, exprs] of values) {
+    const optional = objects.some((obj) => !obj.properties.some((p) => p.key === key));
+    fields.push(`${propertyName(key)}${optional ? "?" : ""}: ${withNull(unionTypes(exprs, uses))}`);
+  }
+  return `{ ${fields.join("; ")} }`;
+}
+function withNull(types) {
+  if (types.includes("any")) return "any";
+  const known = types.filter((t) => t !== "null");
+  if (known.length === 0) return "any";
+  const nullable = types.includes("null");
+  const ordered = known.length === 1 && !nullable ? known : known.map(grouped);
+  if (nullable) ordered.push("null");
+  return ordered.join(" | ");
+}
+function resourceType(builtin, args, uses) {
+  const config = args[0]?.kind === "Object" ? args[0] : null;
+  const field = (key) => config?.properties.find((p) => !p.spread && p.key === key)?.value;
+  const use = (type) => {
+    uses.add(type);
+    return type;
+  };
+  if (RESOURCE_TYPES[builtin]) return `${use(RESOURCE_TYPES[builtin])}<unknown>`;
+  if (builtin === "query") {
+    if (config === null || config.properties.some((p) => p.spread)) return "any";
+    const infinite = field("infinite");
+    const off = infinite === void 0 || infinite.kind === "Literal" && (infinite.value === null || infinite.value === false);
+    return off ? `${use("HttpResource")}<unknown>` : `${use("InfiniteQueryResource")}<unknown>`;
+  }
+  if (builtin === "form") {
+    const values = field("values");
+    const shape = values?.kind === "Object" ? valueType(values, uses) : "any";
+    return shape.startsWith("{ ") ? `${use("FormHandle")}<${shape}>` : use("FormHandle");
+  }
+  if (builtin === "i18n") return use("I18nInstance");
+  if (builtin === "theme") return use("ThemeHandle");
+  return "any";
+}
+function bindingType(init, writes, uses) {
+  const initial = valueType(init, /* @__PURE__ */ new Set());
+  if (initial === "any") return "any";
+  const primitive = PRIMITIVES.has(initial);
+  const known = [init];
+  for (const write of writes) {
+    if (write === "member") return "any";
+    if (write === "unknown" || valueType(write, /* @__PURE__ */ new Set()) === "any") {
+      if (!primitive) return "any";
+      continue;
+    }
+    known.push(write);
+  }
+  return withNull(unionTypes(known, uses));
+}
+const NUMBER = { kind: "Literal", value: 0 };
+const MUTATORS = /* @__PURE__ */ new Set(["push", "unshift", "splice", "fill", "copyWithin"]);
+function bindingKey(expr) {
+  if (expr?.kind === "StateRef") return `$${expr.name}`;
+  if (expr?.kind === "Identifier") return expr.name;
+  return null;
+}
+function rootKey(expr) {
+  let node = expr;
+  while (node?.kind === "Member" || node?.kind === "MethodCall") node = node.object;
+  return bindingKey(node);
+}
+function compoundValue(operator, value) {
+  if (value === void 0) return "unknown";
+  if (operator === "=" || operator === "??=" || operator === "||=" || operator === "&&=") return value;
+  if (operator === "+=") return valueType(value, /* @__PURE__ */ new Set()) === "string" ? value : "unknown";
+  return NUMBER;
+}
+function assignedValues(program) {
+  const out = /* @__PURE__ */ new Map();
+  const record = (key, value) => {
+    if (key === null) return;
+    const list = out.get(key) ?? [];
+    list.push(value);
+    out.set(key, list);
+  };
+  walk(program, ({ node }) => {
+    switch (node.kind) {
+      case "Assignment":
+        record(node.isState ? `$${node.identifier}` : node.identifier, node.expression);
+        break;
+      case "BuiltinCall": {
+        const [target, value, op] = node.arguments;
+        if (node.name === "__rui_assign__") {
+          const direct = bindingKey(target);
+          if (direct !== null) record(direct, compoundValue(op?.kind === "Literal" ? op.value : "=", value));
+          else record(rootKey(target), "member");
+        } else if (node.name === "__rui_prefix__" || node.name === "__rui_postfix__") {
+          const direct = bindingKey(target);
+          if (direct !== null) record(direct, NUMBER);
+          else record(rootKey(target), "member");
+        }
+        break;
+      }
+      case "Unary":
+        if (node.operator === "delete" && node.argument.kind === "Member") record(rootKey(node.argument), "member");
+        break;
+      case "MethodCall":
+        if (MUTATORS.has(node.method)) record(rootKey(node.object), "member");
+        if (node.object.kind === "Identifier" && node.object.name === "Object" && node.method === "assign") {
+          record(rootKey(node.arguments[0]), "member");
+        }
+        break;
+    }
+  });
+  return out;
 }
 function globToRegExp(glob) {
   let re = "";
@@ -11056,29 +11862,67 @@ function walkFiles(dir, skip, out) {
     }
   }
 }
+function isInside(path, dir) {
+  const rel = node_path.relative(dir, path);
+  return rel === "" || !rel.startsWith("..") && !node_path.isAbsolute(rel);
+}
 function resolveOptions(options) {
   const root = node_path.resolve(options.root ?? process.cwd());
+  const outDir = node_path.resolve(root, options.outDir ?? DEFAULT_DECLARATIONS_DIR);
+  const include = options.include ?? ["src/**/*.aktion"];
+  const warnings = [];
+  for (const glob of include) {
+    if (glob.startsWith("../") || glob.startsWith("/") || node_path.isAbsolute(glob)) {
+      warnings.push(
+        `include "${glob}" matches nothing: globs are relative to the root (${root}) and cannot leave it. Declare a shared library through \`alias\` (aktion.config.json), or run aktion-dts with --root in the library.`
+      );
+    }
+  }
+  const mirrorRoot = outDir === root ? node_path.join(root, DEFAULT_DECLARATIONS_DIR) : outDir;
+  const aliases = [];
+  for (const [prefix, target] of Object.entries(options.alias ?? {})) {
+    const segments = prefix.replace(/\/+$/, "").split("/");
+    if (node_path.isAbsolute(prefix) || segments.some((s) => s === "" || s === "." || s === "..")) {
+      warnings.push(`alias "${prefix}" cannot be mirrored as a directory; its modules are not declared.`);
+      continue;
+    }
+    aliases.push({ target: node_path.resolve(root, target), mirror: node_path.join(mirrorRoot, ...segments) });
+  }
   return {
     root,
-    outDir: node_path.resolve(root, options.outDir ?? DEFAULT_DECLARATIONS_DIR),
-    include: (options.include ?? ["src/**/*.aktion"]).map(globToRegExp),
+    outDir,
+    include: include.map(globToRegExp),
     exclude: (options.exclude ?? []).map(globToRegExp),
-    write: options.write !== false
+    aliases,
+    write: options.write !== false,
+    warnings
   };
 }
+const isModule = (file) => /\.aktion$/i.test(file);
+const excluded = (file, o) => o.exclude.some((re) => re.test(toPosix(node_path.relative(o.root, file))));
 function isDeclared(file, o) {
-  if (!/\.aktion$/i.test(file)) return false;
+  if (!isModule(file)) return false;
   const rel = toPosix(node_path.relative(o.root, file));
   if (rel.startsWith("..")) return false;
-  return o.include.some((re) => re.test(rel)) && !o.exclude.some((re) => re.test(rel));
+  return o.include.some((re) => re.test(rel)) && !excluded(file, o);
 }
-function targetOf(file, o) {
-  return node_path.join(o.outDir, declarationFileName(node_path.relative(o.root, file)));
+function targetsOf(file, o) {
+  const targets = [];
+  if (isDeclared(file, o)) targets.push(node_path.join(o.outDir, declarationFileName(node_path.relative(o.root, file))));
+  if (isModule(file) && !excluded(file, o)) {
+    for (const { target, mirror } of o.aliases) {
+      if (isInside(file, target)) targets.push(node_path.join(mirror, declarationFileName(node_path.relative(target, file))));
+    }
+  }
+  return targets;
 }
-function emitOne(file, o, result) {
-  const target = targetOf(file, o);
+function emitOne(file, target, o, result) {
   const { text, errors } = aktionDeclarationText(node_fs.readFileSync(file, "utf8"), toPosix(node_path.relative(o.root, file)));
-  for (const e of errors) result.diagnostics.push({ path: file, line: e.line, column: e.column, message: e.message });
+  for (const e of errors) {
+    if (!result.diagnostics.some((d) => d.path === file && d.line === e.line && d.column === e.column && d.message === e.message)) {
+      result.diagnostics.push({ path: file, line: e.line, column: e.column, message: e.message });
+    }
+  }
   const current = node_fs.existsSync(target) ? node_fs.readFileSync(target, "utf8") : null;
   if (current === text) {
     result.unchanged.push(target);
@@ -11089,26 +11933,33 @@ function emitOne(file, o, result) {
       node_fs.writeFileSync(target, text);
     }
   }
-  return target;
+}
+function isGenerated(file) {
+  if (!file.endsWith(".d.aktion.ts")) return false;
+  try {
+    return node_fs.readFileSync(file, "utf8").slice(0, DECLARATION_HEADER.length) === DECLARATION_HEADER;
+  } catch {
+    return false;
+  }
 }
 function emitAktionDeclarations(options = {}) {
   const o = resolveOptions(options);
-  const result = { written: [], unchanged: [], removed: [], diagnostics: [] };
+  const result = { written: [], unchanged: [], removed: [], diagnostics: [], warnings: [...o.warnings] };
   const files = [];
   walkFiles(o.root, /* @__PURE__ */ new Set([o.outDir]), files);
+  for (const { target } of o.aliases) if (!isInside(target, o.root)) walkFiles(target, /* @__PURE__ */ new Set(), files);
   const targets = /* @__PURE__ */ new Set();
-  for (const file of files.sort()) if (isDeclared(file, o)) targets.add(emitOne(file, o, result));
+  for (const file of [...new Set(files)].sort()) {
+    for (const target of targetsOf(file, o)) {
+      if (targets.has(target)) continue;
+      targets.add(target);
+      emitOne(file, target, o, result);
+    }
+  }
   const existing = [];
   walkFiles(o.outDir === o.root ? o.root : o.outDir, /* @__PURE__ */ new Set(), existing);
   for (const file of existing) {
-    if (!file.endsWith(".d.aktion.ts") || targets.has(file)) continue;
-    let head = "";
-    try {
-      head = node_fs.readFileSync(file, "utf8").slice(0, DECLARATION_HEADER.length);
-    } catch {
-      continue;
-    }
-    if (head !== DECLARATION_HEADER) continue;
+    if (targets.has(file) || !isGenerated(file)) continue;
     result.removed.push(file);
     if (o.write) node_fs.rmSync(file, { force: true });
   }
@@ -11116,14 +11967,12 @@ function emitAktionDeclarations(options = {}) {
 }
 function updateAktionDeclaration(file, options = {}) {
   const o = resolveOptions(options);
-  const result = { written: [], unchanged: [], removed: [], diagnostics: [] };
+  const result = { written: [], unchanged: [], removed: [], diagnostics: [], warnings: [] };
   const absolute = node_path.resolve(file);
-  if (!isDeclared(absolute, o)) return result;
-  if (node_fs.existsSync(absolute)) {
-    emitOne(absolute, o, result);
-  } else {
-    const target = targetOf(absolute, o);
-    if (node_fs.existsSync(target)) {
+  for (const target of targetsOf(absolute, o)) {
+    if (node_fs.existsSync(absolute)) {
+      emitOne(absolute, target, o, result);
+    } else if (node_fs.existsSync(target)) {
       result.removed.push(target);
       if (o.write) node_fs.rmSync(target, { force: true });
     }
@@ -11131,7 +11980,8 @@ function updateAktionDeclaration(file, options = {}) {
   return result;
 }
 const TYPESCRIPT_DISABLED_MESSAGE = "`.aktion.ts` modules are disabled by the plugin option `typescript: false`.";
-const AKTION_ID_FILTER = /\.aktion(?:\.[jt]s)?(?:[?#]|$)/;
+const VITE_ASSET_QUERY = /[?&](?:raw|url|inline|no-inline|worker|sharedworker)(?:[=&#]|$)/;
+const AKTION_ID_FILTER = new RegExp(`^(?!.*${VITE_ASSET_QUERY.source}).*\\.aktion(?:\\.[jt]s)?(?:[?#]|$)`);
 const AKTION_TS_ID = /\.aktion\.ts(?:[?#]|$)/;
 function viteMajorOf(ctx) {
   const version = ctx?.meta?.viteVersion;
@@ -11155,7 +12005,10 @@ function aktionPlugin(options = {}) {
   let projectRoot = process.cwd();
   let resolution = options;
   let typescriptFrontend = null;
-  const declarationOptions = () => typeof options.dts === "object" ? options.dts : {};
+  const declarationOptions = () => ({
+    alias: absoluteAliasTargets(resolution.alias),
+    ...typeof options.dts === "object" ? options.dts : {}
+  });
   const loadTypeScript = () => {
     if (options.typescript === false) return Promise.resolve(unavailableTypeScriptFrontend(TYPESCRIPT_DISABLED_MESSAGE));
     typescriptFrontend ??= tryLoadTypeScriptFrontend(options.typescript ?? {});
@@ -11166,7 +12019,7 @@ function aktionPlugin(options = {}) {
     // handler; Vite 5's dev server ignores `filter`, so the handler re-checks.
     filter: { id: AKTION_ID_FILTER },
     async handler(code, id) {
-      if (!isAktionId(id)) return null;
+      if (!isAktionId(id) || VITE_ASSET_QUERY.test(id)) return null;
       const cleanId = stripQuery(id);
       const frontends = { ...defaultFrontends, typescript: await loadTypeScript() };
       const result = linkProgram(
@@ -11193,7 +12046,7 @@ function aktionPlugin(options = {}) {
       for (const w of diagnostics) {
         if (w.severity === "warning") this.warn(w.message);
       }
-      const moduleCode = emitModule(result, code, cleanId, runtimeModuleId, { sourcesContent: options.devtools !== false }) + (isServe ? HMR_FOOTER : "");
+      const moduleCode = emitModule(result, code, cleanId, runtimeModuleId, { sourcesContent: options.devtools !== false }) + (isServe ? hostOnlyExports(result, frontends, displayPath(cleanId, projectRoot)) + HMR_FOOTER : "");
       return { code: moduleCode, map: buildSourceMap(moduleCode, cleanId, code), moduleType: "js" };
     }
   };
@@ -11212,13 +12065,43 @@ function aktionPlugin(options = {}) {
       await loadTypeScript();
       if (options.dts) {
         const result = emitAktionDeclarations({ ...declarationOptions(), root: projectRoot });
+        for (const w of result.warnings) this.warn?.(w);
         for (const d of result.diagnostics) this.warn?.(`${d.path}:${d.line}:${d.column} ${d.message}`);
+      }
+    },
+    // Host code receives only an Aktion module's default export (the compiled
+    // program): its other exports live inside Aktion programs, which the linker
+    // inlines. A named import from host code would otherwise fail as a bare
+    // "is not exported" — say why instead. Rollup builds only: the dev server
+    // does not call `moduleParsed`, Rolldown (Vite 8) throws "UNSUPPORTED:
+    // ModuleInfo#ast" on reading the AST and keeps its own missing-export
+    // error, and in serve mode the emitted module carries stand-ins that fail
+    // with the same explanation when used.
+    async moduleParsed(info) {
+      if (isServe || isAktionId(info.id)) return;
+      let ast;
+      try {
+        ast = info.ast ?? null;
+      } catch {
+        return;
+      }
+      for (const node of ast?.body ?? []) {
+        if (node.type !== "ImportDeclaration" && !(node.type === "ExportNamedDeclaration" && node.source)) continue;
+        const source = node.source?.value;
+        if (typeof source !== "string" || !source.includes(".aktion")) continue;
+        const named = (node.specifiers ?? []).map(specifierName).filter((n) => n !== null);
+        if (named.length === 0) continue;
+        const resolved = await this.resolve(source, info.id);
+        if (!resolved || !isAktionId(resolved.id) || VITE_ASSET_QUERY.test(resolved.id)) continue;
+        this.error(hostImportMessage(named, source, displayPath(info.id, projectRoot)));
       }
     },
     configureServer(server) {
       if (!options.dts || !server.watcher) return;
       const refresh = (file) => {
-        if (/\.aktion$/i.test(file)) updateAktionDeclaration(file, { ...declarationOptions(), root: projectRoot });
+        if (/\.aktion$/i.test(file)) {
+          updateAktionDeclaration(file, { ...declarationOptions(), root: projectRoot });
+        }
       };
       server.watcher.on("add", refresh);
       server.watcher.on("change", refresh);
@@ -11227,6 +12110,18 @@ function aktionPlugin(options = {}) {
     transform
   };
   return plugin;
+}
+function specifierName(spec) {
+  if (spec.type === "ImportDefaultSpecifier" || spec.type === "ImportNamespaceSpecifier") return null;
+  const ref = spec.type === "ImportSpecifier" ? spec.imported : spec.local;
+  const name = ref?.name ?? ref?.value;
+  return name === void 0 || name === "default" ? null : name;
+}
+function displayPath(id, root) {
+  return isInsideRoot(id, root) ? node_path.relative(root, id).split(node_path.sep).join("/") : id;
+}
+function hostImportMessage(names, source, importer) {
+  return `${importer} imports ${names.map((n) => `\`${n}\``).join(", ")} from "${source}", but an Aktion module gives host code only its compiled program: \`import app from "${source}"\`. Its other exports exist inside Aktion programs — exercise them through a program (compileAktionSource from aktion-runtime/vite).`;
 }
 function formatDiagnostic(d) {
   const where = d.path ? `${d.path}:${d.line}:${d.column}` : `${d.line}:${d.column}`;
@@ -11329,7 +12224,7 @@ function isFile(path) {
 }
 function createNodeResolver(options = {}) {
   const extensions = options.extensions ?? DEFAULT_EXTENSIONS;
-  const aliases = Object.entries(options.alias ?? {}).map(([prefix, target]) => [prefix, node_path.resolve(target)]).sort((a, b) => b[0].length - a[0].length);
+  const aliases = Object.entries(absoluteAliasTargets(options.alias) ?? {}).sort((a, b) => b[0].length - a[0].length);
   const root = options.root === void 0 ? process.cwd() : options.root;
   const allowed = root === null ? null : withRealPaths([node_path.resolve(root), ...(options.roots ?? []).map((r) => node_path.resolve(r)), ...aliases.map(([, t]) => t)]);
   const contained = (path) => allowed === null || allowed.some((r) => isInsideRoot(path, r) || isInsideRoot(realPath(path), r));
@@ -11369,8 +12264,18 @@ function createNodeResolver(options = {}) {
   };
   const checked = (spec, base, resolved) => {
     if (resolved === null) {
-      for (const ext of [".ts", ".js"]) {
-        if (spec.endsWith(".aktion") && isFile(base + ext)) return { path: null, why: `Did you mean "${spec}${ext}"?` };
+      const lower = spec.toLowerCase();
+      const suffix = AKTION_MODULE_SUFFIXES.find((s) => lower.endsWith(s));
+      if (suffix) {
+        const stem = base.slice(0, base.length - suffix.length);
+        for (const other of AKTION_MODULE_SUFFIXES) {
+          if (other === suffix || !isFile(stem + other)) continue;
+          const hint = `Did you mean "${spec.slice(0, spec.length - suffix.length)}${other}"?`;
+          return {
+            path: null,
+            why: suffix === ".aktion.js" && other === ".aktion.ts" ? `${hint} Aktion imports the file named, without TypeScript's \`.js\` → \`.ts\` mapping.` : hint
+          };
+        }
       }
       return { path: null };
     }
@@ -11397,6 +12302,10 @@ function createNodeResolver(options = {}) {
       return node_fs.readFileSync(path, "utf8");
     }
   };
+}
+function absoluteAliasTargets(alias) {
+  if (!alias) return void 0;
+  return Object.fromEntries(Object.entries(alias).map(([prefix, target]) => [prefix, node_path.resolve(target)]));
 }
 function loadAktionConfig(from) {
   let dir = isFile(from) ? node_path.dirname(node_path.resolve(from)) : node_path.resolve(from);
@@ -11478,6 +12387,25 @@ const source = ${JSON.stringify(runnableSource(result, entrySource))};
 export default /*#__PURE__*/ defineCompiledProgram({ __aktionCompiled: ${COMPILED_PROGRAM_VERSION}, program, source, path: ${JSON.stringify(path)}${contents} });
 `;
 }
+const HOST_ONLY_TAG = "AktionHostOnly";
+function hostOnlyExports(result, frontends, path) {
+  const entry = result.modules[0];
+  const frontend = entry ? frontends[entry.language] : void 0;
+  if (!entry || !frontend) return "";
+  const names = aktionExportNames(frontend.compile(entry.originalSource, entry.path).program).filter((name) => name !== "then");
+  if (names.length === 0) return "";
+  const message = `"[aktion] \`" + __aktionNames[i] + "\` is not available to host code: the Aktion module " + ${JSON.stringify(JSON.stringify(path))} + " gives host code only its compiled program (\`import app from\`). Exercise its other exports through a program (compileAktionSource from aktion-runtime/vite)."`;
+  return `const __aktionNames = ${JSON.stringify(names)};
+function __aktionHostOnly(i) {
+  const message = ${message};
+  const fail = () => { throw new Error(message); };
+  const get = (_target, key) => (key === Symbol.toStringTag ? ${JSON.stringify(HOST_ONLY_TAG)} : fail());
+  return new Proxy(function () {}, { apply: fail, construct: fail, get, set: fail, has: fail, ownKeys: fail, defineProperty: fail, deleteProperty: fail, getOwnPropertyDescriptor: fail, getPrototypeOf: fail, setPrototypeOf: fail });
+}
+` + names.map((_, i) => `const __aktion_${i} = __aktionHostOnly(${i});
+`).join("") + `export { ${names.map((n, i) => `__aktion_${i} as ${n}`).join(", ")} };
+`;
+}
 const HMR_FOOTER = `
 if (import.meta.hot) {
   import.meta.hot.accept((mod) => {
@@ -11494,6 +12422,7 @@ exports.DECLARATION_HEADER = DECLARATION_HEADER;
 exports.DEFAULT_DECLARATIONS_DIR = DEFAULT_DECLARATIONS_DIR;
 exports.MISSING_ERASER_MESSAGE = MISSING_ERASER_MESSAGE;
 exports.aktionDeclarationText = aktionDeclarationText;
+exports.aktionExportNames = aktionExportNames;
 exports.aktionPlugin = aktionPlugin;
 exports.aktionViteConfig = aktionViteConfig;
 exports.checkErasureInvariant = checkErasureInvariant;

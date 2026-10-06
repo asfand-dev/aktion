@@ -1232,13 +1232,13 @@
             kind: "Helper",
             signature: "$util.worker(pureFn, ...args) → Promise",
             description:
-              "Run a PURE function off the main thread in a Web Worker, resolving with its result. The function is serialised, so it must not close over outer variables — pass everything it needs as arguments. Falls back to an inline async run when Workers are unavailable.",
+              "Run a PURE host JavaScript function off the main thread in a Web Worker, resolving with its result. The function is serialised with toString(), so it must not close over outer variables — pass everything it needs as arguments. It must come from host code: a lambda written in the program is the evaluator's closure, whose toString() is the runtime's own wrapper, so only the no-Worker fallback could run it. Define the function in host code (window.sumTo = function (n) { … }) and read it by name. Falls back to an inline async run when Workers are unavailable.",
             params: [
-              { name: "pureFn", type: "(...args) => any", desc: "Closure-free function to offload." },
+              { name: "pureFn", type: "(...args) => any", desc: "Closure-free host JavaScript function to offload (not an Aktion lambda)." },
               { name: "...args", type: "any", desc: "Arguments passed to the worker." },
             ],
             returns: { type: "Promise", desc: "Resolves with the function's return value." },
-            example: '$util.worker((n) => { let s = 0; for (let i = 0; i < n; i++) s += i; return s }, 1e8)\n  .then(r => $result = r)',
+            example: '// host page: window.sumTo = function (n) { let s = 0; for (let i = 0; i < n; i++) s += i; return s }\n$util.worker(sumTo, 1e8).then(r => $result = r)',
           },
           {
             anchor: "util-rt-pwa",

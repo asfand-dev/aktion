@@ -12,7 +12,10 @@
  * `responsiveClassFor` returns null and the caller falls back to emitting the
  * base value inline.
  */
-/** Breakpoint → min-width (px). `base` is the 0-width default (no media query). */
+/**
+ * Breakpoint → min-width (px). `base` is the 0-width default (no media query).
+ * Keyed by {@link RESPONSIVE_BREAKPOINTS}, which also orders the rules.
+ */
 export declare const BREAKPOINT_MIN: Record<string, number>;
 /**
  * Lazily create (once) the shared dynamic stylesheet used for responsive
@@ -34,6 +37,12 @@ export interface ResponsiveGroup {
 export declare function responsiveClassFor(groups: ResponsiveGroup[]): string | null;
 /** True when a value is a responsive breakpoint map (`{ base|sm|md|lg|xl: … }`). */
 export declare function isResponsiveMap(v: unknown): v is Record<string, unknown>;
+/**
+ * The interaction states `sx.states` accepts — exactly the states this module
+ * can write a selector for. `sx.ts` filters on it and the DSL types print
+ * `SxInteractionState` from it.
+ */
+export declare const INTERACTION_STATES: readonly string[];
 export interface StateRuleGroup {
     /** State key (`hover` | `focus` | `active` | `disabled` | …). */
     state: string;

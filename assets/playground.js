@@ -1688,7 +1688,7 @@ const GLOBAL_NAMESPACES = [
       { name: "geolocate",     apply: "geolocate()",             info: "Resolve { lat, lng } via the Geolocation API." },
       { name: "isOnline",      apply: "isOnline()",              info: "Current navigator.onLine flag." },
       { name: "deviceType",    apply: "deviceType()",            info: "\"mobile\" | \"tablet\" | \"desktop\" heuristic." },
-      { name: "worker",        apply: "worker(${1:fn}, ${2:args})", info: "Run a closure-free function in a Web Worker; resolves its return value." },
+      { name: "worker",        apply: "worker(${1:fn}, ${2:args})", info: "Run a closure-free HOST JavaScript function in a Web Worker (an Aktion lambda cannot run there); resolves its return value." },
       { name: "registerServiceWorker", apply: "registerServiceWorker(\"${1:/sw.js}\")", info: "Register a service worker for PWA/offline." },
       { name: "webManifest",   apply: "webManifest({ name: \"${1:App}\" })", info: "Inject a sanitised web-app manifest (name, icons, themeColor…)." },
       { name: "nativeShell",   apply: "nativeShell()",           info: "Detect the wrapper: capacitor/cordova/tauri/electron/react-native or \"web\"." },

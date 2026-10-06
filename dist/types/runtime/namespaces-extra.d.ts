@@ -4,30 +4,38 @@
  * (composable validators). Both are pure — no side effects — and safe to
  * call from any expression / action / effect / lambda.
  */
+/** The theme colour names `gradient` / `alpha` resolve to their CSS variable. */
+export type UtilStyleColorToken = "primary" | "accent" | "success" | "warning" | "danger" | "info" | "text" | "muted" | "bg" | "surface" | "border";
+/** A theme colour name, or a plain CSS colour (anything unsafe resolves to nothing). */
+export type UtilStyleColor = UtilStyleColorToken | (string & {});
+/** One `cx` argument: falsy values are skipped, arrays recurse, an object contributes its truthy keys. */
+export type UtilStyleClassValue = string | number | boolean | null | undefined | readonly UtilStyleClassValue[] | {
+    readonly [className: string]: unknown;
+};
 export declare const Style: {
     /**
      * Classname helper (clsx-style). Accepts strings, arrays, and objects
      * `{ "is-active": cond }`; returns a space-joined, de-duped class string.
      * Tokens that aren't valid CSS identifiers are dropped.
      */
-    readonly cx: (...args: unknown[]) => string;
+    readonly cx: (...args: readonly UtilStyleClassValue[]) => string;
     /**
      * Build a safe `linear-gradient(...)` from an array of color stops (and an
      * optional angle in degrees). Returns "" if fewer than two valid stops.
      */
-    readonly gradient: (stops: unknown, angle?: unknown) => string;
+    readonly gradient: (stops: readonly UtilStyleColor[], angle?: number) => string;
     /** color-mix wrapper: blend a color with transparent at `amount` (0–1). */
-    readonly alpha: (color: unknown, amount: unknown) => string;
+    readonly alpha: (color: UtilStyleColor, amount: number) => string;
     /** Build a responsive `clamp(min, preferred, max)` size. */
-    readonly clamp: (min: unknown, preferred: unknown, max: unknown) => string;
+    readonly clamp: (min: string | number, preferred: string | number, max: string | number) => string;
     /**
      * Resolve a dotted token path to its CSS variable: `style.token("spacing.l")`
      * → `var(--rui-spacing-l)`, `style.token("colors.primary")` →
      * `var(--rui-color-primary)`. Falls back to "" for unknown shapes.
      */
-    readonly token: (path: unknown) => string;
+    readonly token: (path: `${"colors" | "color" | "spacing" | "radius" | "shadows" | "shadow" | "gradients" | "gradient"}.${string}` | (string & {})) => string;
     /** Serialize a plain object of CSS declarations to a sanitised style string. */
-    readonly toStyle: (obj: unknown) => string;
+    readonly toStyle: (obj: Readonly<Record<string, string | number | false | null | undefined>>) => string;
 };
 export type StyleNamespace = typeof Style;
 /**
@@ -35,7 +43,7 @@ export type StyleNamespace = typeof Style;
  * of either — async validators (V.2 `asyncCustom`) resolve server-side checks
  * like username uniqueness.
  */
-type Validator = (value: unknown) => string | null | Promise<string | null>;
+export type Validator<T = unknown> = (value: T) => string | null | Promise<string | null>;
 export declare const Rules: {
     readonly required: (message?: string) => Validator;
     readonly email: (message?: string) => Validator;
@@ -44,8 +52,8 @@ export declare const Rules: {
     readonly max: (n: number, message?: string) => Validator;
     readonly minLength: (n: number, message?: string) => Validator;
     readonly maxLength: (n: number, message?: string) => Validator;
-    readonly pattern: (re: unknown, message?: string) => Validator;
-    readonly oneOf: (options: unknown[], message?: string) => Validator;
+    readonly pattern: (re: RegExp | string, message?: string) => Validator;
+    readonly oneOf: (options: readonly unknown[], message?: string) => Validator;
     /**
      * A whole number. `min`/`max` bound the magnitude but say nothing about the
      * step, so `2.5` passes `min(1)` + `max(10)` — which is wrong for every count,
@@ -104,29 +112,31 @@ export declare const Rules: {
      * default. Pass your own when the two are worth separating — a field with a
      * documented floor usually is.
      */
-    readonly duration: (bounds?: unknown, message?: string) => Validator;
+    readonly duration: (bounds?: {
+        readonly min?: number;
+        readonly max?: number;
+    } | string, message?: string) => Validator;
     readonly matches: (other: unknown, message?: string) => Validator;
-    readonly custom: (fn: unknown, message?: string) => Validator;
+    readonly custom: <T = unknown>(fn: (value: T) => boolean | string | null | undefined | PromiseLike<boolean | string | null | undefined>, message?: string) => Validator<T>;
     /**
      * Async validator (V.2) — `fn(value)` may return a Promise resolving to
      * true/null (valid), false (invalid → `message`), or an error string. Use
      * for server-side checks (e.g. username uniqueness). `$form` awaits these
      * before submitting; a rejected promise counts as invalid.
      */
-    readonly asyncCustom: (fn: unknown, message?: string) => Validator;
+    readonly asyncCustom: <T = unknown>(fn: (value: T) => boolean | string | null | undefined | PromiseLike<boolean | string | null | undefined>, message?: string) => Validator<T>;
     /**
      * Run a list of validators against a value; returns the first error
      * message, or null when all pass. Stays fully synchronous for sync
      * validators; returns a Promise only when an async validator is hit.
      */
-    readonly validate: (value: unknown, validators: unknown) => string | null | Promise<string | null>;
+    readonly validate: <T>(value: T, validators: Validator<T> | readonly Validator<T>[]) => string | null | Promise<string | null>;
     /**
      * Validate an object of `{ field: value }` against a schema of
      * `{ field: [validators] }`. Returns `{ field: message }` for failures
      * (empty object when valid) — or a Promise of it when any validator in the
      * schema is async.
      */
-    readonly validateAll: (values: unknown, schema: unknown) => Record<string, string> | Promise<Record<string, string>>;
+    readonly validateAll: <V extends object>(values: V, schema: { readonly [K in keyof V]?: Validator<V[K]> | readonly Validator<V[K]>[]; }) => Partial<Record<keyof V, string>> | Promise<Partial<Record<keyof V, string>>>;
 };
 export type RulesNamespace = typeof Rules;
-export {};

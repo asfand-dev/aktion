@@ -1,3 +1,4 @@
+import { CompiledProgram } from '../compiler/runtime.js';
 import { ComponentLibrary } from '../library/types.js';
 export interface RenderToStringOptions {
     /** Component library to render against (defaults to the built-in one). */
@@ -28,17 +29,18 @@ export interface RenderToStringResult {
     headAttrs: Record<string, string>;
 }
 /**
- * Render an Aktion program to an HTML string + hydration state.
+ * Render an Aktion program — source text or a `CompiledProgram` — to an HTML
+ * string + hydration state.
  *
  * Throws when no DOM is available (install `happy-dom`/`jsdom` and register it
  * on `globalThis` in a Node SSR entry).
  */
-export declare function renderToString(program: string, options?: RenderToStringOptions): RenderToStringResult;
+export declare function renderToString(program: string | CompiledProgram, options?: RenderToStringOptions): RenderToStringResult;
 /**
  * Like `renderToString` but returns only the markup (no hydration state) —
  * for fully static pages / SSG (suggestions-global XI.1).
  */
-export declare function renderToStaticMarkup(program: string, options?: RenderToStringOptions): string;
+export declare function renderToStaticMarkup(program: string | CompiledProgram, options?: RenderToStringOptions): string;
 export interface RenderToTextTreeOptions {
     /** Component library to render against (defaults to the built-in one). */
     library?: ComponentLibrary;
@@ -59,8 +61,8 @@ export interface RenderToTextTreeResult {
     ok: boolean;
 }
 /**
- * Render an Aktion program to a plain-text component tree **without a DOM**
- * (issue #9). Unlike `renderToString`, this needs no `happy-dom` / `jsdom`,
+ * Render an Aktion program — source text or a `CompiledProgram` — to a
+ * plain-text component tree **without a DOM** (issue #9). Unlike `renderToString`, this needs no `happy-dom` / `jsdom`,
  * so `node` can confirm a program actually *renders* — not just parses —
  * out of the box. It parses, schema-validates, evaluates the UI root, and
  * recursively expands user components, surfacing every diagnostic it hits:
@@ -74,4 +76,4 @@ export interface RenderToTextTreeResult {
  * The text outline is for human/CI inspection (it shows component names and
  * nesting, not pixel-perfect HTML); `errors` / `ok` are the machine signal.
  */
-export declare function renderToTextTree(program: string, options?: RenderToTextTreeOptions): RenderToTextTreeResult;
+export declare function renderToTextTree(program: string | CompiledProgram, options?: RenderToTextTreeOptions): RenderToTextTreeResult;

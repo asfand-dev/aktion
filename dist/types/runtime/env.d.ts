@@ -1,33 +1,33 @@
 import { EvaluationContext } from './evaluator.js';
 export interface EnvManager {
     readonly viewport: {
-        width: number;
-        height: number;
+        readonly width: number;
+        readonly height: number;
     };
     readonly breakpoint: {
-        width: number;
-        active: string;
-        sm: boolean;
-        md: boolean;
-        lg: boolean;
-        xl: boolean;
+        readonly width: number;
+        readonly active: "base" | "sm" | "md" | "lg" | "xl";
+        readonly sm: boolean;
+        readonly md: boolean;
+        readonly lg: boolean;
+        readonly xl: boolean;
     };
     readonly scroll: {
-        x: number;
-        y: number;
-        progress: number;
-        direction: string;
+        readonly x: number;
+        readonly y: number;
+        readonly progress: number;
+        readonly direction: "up" | "down";
     };
     readonly media: {
-        prefersDark: boolean;
-        prefersReducedMotion: boolean;
-        online: boolean;
-        pointer: string;
-        portrait: boolean;
+        readonly prefersDark: boolean;
+        readonly prefersReducedMotion: boolean;
+        readonly online: boolean;
+        readonly pointer: "coarse" | "fine";
+        readonly portrait: boolean;
     };
     readonly mouse: {
-        x: number;
-        y: number;
+        readonly x: number;
+        readonly y: number;
     };
 }
 export declare function createEnvManager(ctx: EvaluationContext): EnvManager;

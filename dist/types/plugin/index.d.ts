@@ -3,7 +3,7 @@ import { CompiledProgram, ModuleResolver, ModuleFrontends } from '../compiler/in
 import { TypeScriptFrontendOptions } from './typescript.js';
 import { AktionDeclarationsOptions } from './declarations.js';
 export { loadTypeScriptFrontend, createTypeScriptFrontend, tryLoadTypeScriptFrontend, tryCreateTypeScriptFrontend, unavailableTypeScriptFrontend, typeScriptFrontendFromEraser, computeSoftNewlines, checkErasureInvariant, MISSING_ERASER_MESSAGE, type TypeEraser, type TypeEraseResult, type TypeEraseDiagnostic, type TypeScriptFrontendOptions, } from './typescript.js';
-export { aktionDeclarationText, declarationFileName, emitAktionDeclarations, updateAktionDeclaration, DECLARATION_HEADER, DEFAULT_DECLARATIONS_DIR, type AktionDeclarationsOptions, type AktionDeclarationsResult, } from './declarations.js';
+export { aktionDeclarationText, aktionExportNames, declarationFileName, emitAktionDeclarations, updateAktionDeclaration, DECLARATION_HEADER, DEFAULT_DECLARATIONS_DIR, type AktionDeclarationsOptions, type AktionDeclarationsResult, } from './declarations.js';
 /**
  * How a `.aktion` import specifier becomes a file on disk.
  *
@@ -31,6 +31,10 @@ export interface AktionResolveOptions {
      * separately from `@acme/ui`. Each target directory becomes an allowed root,
      * and an aliased import may not climb out of the target it matched — so an
      * alias widens resolution by exactly the directory it names and no further.
+     *
+     * A relative target resolves against the working directory (`path.resolve`)
+     * — for the build and, in the Vite plugin, for the `dts` declarations alike.
+     * An `aktion.config.json` target resolves against the file's own directory.
      */
     alias?: Record<string, string>;
     /**
@@ -93,7 +97,8 @@ export interface AktionPluginOptions extends AktionResolveOptions {
      * (see {@link emitAktionDeclarations}). `true` uses the defaults
      * (`src/**\/*.aktion` into `.aktion-types`, which needs
      * `"rootDirs": ["src", ".aktion-types/src"]` and `"allowArbitraryExtensions": true`
-     * in the tsconfig). Default: off.
+     * in the tsconfig). The modules of every {@link AktionResolveOptions.alias}
+     * target are declared too, under `.aktion-types/<prefix>/`. Default: off.
      */
     dts?: boolean | Omit<AktionDeclarationsOptions, "root" | "write">;
 }

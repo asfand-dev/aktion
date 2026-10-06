@@ -8,6 +8,19 @@ export declare const Sparkline: ComponentSpec;
 export declare const TreeNode: ComponentSpec;
 export declare const Tree: ComponentSpec;
 /**
+ * One unique key per column, shared by `Table` and `DataGrid`: the `Col`
+ * header, or `col-<index>` when the header is empty or repeats an earlier
+ * column's header.
+ *
+ * The key names the column in the header-keyed `row` handed to `render`,
+ * `onClick` and `onRowClick`, and — in DataGrid — in sorting, filtering, the
+ * column configuration and its persisted layout. Keying straight off the header
+ * gave two `Col("Price", …)` one shared key: the second column's values
+ * overwrote the first's in `row`, and DataGrid, which looks its columns up by
+ * key, drew the second column's data in both.
+ */
+export declare function columnKeys(headers: readonly string[]): string[];
+/**
  * ISO 4217 codes are exactly three letters. Anything else has to fall back:
  * `toLocaleString` throws a RangeError on an unknown currency, which would take
  * the whole render down.

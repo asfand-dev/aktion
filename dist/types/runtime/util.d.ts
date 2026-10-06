@@ -11,6 +11,127 @@
  * teaches the new entry.
  */
 /**
+ * An array the list helpers read. A nullish value (data not loaded yet) is
+ * treated as empty; so is any other non-array (a `Set`, a `Map`, an object).
+ */
+export type UtilList<T> = readonly T[] | null | undefined;
+/**
+ * What the helpers whose result does not depend on the element type (`count`,
+ * `sum`, `avg`, `min`, `max`, `join`) read: a {@link UtilList}, or a value
+ * typed `unknown` — an untyped `$query`'s `data` — which they guard at runtime,
+ * reading any non-array as empty. A value of a known non-array type (a string,
+ * a `Set`, an object) is still rejected: it would be read as `[]`.
+ */
+export type UtilAggregateInput<A> = unknown extends A ? A : UtilList<unknown>;
+/**
+ * What `pick` returns: the picked keys of `T`. When `T` may be `null` /
+ * `undefined` (data not loaded yet) every key is optional, because a nullish
+ * input gives `{}`.
+ */
+export type UtilPicked<T, K extends PropertyKey> = [
+    T
+] extends [object] ? Pick<T, K & keyof T> : Partial<Pick<NonNullable<T>, K & keyof NonNullable<T>>>;
+/** What `omit` returns: `T` without the omitted keys — every key optional when `T` may be nullish, as for {@link UtilPicked}. */
+export type UtilOmitted<T, K extends PropertyKey> = [
+    T
+] extends [object] ? Omit<T, K> : Partial<Omit<NonNullable<T>, K>>;
+/** A field of the row type, or a dotted path into it (`"owner.name"`). */
+export type UtilFieldPath<T> = (T extends object ? keyof T & string : never) | (string & {});
+/** The comparison operators of `filter` / `find` / `partition`. Any other string matches nothing. */
+export type UtilCompareOp = "==" | "!=" | ">" | "<" | ">=" | "<=" | "contains" | "startsWith" | "endsWith";
+/** The options object of `format` (each key is ignored unless it has the right type). */
+export interface UtilNumberFormatOptions {
+    /** ISO 4217 code for `"currency"` mode (default `"USD"`). */
+    readonly currency?: string;
+    /** BCP 47 locale (default: the host's). */
+    readonly locale?: string;
+    /** Fixed number of fraction digits. */
+    readonly decimals?: number;
+}
+/** A `File` / `Blob`, structurally (what `FileUpload` hands over). */
+export interface UtilBlobLike {
+    readonly size: number;
+    readonly type: string;
+    text(): Promise<string>;
+    arrayBuffer(): Promise<ArrayBuffer>;
+}
+/** The options object of `readFile`. */
+export interface UtilReadFileOptions {
+    /** `"text"` (default) the UTF-8 text, `"dataUrl"` a `data:` URI, `"base64"` that URI's payload. */
+    readonly as?: "text" | "dataUrl" | "base64";
+    /** Resolve `""` without reading when the file is larger than this many bytes. */
+    readonly maxSize?: number;
+}
+/** A window feature switch: on is `true`, `1`, `"1"`, `"yes"` or `"true"`; anything else is off. */
+export type UtilWindowFlag = boolean | 0 | 1 | "0" | "1" | "yes" | "no" | "true" | "false";
+/** The `window.open` features `openUrl` / `openWindow` pass on. Any other key is dropped. */
+export interface UtilWindowFeatures {
+    readonly width?: number;
+    readonly height?: number;
+    readonly left?: number;
+    readonly top?: number;
+    readonly screenX?: number;
+    readonly screenY?: number;
+    readonly innerWidth?: number;
+    readonly innerHeight?: number;
+    readonly popup?: UtilWindowFlag;
+    readonly menubar?: UtilWindowFlag;
+    readonly toolbar?: UtilWindowFlag;
+    readonly location?: UtilWindowFlag;
+    readonly status?: UtilWindowFlag;
+    readonly resizable?: UtilWindowFlag;
+    readonly scrollbars?: UtilWindowFlag;
+    readonly noopener?: UtilWindowFlag;
+    readonly noreferrer?: UtilWindowFlag;
+}
+/** The options object of `openUrl`. */
+export interface UtilOpenUrlOptions {
+    /** `"_blank"` (default, a new tab) or a window NAME, which reuses one window across calls. */
+    readonly target?: "_blank" | "_self" | "_parent" | "_top" | (string & {});
+    /** A features object, or a `"key=value,…"` string (re-parsed against the same allow-list). */
+    readonly features?: UtilWindowFeatures | string;
+    /** Defaults to on for `_blank` and off for a named target. */
+    readonly noopener?: UtilWindowFlag;
+    readonly noreferrer?: UtilWindowFlag;
+}
+/** The options object of `openWindow`. */
+export interface UtilOpenWindowOptions {
+    /** A window name, which reuses one window across calls (default `"_blank"`). */
+    readonly name?: string;
+    /** The same features `openUrl` takes. */
+    readonly features?: UtilWindowFeatures | string;
+}
+/** The config `webManifest` reads (each key is ignored unless it is a string, or an array for `icons`). */
+export interface UtilWebManifestConfig {
+    readonly name?: string;
+    readonly shortName?: string;
+    readonly startUrl?: string;
+    readonly display?: "fullscreen" | "standalone" | "minimal-ui" | "browser" | (string & {});
+    readonly backgroundColor?: string;
+    readonly themeColor?: string;
+    readonly description?: string;
+    readonly icons?: readonly {
+        readonly src?: string;
+        readonly sizes?: string;
+        readonly type?: string;
+    }[];
+}
+/** The sanitised Web App Manifest `webManifest` returns (snake_case, defaults filled in). */
+export interface UtilWebManifest {
+    name: string;
+    short_name: string;
+    start_url: string;
+    display: string;
+    background_color: string;
+    theme_color: string;
+    description?: string;
+    icons?: {
+        src: string;
+        sizes: string;
+        type: string;
+    }[];
+}
+/**
  * The handle `$util.openWindow()` hands back.
  *
  * Deliberately NOT the raw `Window`: a program under the `"safe"` policy must
@@ -22,7 +143,7 @@ export type OpenedWindow = {
     /** `false` when the browser refused (a popup blocker) or there was no `window` at all. */
     ok: boolean;
     /** Point the context at a URL. Returns `false` for a rejected scheme or a context that is gone. */
-    navigate(url: unknown): boolean;
+    navigate(url: string): boolean;
     /** Close the context. Safe to call twice, and on a context that was never opened. */
     close(): void;
     /** Live: `true` once the context has been closed, by this program or by the user. */
@@ -41,29 +162,29 @@ export type OpenedWindow = {
 export declare const parseDuration: (value: unknown) => number | null;
 export declare function safeRegexTest(pattern: string, subject: string): boolean;
 export declare const Util: {
-    readonly count: (arr: unknown) => number;
-    readonly sum: (arr: unknown) => number;
-    readonly avg: (arr: unknown) => number;
-    readonly min: (arr: unknown) => number;
-    readonly max: (arr: unknown) => number;
-    readonly first: (arr: unknown) => unknown;
-    readonly last: (arr: unknown) => unknown;
-    readonly filter: (arr: unknown, field?: string, op?: string, value?: unknown) => unknown[];
-    readonly find: (arr: unknown, field?: string, op?: string, value?: unknown) => unknown;
-    readonly sort: (arr: unknown, field?: string, direction?: "asc" | "desc") => unknown[];
-    readonly groupBy: (arr: unknown, field?: string) => Record<string, unknown[]>;
-    readonly slice: (arr: unknown, start?: number, end?: number) => unknown[];
-    readonly unique: (arr: unknown, field?: string) => unknown[];
-    readonly reverse: (arr: unknown) => unknown[];
+    readonly count: <A>(arr: UtilAggregateInput<A>) => number;
+    readonly sum: <A>(arr: UtilAggregateInput<A>) => number;
+    readonly avg: <A>(arr: UtilAggregateInput<A>) => number;
+    readonly min: <A>(arr: UtilAggregateInput<A>) => number;
+    readonly max: <A>(arr: UtilAggregateInput<A>) => number;
+    readonly first: <T>(arr: UtilList<T>) => T | null;
+    readonly last: <T>(arr: UtilList<T>) => T | null;
+    readonly filter: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>, op?: UtilCompareOp, value?: unknown) => T[];
+    readonly find: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>, op?: UtilCompareOp, value?: unknown) => T | null;
+    readonly sort: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>, direction?: "asc" | "desc") => T[];
+    readonly groupBy: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>) => Record<string, T[]>;
+    readonly slice: <T>(arr: UtilList<T>, start?: number, end?: number) => T[];
+    readonly unique: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>) => T[];
+    readonly reverse: <T>(arr: UtilList<T>) => T[];
     readonly range: (start: number, end: number, step?: number) => number[];
     readonly repeat: <T>(value: T, n: number) => T[];
-    readonly pick: (obj: unknown, keys: unknown) => Record<string, unknown>;
-    readonly omit: (obj: unknown, keys: unknown) => Record<string, unknown>;
-    readonly chunk: (arr: unknown, size: number) => unknown[][];
-    readonly flatten: (arr: unknown, depth?: number) => unknown[];
-    readonly zip: (...arrays: unknown[]) => unknown[][];
-    readonly partition: (arr: unknown, field?: string, op?: string, value?: unknown) => [unknown[], unknown[]];
-    readonly keyBy: (arr: unknown, field?: string) => Record<string, unknown>;
+    readonly pick: <T extends object | null | undefined, K extends keyof NonNullable<T> & string>(obj: T, keys: readonly K[]) => UtilPicked<T, K>;
+    readonly omit: <T extends object | null | undefined, K extends keyof NonNullable<T> & string>(obj: T, keys: readonly K[]) => UtilOmitted<T, K>;
+    readonly chunk: <T>(arr: UtilList<T>, size: number) => T[][];
+    readonly flatten: <A extends readonly unknown[], D extends number = 1>(arr: A | null | undefined, depth?: D) => FlatArray<A, D>[];
+    readonly zip: <L extends readonly (readonly unknown[])[]>(...arrays: L) => { -readonly [K in keyof L]: L[K][number] | null; }[];
+    readonly partition: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>, op?: UtilCompareOp, value?: unknown) => [pass: T[], fail: T[]];
+    readonly keyBy: <T>(arr: UtilList<T>, field?: UtilFieldPath<T>) => Record<string, T>;
     readonly cloneDeep: <T>(value: T) => T;
     readonly merge: (target: unknown, ...sources: unknown[]) => Record<string, unknown>;
     /**
@@ -72,13 +193,13 @@ export declare const Util: {
      * `{ currency?, locale?, decimals? }`. Legacy positional form
      * `Util.format(v, "currency", "USD", "en-US")` is also accepted.
      */
-    readonly format: (value: unknown, mode?: string, options?: unknown, fourth?: unknown) => string;
+    readonly format: (value: number | string | null | undefined, mode?: "number" | "currency" | "percent" | "compact", options?: UtilNumberFormatOptions | string, fourth?: string) => string;
     /**
      * Format a date. Second argument is either a moment-like pattern
      * (`"MMM D"`, `"YYYY-MM-DD"`) or one of: `"relative"`, `"date"`,
      * `"time"`, `"datetime"`, `"iso"`.
      */
-    readonly formatDate: (value: unknown, format?: string) => string;
+    readonly formatDate: (value: Date | number | string, format?: "relative" | "date" | "time" | "datetime" | "iso" | (string & {})) => string;
     readonly plural: (count: unknown, singular: unknown, plural?: unknown) => string;
     readonly capitalize: (text: unknown) => string;
     readonly lowercase: (text: unknown) => string;
@@ -87,11 +208,11 @@ export declare const Util: {
     readonly case: (text: unknown, kind?: "camel" | "snake" | "kebab" | "pascal") => string;
     readonly now: () => number;
     readonly today: () => string;
-    readonly addDays: (date: unknown, days: unknown) => string;
-    readonly addHours: (date: unknown, hours: unknown) => string;
-    readonly diffDays: (start: unknown, end: unknown) => number;
-    readonly startOfWeek: (date: unknown) => string;
-    readonly endOfMonth: (date: unknown) => string;
+    readonly addDays: (date: Date | number | string, days: number) => string;
+    readonly addHours: (date: Date | number | string, hours: number) => string;
+    readonly diffDays: (start: Date | number | string, end: Date | number | string) => number;
+    readonly startOfWeek: (date: Date | number | string) => string;
+    readonly endOfMonth: (date: Date | number | string) => string;
     readonly duration: {
         /**
          * A duration string in seconds, or `null` when the value is not one.
@@ -112,11 +233,13 @@ export declare const Util: {
          * something that is not a duration at all and you get `""` rather than an
          * exception, in keeping with every other member here.
          */
-        readonly format: (value: unknown, options?: unknown) => string;
+        readonly format: (value: number | string, options?: {
+            readonly style?: "simple" | "iso";
+        }) => string;
         /** Whether the value parses as a duration at all. */
         readonly isValid: (value: unknown) => boolean;
     };
-    readonly join: (arr: unknown, sep?: string) => string;
+    readonly join: <A>(arr: UtilAggregateInput<A>, sep?: string) => string;
     readonly split: (text: unknown, sep?: string) => string[];
     readonly trim: (text: unknown) => string;
     readonly replace: (text: unknown, search: unknown, replacement?: unknown) => string;
@@ -124,7 +247,7 @@ export declare const Util: {
     readonly startsWith: (text: unknown, prefix: unknown) => boolean;
     readonly endsWith: (text: unknown, suffix: unknown) => boolean;
     readonly contains: (text: unknown, needle: unknown) => boolean;
-    readonly match: (text: unknown, pattern: unknown) => boolean;
+    readonly match: (text: string | number | null | undefined, pattern: string) => boolean;
     readonly round: (value: unknown, decimals?: number) => number;
     readonly floor: (value: unknown) => number;
     readonly ceil: (value: unknown) => number;
@@ -140,28 +263,33 @@ export declare const Util: {
     readonly currency: (value: unknown, code?: string, locale?: string) => string;
     readonly percent: (value: unknown, decimals?: unknown) => string;
     readonly bytes: (value: unknown) => string;
-    readonly relativeTime: (value: unknown) => string;
+    readonly relativeTime: (value: Date | number | string) => string;
     /**
      * Copy text to the clipboard. Resolves `true` only once the async Clipboard
      * API write actually succeeds (permission can deny it), `false` otherwise.
      * `await $util.copy(x)` in an action; plain truthy checks keep working.
      */
-    readonly copy: (text: unknown) => Promise<boolean>;
+    readonly copy: (text: string | number) => Promise<boolean>;
     /** Await a pause: `await $util.sleep(300)`. Capped at 60s. */
-    readonly sleep: (ms?: unknown) => Promise<void>;
+    readonly sleep: (ms?: number) => Promise<void>;
     readonly uuid: () => string;
     /** Wrap a function so it only fires `wait` ms after the last call. */
-    readonly debounceFn: (fn: unknown, wait?: unknown) => ((...args: unknown[]) => void);
+    readonly debounceFn: <A extends unknown[]>(fn: (...args: A) => unknown, wait?: number) => ((...args: A) => void);
     /**
      * Wrap a function so it fires at most once per `wait` ms. Leading edge
      * fires immediately; calls landing inside the window schedule one trailing
      * fire with the latest arguments, so the final value is never dropped.
      */
-    readonly throttleFn: (fn: unknown, wait?: unknown) => ((...args: unknown[]) => void);
+    readonly throttleFn: <A extends unknown[]>(fn: (...args: A) => unknown, wait?: number) => ((...args: A) => void);
     /** Trigger device haptics. `pattern` is ms or an array of on/off ms. */
-    readonly vibrate: (pattern?: unknown) => boolean;
+    readonly vibrate: (pattern?: number | readonly number[]) => boolean;
     /** Native share sheet. `data` = { title?, text?, url? }. Returns a promise. */
-    readonly share: (data: unknown) => Promise<boolean>;
+    readonly share: (data: string | {
+        readonly title?: string;
+        readonly text?: string;
+        readonly url?: string;
+        readonly files?: readonly UtilBlobLike[];
+    }) => Promise<boolean>;
     /** Read text from the clipboard (async). Returns "" when unavailable/denied. */
     readonly readClipboard: () => Promise<string>;
     /**
@@ -184,8 +312,8 @@ export declare const Util: {
      *   }
      *
      * `file` may be a single `File`/`Blob`, or the whole pick as `FileUpload`
-     * hands it over (a `FileList` or an array) — in which case the FIRST readable
-     * entry is used. Loop the pick yourself for `multiple`.
+     * hands it over (a `File[]`; a `FileList` works too) — in which case the
+     * FIRST readable entry is used. Loop the pick yourself for `multiple`.
      *
      * `options.as` selects the representation:
      *   `"text"`     (default) the decoded UTF-8 text
@@ -203,7 +331,7 @@ export declare const Util: {
      * string is also the honest answer: the program has no contents to work with.
      * Branch on the result being empty, not on a `.catch`.
      */
-    readonly readFile: (file: unknown, options?: unknown) => Promise<string>;
+    readonly readFile: (file: UtilBlobLike | ArrayLike<UtilBlobLike> | null | undefined, options?: UtilReadFileOptions) => Promise<string>;
     /**
      * Open a URL in a new browsing context.
      *
@@ -245,7 +373,7 @@ export declare const Util: {
      * signed URL, then open it" — is exactly the shape browsers block. That is
      * what {@link openWindow} is for.
      */
-    readonly openUrl: (url: unknown, options?: unknown) => boolean;
+    readonly openUrl: (url: string, options?: UtilOpenUrlOptions) => boolean;
     /**
      * Open an EMPTY browsing context now, and navigate it once you know where to.
      *
@@ -283,40 +411,49 @@ export declare const Util: {
      * is later navigated to cannot reach back into this one. That is the same
      * protection `noopener` gives, applied in the one order that keeps the handle.
      */
-    readonly openWindow: (options?: unknown) => OpenedWindow;
+    readonly openWindow: (options?: UtilOpenWindowOptions) => OpenedWindow;
     /** Current geolocation as a promise of { lat, lng, accuracy } (or null). */
-    readonly geolocate: (options?: unknown) => Promise<{
-        lat: number;
-        lng: number;
-        accuracy: number;
+    readonly geolocate: (options?: {
+        readonly enableHighAccuracy?: boolean;
+        readonly timeout?: number;
+        readonly maximumAge?: number;
+    }) => Promise<{
+        readonly lat: number;
+        readonly lng: number;
+        readonly accuracy: number;
     } | null>;
     /** `true` when the device is currently online. */
     readonly isOnline: () => boolean;
     /** Best-effort device class from the user agent: "mobile" | "tablet" | "desktop". */
-    readonly deviceType: () => string;
+    readonly deviceType: () => "mobile" | "tablet" | "desktop";
     /**
      * Run a PURE function off the main thread in a Web Worker, resolving with its
      * result. `fn` is serialised via `toString()`, so it must not close over
      * outer variables (pass everything it needs as arguments). Falls back to
      * running inline (still async) when Workers aren't available.
      *   $util.worker((n) => heavyCompute(n), 1000).then(r => $result = r)
+     *
+     * `fn` must be a HOST JavaScript function. An Aktion lambda is the
+     * evaluator's closure, so its `toString()` is the runtime's own wrapper (it
+     * references the evaluation context), not the program's code — only the
+     * no-Worker fallback can run it.
      */
-    readonly worker: (fn: unknown, ...args: unknown[]) => Promise<unknown>;
+    readonly worker: <A extends unknown[], R>(fn: (...args: A) => R, ...args: A) => Promise<Awaited<R>>;
     /** Register a service worker. Resolves true on success, false otherwise. */
-    readonly registerServiceWorker: (url: unknown, scope?: unknown) => Promise<boolean>;
+    readonly registerServiceWorker: (url: string, scope?: string) => Promise<boolean>;
     /**
      * Build a sanitised Web App Manifest object from a config (XII.2). Use it to
      * inline a manifest (`<link rel="manifest" href="data:...">`) or write one at
      * build time. Unknown/unsafe keys are dropped.
      */
-    readonly webManifest: (config: unknown) => Record<string, unknown>;
+    readonly webManifest: (config: UtilWebManifestConfig) => UtilWebManifest;
     /**
      * Detect the native shell the app is running inside (Capacitor / Cordova /
      * Tauri / Electron / React Native WebView), or "web" when it's a plain
      * browser. Lets a program branch on the host (e.g. hide a download button in
      * a native shell, or call a bridge when present).
      */
-    readonly nativeShell: () => string;
+    readonly nativeShell: () => "tauri" | "capacitor" | "cordova" | "react-native" | "electron" | "web";
     /** True when running inside any native shell (not a plain browser). */
     readonly isNativeApp: () => boolean;
 };

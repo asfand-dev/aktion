@@ -63,6 +63,15 @@ export declare function getDefinitionTarget(source: string, position: Position):
  * Find the declaration of a top-level `name` in `source` (used by a host to
  * land on an imported symbol's definition in another file). `isState`
  * disambiguates the `$`-namespace from the identifier namespace.
+ *
+ * What another module imports is a module-level declaration, so one is
+ * preferred over a same-named `function` nested in a body (a supported helper
+ * in `.aktion.ts` / `.aktion.js` modules, where `export let` / `export const`
+ * is the module-level form). A module-level `let` / `const` / `var` comes
+ * first: it is always the declaration, while a module-level `$x = …` after it
+ * only reassigns (in a `.aktion.ts` / `.aktion.js` module `$x = …` never
+ * declares — E125 without `let`). Then a module-level `function` or `$x = …`,
+ * the `.aktion` declaration forms, and only then any declaration at all.
  */
 export declare function findDeclaration(source: string, name: string, isState: boolean): Range | null;
 /**

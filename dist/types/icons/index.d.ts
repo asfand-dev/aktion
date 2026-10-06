@@ -22,6 +22,12 @@ export declare const FONT_AWESOME_VERSION = "6.7.2";
  */
 export declare const FONT_AWESOME_CDN_INTEGRITY = "";
 /**
+ * The Font Awesome styles a `variant:` prefix may name. An unknown prefix falls
+ * back to {@link DEFAULT_VARIANT}. The DSL types print the `${variant}:${name}`
+ * icon-name template from this set.
+ */
+export declare const SUPPORTED_VARIANTS: ReadonlySet<string>;
+/**
  * Inject the Font Awesome stylesheet into `document.head` (once per page)
  * and into the given shadow root (once per instance) so icon classes
  * resolve both outside and inside the custom element.

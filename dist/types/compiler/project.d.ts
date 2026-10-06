@@ -34,7 +34,10 @@ export interface LinkProjectOptions {
 export interface LinkProjectResult {
     /** The merged, scope-renamed program. */
     program: Program;
-    /** Re-emitted source of the merged program (for `mountCompiled` round-trips). */
+    /**
+     * Re-emitted source of the merged program (for `mountCompiled` round-trips)
+     * — see `CompiledProgram.source` for what the text carries.
+     */
     source: string;
     /** Linker + fetch diagnostics. */
     diagnostics: LinkDiagnostic[];

@@ -13,8 +13,13 @@ export declare const BUTTON_VARIANTS: readonly ["primary", "secondary", "outline
 export declare const BUTTON_SIZES: readonly ["xs", "sm", "md", "lg", "xl"];
 /**
  * Normalise a size token to the canonical `xs|sm|md|lg|xl` vocabulary.
- * `extra-small` / `small` / `large` / `extra-large` are accepted as verbose
- * spellings; anything unrecognised (or empty) falls back to `md`.
+ * Every legacy spelling `canonicalSizeToken` knows (`s`/`m`/`l`,
+ * `small`/`normal`/`large`) plus `extra-small` / `extra-large` is accepted;
+ * anything unrecognised (or empty) falls back to `md`. The renderer already
+ * canonicalises the legacy spellings before a spec renders, but this is also
+ * reached directly (a component rendering a Button-shaped child itself), so it
+ * must not know fewer spellings than the validator accepts — it once lacked `s`
+ * and `l`, which rendered medium.
  *
  * Exported alongside `BUTTON_SIZES` so IconButton resolves sizes by the same
  * rules instead of keeping its own copy. IconButton's copy accepted `small` /

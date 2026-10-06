@@ -85,7 +85,7 @@ export interface Todo { id: number; title: string; isCompleted: boolean }</code>
 <pre><code>// src/store.aktion.ts — an Aktion module in TypeScript
 import { $http } from "aktion-runtime/dsl";
 import type { Todo } from "./types.ts";
-import { base } from "./api.aktion.js";
+import { base } from "./api.aktion.js";   // a JavaScript Aktion module — for api.aktion.ts write "./api.aktion.ts"
 
 export const $todos = $http&lt;Todo[]&gt;({ url: `${base}/todos` });
 export let $editingId: number | null = null;   // reassigned → `let`, never `const`
@@ -130,6 +130,48 @@ import "aktion-runtime";
 import type { AktionElement } from "aktion-runtime";
 import app from "./app.aktion.ts";
 document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code></pre>
+      <p>
+        <strong>Host code imports only an Aktion module&rsquo;s default export</strong>,
+        its compiled program. The other exports exist inside Aktion programs: a named
+        import from host code (<code>import { summary } from "./api.aktion.ts"</code>
+        in <code>main.ts</code>) fails <code>vite build</code> &mdash; with an
+        explanation on Vite&nbsp;5&ndash;7, while Vite&nbsp;8 reports the missing
+        export &mdash; and under <code>vite dev</code> and Vitest the binding throws as
+        soon as it is used. To unit-test a helper, call it from a program
+        (<code>compileAktionSource</code>, see <a href="testing.html#multi-file">Testing</a>).
+      </p>
+
+      <h3 id="aktion-ts-keys">Keys and children</h3>
+      <p>
+        A TypeScript component&rsquo;s signature is its parameter list, so a call that
+        passes a <code>key</code> or children needs a parameter for them:
+        <code>Item(id, { key: id })</code> against <code>function Item(label: string)</code>
+        is <code>TS2554</code>, and so is <code>Panel("P", Text("child"))</code> against
+        <code>function Panel(title: string)</code>. Two conventions type-check and bind
+        as written:
+      </p>
+<pre><code>import { Column, Row, Text, type AktionNode, type Children, type ComponentOptions } from "aktion-runtime/dsl";
+
+// A trailing optional parameter takes the key (`ComponentOptions` is `{ readonly key?: Key }`).
+export function OrderRow(name: string, total: number, _opts?: ComponentOptions): AktionNode {
+  return Row([Text(name), Text(String(total))], { gap: "s" });
+}
+
+// A declared parameter takes the children.
+export function Shell(title: string, children: Children): AktionNode {
+  return Column([Text(title), children], { gap: "m" });
+}
+
+Shell("Orders", orders.map((o) =&gt; OrderRow(o.name, o.total, { key: o.id })));</code></pre>
+      <p>
+        The call binds by position, as JavaScript does, so <code>_opts</code>
+        receives the <code>{ key }</code> object. Because that object is the last
+        argument and <code>key</code> is its only property, Aktion also takes it as
+        the row&rsquo;s identity, so per-instance state stays with its row when the
+        list is re-sorted. For children, a rest parameter works too:
+        <code>function Panel(title: string, ...kids: AktionNode[])</code> receives
+        every remaining argument as an array.
+      </p>
 
       <h3 id="aktion-dsl">The built-ins: <code>aktion-runtime/dsl</code></h3>
       <p>
@@ -144,13 +186,218 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
         (<code>{ Button as B }</code>) is an error (E122).
       </p>
       <p>
+        The declarations are generated from the runtime itself &mdash; the component
+        specs, the arguments each renderer hands its callbacks, and the tables
+        <code>sx</code>, <code>$theme</code> and the namespaces read &mdash; so they
+        are exact. A value <code>tsc</code> rejects is one the runtime would drop,
+        ignore or render wrongly, usually without a word; where the runtime takes an
+        open set (a CSS length, a colour, an icon name), the type is open too. When
+        <code>tsc</code> flags a call, trust the error over how the call looks:
+      </p>
+<pre><code>Button("Save", { variant: "brand" });                  // TS2769: not a ButtonVariant
+Button("Save", "primary");                             // TS2769: the second slot is onClick, not variant
+Input("age", { onChange: (value: number) =&gt; value });  // TS2769: onChange receives the string value
+Text("x", { sx: { _hover: { bg: "primary" } } });      // TS2769: no _hover key — use hover, focus or states
+$theme({ colors: { "bg-subtle": "#ffffff" } });        // TS2353: $theme colour keys are camelCase (bgSubtle)</code></pre>
+      <table class="signature-table">
+        <thead><tr><th>Surface</th><th>How it is typed</th></tr></thead>
+        <tbody>
+          <tr><td>Props</td><td>Each prop has its exact type. An enum prop is a union of its literal values, exported as <code>&lt;Component&gt;&lt;Prop&gt;</code> (<code>ButtonVariant</code>, <code>BadgeTone</code>, <code>ModalSize</code>) &mdash; the spacing props of the layout components (<code>gap</code>, <code>padding</code>, &hellip;) share <code>SpacingToken</code>; the data a component reads has a shape type (<code>SelectItemData</code>, <code>CalendarViewEvent</code>, <code>CommandPaletteItem</code>); <code>&lt;Component&gt;Options</code> is the whole props bag. Import them with <code>import type</code>.</td></tr>
+          <tr><td>Callbacks</td><td>Exactly the arguments the renderer passes: <code>Input</code>&rsquo;s <code>onChange</code> gets the string value, <code>Col</code>&rsquo;s <code>render</code> gets <code>(value, index, row)</code>, <code>Button</code>&rsquo;s <code>onClick</code> gets nothing. A callback whose result the runtime ignores returns <code>unknown</code>; every callback prop accepts <code>null</code>.</td></tr>
+          <tr><td>Components that hand your data back</td><td>Generic, inferred from the data you pass: <code>VirtualList</code>, <code>VirtualGrid</code>, <code>Col</code>, <code>Draggable</code>, <code>Mount</code>, <code>Calendar</code>, <code>CalendarView</code>, <code>ActivityLog</code>, <code>Gallery</code>, <code>FieldRepeater</code>, <code>NotificationBell</code>, <code>PresenceAvatars</code>, <code>SegmentedControl</code>, <code>ToggleGroup</code>.</td></tr>
+          <tr><td>DOM values</td><td><code>DomElement</code>, <code>DomFile</code>, <code>DomEvent</code>, <code>DomKeyboardEvent</code>, <code>DomMouseEvent</code>, <code>DomPointerEvent</code>, <code>DomFocusEvent</code>, <code>DomDragEvent</code>, <code>DomWheelEvent</code>, <code>DomClipboardEvent</code>, <code>DomInputEvent</code>.</td></tr>
+          <tr><td><code>sx</code>, <code>animate</code>, <code>role</code></td><td><code>SxProps</code>, <code>AnimateValue</code> and <code>AriaRole</code>, printed from the runtime&rsquo;s own tables. <code>class</code> / <code>className</code> take a string or an array; <code>style</code> takes a string.</td></tr>
+          <tr><td><code>$theme</code>, icons</td><td><code>ThemeConfig</code>, with one key set per token group; <code>AktionIconName</code> for icon names.</td></tr>
+          <tr><td><code>$util</code>, <code>$toast</code>, <code>$head</code></td><td>Generic helpers (the element type flows through); the value sets each one honours.</td></tr>
+          <tr><td>Data, stores, forms, routes</td><td>A type argument for <code>$http&lt;T&gt;</code> / <code>$query&lt;T&gt;</code>; <code>Store&lt;Fields&gt;</code> for a <code>$store</code> method&rsquo;s handle; one <code>Validator&lt;T&gt;</code> per <code>$form</code> field; <code>RouteParamsOf&lt;"/users/:id"&gt;</code> for route params.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <strong>Props and callbacks.</strong> A callback parameter is typed from the
+        component, so you rarely annotate one. The runtime ignores what an event
+        handler returns, so handlers return <code>unknown</code> and may return
+        anything, a promise included; only the few callbacks whose result is used
+        are typed with what they must return (<code>VirtualList</code>&rsquo;s
+        <code>renderItem</code> and <code>Col</code>&rsquo;s <code>render</code> return
+        what to render, <code>Mount</code>&rsquo;s <code>setup</code> the instance).
+        Every callback prop also accepts <code>null</code>, which leaves the
+        component without that handler &mdash; switch one on and off with a ternary.
+        (The snippets in this section share <code>Order</code>, <code>rows</code> and
+        the atoms declared in them.)
+      </p>
+<pre><code>import { $util, Button, Column, Input, type AktionNode, type BadgeTone } from "aktion-runtime/dsl";
+
+interface Order { id: number; customer: string; paid: boolean; plan: "free" | "pro" }
+
+let $email = "";
+let $dirty = false;
+function save(): void { $dirty = false; }
+
+export function statusTone(order: Order): BadgeTone {   // "neutral" | "primary" | "success" | …
+  return order.paid ? "success" : "warning";
+}
+
+export function EmailForm(): AktionNode {
+  return Column([
+    Input("email", { value: $email, onChange: (value) =&gt; { $email = value; $dirty = true; } }),   // value: string
+    Button("Save", { onClick: $dirty ? save : null, variant: "primary" }),                       // null: no handler
+    Button("Copy", { onClick: () =&gt; $util.copy($email).then((ok) =&gt; { $dirty = !ok; }) }),      // a promise is fine
+  ]);
+}</code></pre>
+      <p>
+        <strong>Components that hand your data back are generic.</strong> A list,
+        a column, a drag payload or a mounted widget infers its type parameter from
+        what you pass, and every callback that gives the value back receives that
+        type:
+      </p>
+<pre><code>import { $query, Badge, Col, DataGrid, Text, VirtualList } from "aktion-runtime/dsl";
+
+const $orders = $query&lt;Order[]&gt;({ url: "/api/orders" });   // .data: Order[] | undefined
+const rows: Order[] = $orders.data ?? [];
+
+export const list = VirtualList(rows, {
+  renderItem: (order) =&gt; Text(order.customer),       // order: Order
+});
+
+export const grid = DataGrid([
+  Col("Customer", rows.map((o) =&gt; o.customer)),
+  Col("Plan", rows.map((o) =&gt; o.plan), {
+    render: (plan) =&gt; Badge(plan, { tone: plan === "pro" ? "primary" : "neutral" }),   // plan: "free" | "pro"
+  }),
+]);</code></pre>
+      <p>
+        <strong>DOM values arrive as the <code>Dom*</code> bridge types.</strong>
+        A <code>Mount</code> host, a keyboard event or a picked file is typed as
+        <code>DomElement</code>, <code>DomKeyboardEvent</code>, <code>DomFile</code>
+        and so on. With the DOM lib loaded these are <code>lib.dom</code>&rsquo;s own
+        <code>HTMLElement</code>, <code>KeyboardEvent</code> and <code>File</code>;
+        without it, they are the structural subset the runtime guarantees, so the
+        same module type-checks either way:
+      </p>
+<pre><code>import { FileUpload, Mount, OnKeyboard, Text } from "aktion-runtime/dsl";
+
+export const widget = Mount((node) =&gt; {               // node: DomElement
+  node.setAttribute("data-ready", "true");
+  return { zoom: 3 };                                   // the instance
+}, {
+  update: (instance, _props, node) =&gt; node.setAttribute("data-zoom", String(instance.zoom)),   // instance: { zoom: number }
+});
+
+export const keys = OnKeyboard(Text("Escape discards the draft"), (event) =&gt; {   // event: DomKeyboardEvent
+  if (event.key === "Escape") $dirty = false;
+});
+
+export const avatar = FileUpload("avatar", {
+  onSelect: (files) =&gt; { $email = files.map((f) =&gt; f.name).join(", "); },   // files: DomFile[]
+});</code></pre>
+      <p>
+        <strong><code>sx</code> is a typed style object</strong>, derived from the
+        tables the runtime resolves it with (see <a href="sx.html">The sx prop</a>).
+        Its keys are closed, so a key the runtime would ignore is an error &mdash;
+        there is no <code>_hover</code>; use <code>hover</code>, <code>focus</code> or
+        <code>states</code>. Enum keys (<code>display</code>, <code>position</code>,
+        <code>shadow</code>, <code>cursor</code>&hellip;) take only their values. Token
+        keys autocomplete their tokens and still accept any CSS string, through
+        <code>(string &amp; {})</code>: <code>"60ch"</code>, <code>"#0969da"</code>,
+        <code>"clamp(1rem, 2vw, 2rem)"</code>. A number on a length key is pixels,
+        and the keys that honour a breakpoint map accept one. <code>hover</code> and
+        <code>focus</code> take an effect name or an object of effect flags and state
+        styles (<code>focus</code> has only the <code>glow</code> and
+        <code>border</code> effects), and <code>states</code> one style object per
+        state. <code>animate</code> takes an <code>AnimatePreset</code> name,
+        <code>"none"</code>, or <code>{ preset, duration, delay, repeat }</code>;
+        <code>role</code> takes the
+        allow-listed <code>AriaRole</code>s; and <code>style</code> is a string
+        &mdash; build one from an object with <code>$util.style.toStyle({ … })</code>.
+      </p>
+<pre><code>import { $util, Column, Text, type SxProps } from "aktion-runtime/dsl";
+
+export const panel: SxProps = {
+  p: 16,                                      // a number on a length key is px
+  maxW: "60ch",                               // tokens autocomplete; any CSS length type-checks
+  bg: { base: "surface", md: "bg-subtle" },   // a breakpoint map
+  radius: "lg",
+  hover: "lift",
+  states: { active: { scale: 0.98 }, "focus-visible": { borderColor: "primary" } },
+};
+
+export const card = Column([Text("Hello")], {
+  sx: panel,
+  animate: { preset: "fade-up", duration: 300 },
+  role: "region",
+  className: ["card", $dirty ? "card--dirty" : ""],
+  style: $util.style.toStyle({ outlineOffset: "2px" }),
+});</code></pre>
+      <p>
+        <strong><code>$theme</code> and icons.</strong> <code>ThemeConfig</code> has
+        one key set per token group &mdash; <code>colors</code> takes the camelCase
+        colour tokens (<code>bgSubtle</code>, <code>primaryText</code>),
+        <code>radius</code>, <code>spacing</code>, <code>shadows</code> and
+        <code>zIndex</code> their own scales, <code>gradients</code> the six gradient
+        tokens (two or more colour stops, <code>{ stops, angle }</code>, or a
+        <code>linear-gradient(…)</code>-style string) &mdash; so an unknown token, or a
+        plain colour where a gradient belongs, is an error rather than a silently
+        dropped value. <code>AktionIconName</code> types an icon name in your
+        own components: a Font Awesome name, a <code>"regular:star"</code>-style
+        prefixed name, or one you registered. It stays open to any string, as the
+        built-in <code>icon</code> props are, and the names you add to
+        <code>AktionIconRegistry</code> autocomplete.
+      </p>
+      <p>
+        <strong>The built-in functions.</strong> The <code>$util</code> list helpers
+        are generic: <code>$util.first(rows)</code> is <code>Order | null</code>, a
+        field argument autocompletes the element&rsquo;s keys, and
+        <code>$util.worker(fn, …args)</code> checks the arguments against
+        <code>fn</code>. <code>$toast</code> takes only the toast tones and corner
+        positions (<code>ToastShowTone</code>, <code>ToastStackPosition</code>) and
+        <code>$head</code> only the link <code>rel</code>s it renders
+        (<code>HeadLinkRel</code> &mdash; no <code>stylesheet</code>). Give
+        <code>$http</code> and <code>$query</code> the response type, as above. A
+        <code>$store</code> method&rsquo;s handle is <code>any</code> unless you
+        annotate it, because TypeScript cannot infer it from the object literal it
+        is defined in; annotate it with <code>Store&lt;Fields&gt;</code>, and callers
+        of the store are fully typed. <code>$form</code> hands each field&rsquo;s
+        validators that field&rsquo;s value:
+      </p>
+<pre><code>import { $form, $store, $util, Button, type Store } from "aktion-runtime/dsl";
+
+export const latest = $util.first(rows);                 // Order | null
+export const byPlan = $util.groupBy(rows, "plan");       // Record&lt;string, Order[]&gt;
+
+interface Cart { items: string[] }
+export const cart = $store({
+  items: [] as string[],
+  add: (s: Store&lt;Cart&gt;, item: string) =&gt; { s.items = [...s.items, item]; },
+});
+export const addApple = Button("Add", { onClick: () =&gt; cart.add("apple") });   // callers pass only `item`
+
+export const signup = $form({
+  values: { email: "", age: 0 },
+  rules: {
+    email: [$util.rules.required(), $util.rules.email()],
+    age: $util.rules.custom((age) =&gt; age &gt;= 18 || "Adults only"),   // age: number
+  },
+});</code></pre>
+      <p>
+        Route params have a type per pattern: <code>RouteParamsOf&lt;"/users/:id/files/*"&gt;</code>
+        is <code>{ readonly id: string; readonly _: string }</code> (a trailing
+        <code>*</code> captures the rest of the path as <code>_</code>). Arms are
+        expressions, so <code>params</code> cannot be typed per arm by inference
+        &mdash; cast it in the arm: <code>UserPage(params as RouteParamsOf&lt;"/users/:id"&gt;)</code>.
+      </p>
+      <p>
         Prefer the module form. For code that names built-ins without importing
         them, <code>aktion-runtime/dsl-globals</code> declares the same names
         ambiently &mdash; but only in a tsconfig <em>without</em> the DOM lib, because
         <code>Text</code>, <code>Image</code> and <code>console</code> collide with
-        it. Host-registered components join through module augmentation:
+        it. Host-registered components, and the icon names you register, join
+        through module augmentation, in a file that is itself a module:
       </p>
-<pre><code>declare module "aktion-runtime/dsl" {
+<pre><code>// src/aktion-env.d.ts
+import "aktion-runtime/dsl";   // makes this file a module: without it, the block below replaces the built-ins
+
+declare module "aktion-runtime/dsl" {
+  interface AktionIconRegistry { logo: true }   // names from $theme({ icons }) or registerIcons
   export function PriceBadge(amount: number, props?: { currency?: string }): AktionNode&lt;"PriceBadge"&gt;;
 }</code></pre>
 
@@ -170,17 +417,28 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
   },
   "include": ["src", "tests", ".aktion-types"]
 }</code></pre>
-      <p>A few TypeScript habits matter here, and <code>tsc</code> enforces each one:</p>
+      <p>
+        A few TypeScript habits matter here. With these options <code>tsc</code>
+        flags most slips; where it accepts the code, Aktion reports it:
+      </p>
       <table class="signature-table">
         <thead><tr><th>Rule</th><th>Why</th></tr></thead>
         <tbody>
           <tr><td>Declare atoms that change with <code>let</code></td><td><code>const $x</code> cannot be reassigned (<code>TS2588</code>).</td></tr>
           <tr><td>Change an imported atom through an exported action</td><td>An import is a read-only binding in TypeScript (<code>TS2632</code>).</td></tr>
-          <tr><td>Import types with <code>import type</code></td><td>Erasure removes type-only imports; a value import of a type would reach the linker, which reports <code>does not export 'Todo'</code>.</td></tr>
+          <tr><td>Import types with <code>import type</code></td><td>Erasure removes type-only imports; a value import of a type would reach the linker, which reports <code>does not export 'Todo'</code>. The inline form is not enough: <code>import { type Todo } from "./types.ts"</code> still imports the native file for its side effects under <code>verbatimModuleSyntax</code>, and <code>tsc</code> accepts it, so Aktion refuses it and suggests <code>import type { Todo }</code>.</td></tr>
           <tr><td>No <code>enum</code>, <code>namespace</code>, parameter properties, <code>&lt;T&gt;x</code> casts or decorators</td><td>They have runtime meaning and cannot be erased; Aktion reports each one at its position.</td></tr>
-          <tr><td>Write the <code>.ts</code> extension</td><td>Aktion resolves files, not TypeScript module names.</td></tr>
+          <tr><td>Write the <code>.ts</code> extension</td><td>Aktion resolves files, not TypeScript module names: <code>./x.aktion.js</code> for <code>x.aktion.ts</code>, which <code>tsc</code> resolves, reports <code>Did you mean "./x.aktion.ts"?</code>.</td></tr>
         </tbody>
       </table>
+      <p>
+        Handlers may return a promise. Every component callback whose result the
+        runtime ignores is typed to return <code>unknown</code>, not
+        <code>void</code>, so <code>onClick: () =&gt; $util.copy(text).then(…)</code>
+        type-checks, and typescript-eslint&rsquo;s <code>no-misused-promises</code>
+        &mdash; which reports a promise-returning function only where a
+        <code>void</code> return is expected &mdash; stays quiet about it.
+      </p>
 
       <h3 id="aktion-ts-semantics">Where Aktion is not JavaScript</h3>
       <p>
@@ -194,12 +452,15 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
         <li>every local variable gets its own name, so a block&rsquo;s <code>let</code> stays in its block, a local never overwrites a module binding, a helper reads the module&rsquo;s variable rather than its caller&rsquo;s, and a parameter wins over a top-level function of the same name;</li>
         <li>a function declared inside another becomes a <code>const</code> function at the same place, so an <code>onClick</code> can call it later (it is <em>not</em> hoisted);</li>
         <li>a function body that does not <code>return</code> returns <code>undefined</code>, as in JavaScript, instead of its last expression;</li>
-        <li>a module-level <code>const Card = (…) =&gt; …</code> with a capitalised name is a component, so hooks and per-instance state work in it.</li>
+        <li>a module-level <code>const Card = (…) =&gt; …</code> with a capitalised name is a component, so hooks and per-instance state work in it;</li>
+        <li>a call to one of your components declared in a <code>.aktion.ts</code> / <code>.aktion.js</code> module binds its arguments by position, as JavaScript does &mdash; <code>KVRow({ key: "a", value: "1" })</code> hands the whole object to the first parameter, however the import spells the path (<code>"./cards"</code> or <code>"./cards.aktion.ts"</code>). <code>key:</code> still sets the instance identity, from an extra object after the declared parameters (<code>ItemRow(item, { key: item.id })</code> for <code>function ItemRow(item)</code>) or from a last argument whose only property is <code>key</code> (see <a href="#aktion-ts-keys">Keys and children</a>), and the object itself is still passed as JavaScript passes it. Calls written in <code>.aktion</code>, and calls to components declared in <code>.aktion</code>, keep Aktion&rsquo;s named props;</li>
+        <li>a <code>...rest</code> parameter on a component gathers every remaining argument into an array.</li>
       </ul>
       <p>
         The rest it <strong>rejects</strong>, with an error at the exact line and a
-        stable code (the full list, with every message, is in the
-        <a href="https://github.com/asfand-dev/aktion/blob/main/CHANGELOG.md">CHANGELOG</a>):
+        stable code (the
+        <a href="https://github.com/asfand-dev/aktion/blob/main/CHANGELOG.md">CHANGELOG</a>
+        lists every code; each error message says what to write instead):
       </p>
       <table class="signature-table">
         <thead><tr><th>Code</th><th>Rejected</th><th>Instead</th></tr></thead>
@@ -207,16 +468,24 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
           <tr><td>E101, E102</td><td><code>await</code>, <code>async</code> &mdash; bodies run synchronously</td><td><code>.then(…)</code>, or <code>$http(…)</code> and its <code>.onDone</code></td></tr>
           <tr><td>E103, E104</td><td><code>this</code>, <code>arguments</code>, <code>var</code></td><td>parameters, a rest parameter, <code>let</code> / <code>const</code></td></tr>
           <tr><td>E105, E106</td><td>a local reassigned after a closure captured it; a closure using a local declared after it &mdash; closures copy their scope when they are created</td><td>a <code>$state</code> atom, <code>$ref(…)</code>, or an object box; declare first</td></tr>
-          <tr><td>E107</td><td>changing a module-level binding after it was built &mdash; module-level bindings are rebuilt every render</td><td>a state atom (<code>let $items = []</code>)</td></tr>
-          <tr><td>E108</td><td><code>$todos.push(t)</code> and other in-place changes of a data atom &mdash; only assignment re-renders</td><td><code>$todos = [...$todos, t]</code></td></tr>
+          <tr><td>E107</td><td>changing a module-level binding in place after it was built, in a function or at module top level (<code>xs.push(2)</code>, <code>byId[k] = v</code> in a top-level loop, <code>Object.assign(o, …)</code>) &mdash; every render rebuilds it from its initializer, so the change is lost. Not reported for a <code>$store</code> / <code>$form</code> / <code>$query</code> handle or a host object read through a global (<code>const root = document.documentElement</code>), which survive the rebuild</td><td>build the whole value in the initializer (<code>[1, 2]</code>, <code>Object.fromEntries(…)</code>, <code>new Map([[k, v]])</code>), or use a state atom (<code>let $items = []</code>)</td></tr>
+          <tr><td>E108</td><td><code>$todos.push(t)</code>, <code>Object.assign($cfg, …)</code> and other in-place changes of a data atom &mdash; only assignment re-renders</td><td><code>$todos = [...$todos, t]</code></td></tr>
           <tr><td>E109, E110</td><td>per-instance state or hooks anywhere but the top of a component (or hook) body</td><td>move them up</td></tr>
           <tr><td>E111</td><td>a capitalised function used as a value &mdash; it is a component</td><td>name the helper in camelCase</td></tr>
           <tr><td>E112, E115</td><td>names the runtime owns (<code>route</code>, <code>params</code>, a binding named like a built-in component, <code>__a1_x</code> / <code>__l1_x</code>)</td><td>rename</td></tr>
-          <tr><td>E113, E117&ndash;E121</td><td>block statements, spreads in a built-in&rsquo;s props, <code>$app</code> anywhere but the top level, an <code>$effect</code> callback that is not inline, deps that are not an array literal, returning a cleanup from an effect</td><td>see each message</td></tr>
+          <tr><td>E113, E117&ndash;E121</td><td>block statements (<code>{ const x = 1 }</code>, and the <code>case X: { … }</code> form ESLint&rsquo;s <code>no-case-declarations</code> asks for), reported once at the <code>{</code>; spreads in a built-in&rsquo;s props, <code>$app</code> anywhere but the top level, an <code>$effect</code> callback that is not inline, deps that are not an array literal, returning a cleanup from an effect</td><td>see each message</td></tr>
           <tr><td>E114, E124&ndash;E126</td><td>a derived atom that is also assigned, destructuring a <code>$store</code> / <code>$form</code> handle, assigning an undeclared name, components or hooks declared inside functions</td><td>see each message</td></tr>
+          <tr><td>E122, E123</td><td>an aliased <code>aktion-runtime/dsl</code> import (<code>{ Button as B }</code>); a name imported from <code>aktion-runtime/dsl</code> and also declared in the module</td><td>import each built-in by its own name; remove one of the two</td></tr>
+          <tr><td>E127</td><td><code>$router(…)</code> arms Aktion cannot read from the source: arms passed as a value (<code>$router(routes)</code>), a spread (<code>...more</code>), a computed path (<code>[path]: …</code>), or a layout arm whose <code>routes</code> is not an object literal &mdash; the runtime ignores them: a table passed as a value renders nothing, a spread or computed arm is skipped, and the layout arm renders no child route. <code>RouteTable</code> accepts any object, so <code>tsc</code> does not catch this; in the editor, the ESLint rule <code>aktion/router-literal</code> flags the tables, spreads and <code>routes</code> that are not literals</td><td>list every arm, with a string path, in the object literal at the call: <code>$router({ "/": Home(), default: NotFound() })</code></td></tr>
           <tr><td>W201, W202</td><td><em>Warnings:</em> a module-level value from <code>Date.now()</code>, <code>Math.random()</code> or <code>crypto</code> (recomputed each render); a state-writing function called while rendering</td><td>compute it in a component, effect or action</td></tr>
         </tbody>
       </table>
+      <p>
+        A <code>${…}</code> interpolation that is not one complete expression
+        (<code>${}</code>, <code>${import.meta.env.X}</code>, a BigInt, a typo) is a
+        parse error at its own position, in every module language,
+        <code>.aktion</code> included &mdash; it no longer renders as an empty string.
+      </p>
       <p>And some differences no compiler can see, because they depend on runtime values:</p>
       <ul>
         <li>division by zero and other <code>NaN</code> results are <code>0</code>; two numeric strings compare as numbers; <code>null</code> and <code>undefined</code> concatenate as <code>""</code> and objects as JSON;</li>
@@ -224,7 +493,8 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
         <li>property access on an array plucks (<code>users.name</code>), and reading a method as a value (<code>const up = s.toUpperCase</code>) gives <code>undefined</code>;</li>
         <li>a call to an unknown function renders a placeholder instead of throwing &mdash; <code>tsc</code> catches the unknown name;</li>
         <li><code>cond &amp;&amp; Text("x")</code> renders <code>false</code> when <code>cond</code> is false &mdash; use <code>cond ? Text("x") : null</code> (the types reject the boolean child);</li>
-        <li>a props bag must be an object literal at the call: <code>Button("Go", opts)</code> binds <code>opts</code> to <code>onClick</code>. The ESLint rule <code>aktion/props-literal</code> flags it.</li>
+        <li>a props bag must be an object literal at the call: <code>Button("Go", opts)</code> binds <code>opts</code> to <code>onClick</code>. The ESLint rule <code>aktion/props-literal</code> flags it, unless <code>opts</code> is typed <code>any</code> (as every untyped parameter of a <code>.aktion.js</code> module is), because then nothing says it holds props;</li>
+        <li>the other way round, in a call with two or more arguments the last object literal is read as the props bag as soon as one of its keys is a prop name, even where TypeScript matched it to an object parameter: <code>HTMLTag("section", { "data-x": "1", id: "a" })</code> renders <code>&lt;section id="a"&gt;</code> and drops <code>data-x</code>. Pass <code>{ attributes: { … }, id: "a" }</code> instead, and move any argument after the object into it too (<code>HTMLTag("div", { attributes: { … }, class: "hero", children: [ … ] })</code>), since no overload takes arguments after the props; <code>aktion/props-literal</code> flags this too.</li>
       </ul>
 
       <h3 id="aktion-ts-sidecars">Importing <code>.aktion</code> modules from TypeScript</h3>
@@ -233,18 +503,48 @@ document.querySelector&lt;AktionElement&gt;("#app")?.mountCompiled(app);</code><
         <code>import { TodoRow } from "./todo-row.aktion"</code> in a
         <code>.aktion.ts</code> module needs a declaration. The plugin writes one per
         module &mdash; <code>todo-row.d.aktion.ts</code>, found through
-        <code>allowArbitraryExtensions</code> &mdash; declaring each export (a component
-        as a function of optional parameters, an action with its arity checked, an
-        atom with the type of a literal initializer):
+        <code>allowArbitraryExtensions</code> &mdash; declaring each export:
       </p>
+      <ul>
+        <li>a component, with one overload per way a call binds: its parameters by
+          position, followed by children, or a named-props object
+          (<code>TodoRowProps</code> &mdash; the parameters by name, <code>key</code>,
+          and named slots) after any prefix of them;</li>
+        <li>an action or hook, with its arity checked;</li>
+        <li>a parameter with a literal default, typed from it &mdash;
+          <code>tone = "muted"</code> is <code>string | null</code>, because only
+          <code>undefined</code> selects the default;</li>
+        <li>an atom, typed from its initializer (literals, array and object literals,
+          <code>$http</code> / <code>$query</code> / <code>$mutation</code> /
+          <code>$form</code> / &hellip; resources) and widened by the values the
+          module assigns to it.</li>
+      </ul>
 <pre><code>// vite.config.ts
 export default defineConfig({ plugins: [aktion({ dts: true })] });   // → .aktion-types/</code></pre>
       <p>
         For CI, run the same generator before <code>tsc</code>; <code>--check</code>
-        fails when a declaration is stale:
+        fails when a declaration is stale. The <code>--lang ts</code> templates&rsquo;
+        <code>typecheck</code> script does exactly this:
+        <code>aktion-dts --quiet &amp;&amp; tsc</code>.
       </p>
 <pre><code>npx aktion-dts &amp;&amp; npx tsc --noEmit
 npx aktion-dts --check</code></pre>
+      <p>
+        Modules of an <code>alias</code> &mdash; the plugin option, or
+        <code>aktion.config.json</code>, which <code>aktion-dts</code> reads too
+        (<code>--no-config</code> skips it) &mdash; are declared under
+        <code>.aktion-types/&lt;prefix&gt;/</code>. TypeScript needs a
+        <code>paths</code> entry for an alias anyway; give it the mirror as a
+        fallback:
+      </p>
+<pre><code>"paths": { "@acme/ui/*": ["../../libs/ui/src/*", "./.aktion-types/@acme/ui/*"] }</code></pre>
+      <p>
+        A directory reached through <code>roots</code> is not mirrored: run
+        <code>aktion-dts --out-dir .</code> in that package, so each declaration sits
+        next to its module. The declarations type imports between Aktion modules
+        only &mdash; host code still takes just the default export
+        (<a href="#aktion-ts-example">see above</a>).
+      </p>
       <p>
         <code>.aktion.js</code> modules need no declarations &mdash; with
         <code>allowJs</code>, TypeScript reads them directly. Don&rsquo;t keep a
@@ -256,9 +556,12 @@ npx aktion-dts --check</code></pre>
       <h3 id="aktion-ts-eslint">Linting</h3>
       <p>
         <code>aktion-runtime/eslint</code> exports <code>aktionTypeScriptConfig</code>
-        for <code>**/*.aktion.ts</code> and <code>**/*.aktion.js</code>: it turns off
-        the rules whose autofixes break Aktion code, and adds the type-aware
-        <code>aktion/props-literal</code> rule. Spread it after your own config:
+        for <code>**/*.aktion.ts</code> and <code>**/*.aktion.js</code>. It turns off
+        the rules whose autofixes break Aktion code and the ones that report
+        Aktion&rsquo;s own idioms (component calls, top-level <code>$app</code> and
+        <code>$effect</code>, actions that assign atoms). It adds two rules of its
+        own: the type-aware <code>aktion/props-literal</code> and
+        <code>aktion/router-literal</code>. Spread it after your own config:
       </p>
 <pre><code>// eslint.config.js
 import tseslint from "typescript-eslint";
@@ -268,9 +571,30 @@ import { aktionTypeScriptConfig } from "aktion-runtime/eslint";
 export default [
   ...tseslint.configs.recommended,
   unicorn.configs.recommended,
-  { languageOptions: { parserOptions: { projectService: true } } },
+  {
+    languageOptions: {
+      parserOptions: {
+        projectService: { allowDefaultProject: ["*.config.js", "*.config.ts"] },
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
   ...aktionTypeScriptConfig,
 ];</code></pre>
+      <p>
+        <code>allowDefaultProject</code> is there for the files at the project root:
+        <code>eslint.config.js</code>, <code>vite.config.ts</code> and
+        <code>vitest.config.ts</code> are outside the tsconfig&rsquo;s
+        <code>include</code>, and without it the project service refuses to parse
+        them. Because the preset comes last, it also wins over your own settings
+        for these files, and two of its entries switch a rule <em>on</em> as an
+        error: <code>object-shorthand</code> in <code>properties</code> mode
+        (<code>{ title: title }</code> becomes <code>{ title }</code>) and
+        <code>unicorn/switch-case-braces</code> in <code>avoid</code> mode, which
+        removes the braces Aktion cannot parse around a <code>case</code> body. The
+        second needs <code>eslint-plugin-unicorn</code>; without it, add a block
+        after the preset that turns <code>unicorn/switch-case-braces</code> off.
+      </p>
 
       <h2 id="install">Install &amp; tsconfig</h2>
       <p>
@@ -349,18 +673,21 @@ export default [
           <tr><td><code>aktion-runtime</code></td><td>The runtime: registers <code>&lt;aktion-app&gt;</code> on import, plus <code>registerComponents</code>, the themes, the SSR helpers, and every core type.</td></tr>
           <tr><td><code>aktion-runtime/test</code></td><td>The Testing-Library-style API (<code>render</code>, <code>renderComponent</code>, <code>within</code>, <code>axe</code>, <code>fetch</code> mocks). See <a href="testing.html">Testing</a>.</td></tr>
           <tr><td><code>aktion-runtime/devtools</code></td><td>The DevTools backend and in-page panel. See <a href="devtools.html">DevTools</a>.</td></tr>
+          <tr><td><code>aktion-runtime/coverage</code></td><td>The DOM&#8209;free <code>coverage</code> API &mdash; the lines, functions and branches of Aktion source the interpreter reached &mdash; sharing one session with <code>aktion-runtime/test</code>, for a Vitest <code>globalSetup</code> or a Node script. See <a href="testing.html">Testing</a>.</td></tr>
           <tr><td><code>aktion-runtime/language</code></td><td>DOM&#8209;free language + tooling surface: diagnostics, completions, hover, navigation, semantic tokens, signature help, <code>formatProgram</code>.</td></tr>
+          <tr><td><code>aktion-runtime/eslint</code></td><td>The ESLint processor and presets: <code>configs.recommended</code> for <code>.aktion</code> files, <code>aktionTypeScriptConfig</code> and the <code>aktion/props-literal</code> and <code>aktion/router-literal</code> rules for <code>.aktion.ts</code> / <code>.aktion.js</code> &mdash; see <a href="#aktion-ts-eslint">Linting</a>.</td></tr>
           <tr><td><code>aktion-runtime/vite</code></td><td>The Vite plugin for <code>.aktion</code>, <code>.aktion.ts</code> and <code>.aktion.js</code> modules (default export), the compile helpers, the TypeScript frontend and <code>emitAktionDeclarations</code>.</td></tr>
           <tr><td><code>aktion-runtime/dsl</code></td><td><em>Types only.</em> Every built-in component, hook and namespace, for <code>.aktion.ts</code> modules &mdash; see <a href="#aktion-dsl">above</a>.</td></tr>
           <tr><td><code>aktion-runtime/dsl-globals</code></td><td><em>Types only.</em> The same names declared ambiently, for a tsconfig without the DOM lib.</td></tr>
           <tr><td><code>aktion-runtime/aktion-modules</code></td><td><em>Types only.</em> Ambient <code>declare module "*.aktion"</code> declarations &mdash; see above.</td></tr>
-          <tr><td><code>aktion-runtime/style.css</code></td><td>The base stylesheet, for hosts that render outside the shadow root.</td></tr>
           <tr><td><code>aktion-runtime/system_prompt.txt</code><br /><code>aktion-runtime/system_prompt_chat.txt</code></td><td>The full and chat-sized system prompts as plain text files, for build steps that read them from disk. From a program, prefer <code>element.getSystemPrompt()</code>.</td></tr>
+          <tr><td><code>aktion-runtime/skill</code></td><td>The Aktion agent skill (<code>SKILL.md</code>), for tools that load it from the package.</td></tr>
         </tbody>
       </table>
       <p>
-        Only <code>aktion-runtime</code> and <code>aktion-runtime/vite</code> ship a
-        CommonJS build; the rest are ESM&#8209;only.
+        Only <code>aktion-runtime</code>, <code>aktion-runtime/vite</code> and
+        <code>aktion-runtime/eslint</code> ship a CommonJS build; the other
+        JavaScript entries are ESM&#8209;only.
       </p>
 
       <h2 id="types">The public types</h2>
@@ -679,9 +1006,9 @@ if (result.errors.length === 0) writeFileSync(path, result.formatted);</code></p
       <table class="signature-table">
         <thead><tr><th>Export</th><th>Signature</th><th>Purpose</th></tr></thead>
         <tbody>
-          <tr><td><code>renderToString</code></td><td><code>(program, opts?) =&gt; { html, state, head, headAttrs }</code></td><td>SSR &mdash; markup, a hydration snapshot, and the <code>$head</code> output.</td></tr>
+          <tr><td><code>renderToString</code></td><td><code>(program, opts?) =&gt; { html, state, head, headAttrs }</code></td><td>SSR &mdash; markup, a hydration snapshot, and the <code>$head</code> output. <code>program</code> is a compiled program or Aktion text.</td></tr>
           <tr><td><code>renderToStaticMarkup</code></td><td><code>(program, opts?) =&gt; string</code></td><td>SSG &mdash; the <code>html</code> field only.</td></tr>
-          <tr><td><code>renderToTextTree</code></td><td><code>(program, opts?) =&gt; { text, errors, ok }</code></td><td>An indented outline of the rendered tree, for snapshot tests and LLM feedback loops.</td></tr>
+          <tr><td><code>renderToTextTree</code></td><td><code>(program, opts?) =&gt; { text, errors, ok }</code></td><td>An indented outline of the rendered tree, for snapshot tests and LLM feedback loops. <code>program</code> is a compiled program or Aktion text.</td></tr>
           <tr><td><code>htmlToAktion</code></td><td><code>(html) =&gt; string</code></td><td>Importer &mdash; map common HTML/JSX tags to an Aktion program.</td></tr>
           <tr><td><code>tailwindToSx</code></td><td><code>(classString) =&gt; object</code></td><td>Map Tailwind utilities (incl. arbitrary values like <code>w-[327px]</code>) to an <code>sx</code> object; misses land in <code>_unmapped</code>.</td></tr>
           <tr><td><code>cssToSx</code></td><td><code>(cssText) =&gt; object</code></td><td>Map a raw CSS declaration string or rule to an <code>sx</code> object.</td></tr>
@@ -692,14 +1019,24 @@ if (result.errors.length === 0) writeFileSync(path, result.formatted);</code></p
         </tbody>
       </table>
       <p>
-        <code>renderToString</code> returns <strong>four</strong> fields, not two.
+        To render a compiled program, pass <strong>the program itself</strong>
+        &mdash; the default import of a <code>.aktion</code> /
+        <code>.aktion.ts</code> / <code>.aktion.js</code> entry, or what
+        <code>compileAktionFile</code> returns. <code>renderToString(app)</code>
+        renders its AST as linked, as <code>mountCompiled</code> does in the browser,
+        and does not re-parse <code>app.source</code>. The string form,
+        <code>renderToString(source)</code>, is for plain Aktion text.
+      </p>
+      <p>
+        Either way it returns <strong>four</strong> fields, not two.
         Dropping <code>head</code> and <code>headAttrs</code> is what silently
         loses your <code>&lt;title&gt;</code>, meta tags, and Open Graph cards from
         the served page:
       </p>
 <pre><code>import { renderToString } from "aktion-runtime";
+import app from "./app.aktion.ts";   // the compiled program
 
-const { html, state, head, headAttrs } = renderToString(source, { path: "/" });
+const { html, state, head, headAttrs } = renderToString(app, { path: "/" });
 
 const attrs = Object.entries(headAttrs).map(([k, v]) =&gt; `${k}="${v}"`).join(" ");
 const page = `&lt;!doctype html&gt;
@@ -711,9 +1048,10 @@ const page = `&lt;!doctype html&gt;
   &lt;/body&gt;
 &lt;/html&gt;`;</code></pre>
       <p>
-        Ship <code>state</code> to the browser and hand it to
-        <code>element.loadSnapshot({ programText, state })</code> so hydration
-        starts from the server&rsquo;s values.
+        Ship <code>state</code> to the browser and hand it back with the same
+        program &mdash; <code>element.mountCompiled(app, state)</code> for a compiled
+        program, <code>element.loadSnapshot({ programText, state })</code> for text
+        &mdash; so hydration starts from the server&rsquo;s values.
         <a href="head.html#ssr">Head</a> owns the <code>head</code> /
         <code>headAttrs</code> fields; <a href="deployment.html">Deployment</a>
         covers the serving side.

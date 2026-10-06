@@ -16,6 +16,15 @@ export interface ParseOptions {
      * one call instead of becoming two statements.
      */
     softNewlines?: ReadonlySet<number>;
+    /**
+     * Read a `{` at the start of a statement that is not an object literal as a
+     * statement block — an `ExpressionStatement` whose expression is a `Block` —
+     * instead of failing inside the object-literal grammar. For the
+     * `.aktion.js` / `.aktion.ts` frontends, which reject block statements
+     * (E113) at the `{` with one diagnostic; `.aktion` keeps reading every
+     * statement-position `{` as an object literal.
+     */
+    statementBlocks?: boolean;
 }
 export declare function parse(source: string, options?: ParseOptions): Program;
 /**

@@ -2,7 +2,7 @@ import { Linter } from 'eslint';
 /**
  * Rule overrides that are properties of the Aktion LANGUAGE ITSELF, not of
  * any one consumer's app — every consumer routing `.aktion` files through
- * `aktionProcessor` (see `processor.ts`) hits the same eight false positives
+ * `aktionProcessor` (see `processor.ts`) hits the same ten false positives
  * / grammar incompatibilities, because they all stem from this repo's own
  * grammar (`src/parser/parser.ts`) or this repo's own component/reactivity
  * idiom (`src/library`, `src/runtime`), not from anything a consumer wrote.
@@ -21,9 +21,12 @@ import { Linter } from 'eslint';
  *   designed to do, correctly, against JS/TS in general, but the pattern it
  *   flags is the DSL's normal, unavoidable idiom, not a mistake.
  *
- * `tests/eslint-corpus-sweep.test.ts` re-verifies all eight against this
- * repo's own real `.aktion` corpus on every test run — see that file for the
- * measured trigger counts. That whole-corpus sweep is how the eighth entry
+ * `tests/eslint-corpus-sweep.test.ts` re-verifies the first eight against
+ * this repo's own real `.aktion` corpus on every test run — see that file for
+ * the measured trigger counts — and `tests/eslint-preset-idioms.test.ts`
+ * reproduces the last two (`unicorn/prefer-switch`,
+ * `unicorn/no-top-level-assignment-in-function`). That whole-corpus sweep is
+ * how the eighth entry
  * (`unicorn/switch-case-braces`) was found: it doesn't appear in the
  * downstream dcd-monorepo pilot this rule set was originally ported from
  * (its own `.aktion` corpus happens not to contain a `switch` statement
@@ -59,18 +62,23 @@ export declare const aktionRecommendedRules: Linter.RulesRecord;
  * - **CROSS-MODULE RENAME** — the autofix renames, in the one file ESLint is
  *   looking at, a name that other modules depend on, so they break.
  *
- * Every entry is `"off"` except `unicorn/switch-case-braces`, which is
- * reconfigured instead. ESLint does not validate a rule that is off, so the
- * `"off"` entries are inert where their plugin is not installed. The one
- * enabled entry is not: a config applying this record needs
- * `eslint-plugin-unicorn` registered under the `unicorn` namespace (XO and
- * unicorn's own `configs.recommended` both do that), or ESLint rejects the
- * config with `Could not find plugin "unicorn"`. Without unicorn, add a later
- * block with `"unicorn/switch-case-braces": "off"` — the autofix it guards
- * against cannot run without the plugin either.
+ * Two entries switch a rule ON, as an error, instead of off: core
+ * `object-shorthand` in `properties` mode (a style choice, see its entry) and
+ * `unicorn/switch-case-braces` in `avoid` mode (an autofix guard). Because the
+ * preset is spread after the consumer's own rule sets, both override whatever
+ * the consumer set for these files — `"object-shorthand": "off"` included.
+ * Every other entry is `"off"`, and ESLint does not validate a rule that is
+ * off, so those entries are inert where their plugin is not installed.
+ * `object-shorthand` needs no plugin; `unicorn/switch-case-braces` does: a
+ * config applying this record needs `eslint-plugin-unicorn` registered under
+ * the `unicorn` namespace (XO and unicorn's own `configs.recommended` both do
+ * that), or ESLint rejects the config with `Could not find plugin "unicorn"`.
+ * Without unicorn, add a later block with `"unicorn/switch-case-braces":
+ * "off"` — the autofix it guards against cannot run without the plugin either.
  *
- * `aktion/props-literal` is not in this record because it is this package's
- * own rule (`props-literal.ts`): `aktionTypeScriptConfig` in
- * `src/eslint-api.ts` registers the plugin and enables it next to these.
+ * `aktion/props-literal` and `aktion/router-literal` are not in this record
+ * because they are this package's own rules (`props-literal.ts`,
+ * `router-literal.ts`): `aktionTypeScriptConfig` in `src/eslint-api.ts`
+ * registers the plugin and enables them next to these.
  */
 export declare const aktionTypeScriptRules: Linter.RulesRecord;

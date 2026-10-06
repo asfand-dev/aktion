@@ -77,6 +77,16 @@ export interface LinkResult {
  */
 export declare function nativeImportMessage(spec: string, resolvedPath: string): string;
 /**
+ * Message for a TypeScript import of native code whose names are ALL inline
+ * type-only (`import { type Todo } from "./types.ts"`). `tsc` accepts it, but
+ * under `verbatimModuleSyntax` erasure keeps the declaration as
+ * `import {} from "./types.ts"` — a side-effect import of the native file —
+ * so the generic "rename it to types.aktion.ts" advice would be wrong.
+ *
+ * Exported so the docs and tests quote one source of truth.
+ */
+export declare function typeOnlyNativeImportMessage(spec: string, names: ReadonlyArray<string>): string;
+/**
  * Link the import graph rooted at `entrySource`/`entryPath` into one program.
  *
  * Each module is compiled by the frontend for its language

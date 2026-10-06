@@ -79,5 +79,10 @@ export declare function formatProgram(source: string, options?: FormatOptions): 
  * Re-emit a parsed `Program` as canonical Aktion source. Exported so the
  * module linker can serialise a merged (multi-file → single) program back to
  * text for `mountCompiled`'s round-trip fields (reconnect re-parse, snapshots).
+ *
+ * For a linked program the text is written so that parsing it again gives a
+ * program that behaves as this one does, AST-only fields included — see the
+ * "Means what the AST means" bullet at the top of this file, and
+ * `CompiledProgram.source` for what text cannot carry.
  */
 export declare function printProgram(program: Program, options?: FormatOptions): string;

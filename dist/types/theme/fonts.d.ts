@@ -22,6 +22,11 @@
  */
 export declare function buildFontUrl(list: unknown): string;
 /**
+ * The key of a `$theme({ fonts })` / `$theme({ font })` group that lists web
+ * fonts to import (a shorthand string or an array of them).
+ */
+export declare const FONT_IMPORT_KEY = "import";
+/**
  * Inject the web fonts named in `import` into `document.head` (idempotent).
  * `record` is the `fonts` group from a `$theme({ fonts: {...} })` call; only
  * its `import` array is used here (the `family`/`familyHeading` tokens are

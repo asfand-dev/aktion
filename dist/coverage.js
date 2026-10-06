@@ -18,13 +18,14 @@ function isNode(value) {
   const first = kind.charCodeAt(0);
   return first >= 65 && first <= 90;
 }
+const NON_CHILD_KEYS = /* @__PURE__ */ new Set(["loc", "leadingComments", "trailingComments", "innerComments"]);
 function walk(program, visit) {
   for (const stmt of program.statements) visitNode(stmt, null, null, null, 0, visit);
 }
 function visitNode(node, parent, key2, index, depth, visit) {
   if (visit({ node, parent, key: key2, index, depth }) === false) return;
   for (const childKey of Object.keys(node)) {
-    if (childKey === "loc") continue;
+    if (NON_CHILD_KEYS.has(childKey)) continue;
     const value = node[childKey];
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i += 1) {
@@ -42,7 +43,7 @@ function visitNode(node, parent, key2, index, depth, visit) {
 }
 function visitRecord(record, owner, key2, depth, visit) {
   for (const inner of Object.keys(record)) {
-    if (inner === "loc") continue;
+    if (NON_CHILD_KEYS.has(inner)) continue;
     const value = record[inner];
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i += 1) {

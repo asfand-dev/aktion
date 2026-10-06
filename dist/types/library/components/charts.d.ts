@@ -37,7 +37,16 @@ export interface SeriesStyle {
     name: string;
     color?: string;
 }
-/** A series' own colour when it declares one, its palette slot otherwise. */
+/**
+ * A series' own colour when it declares one, its palette slot otherwise.
+ *
+ * Sanitised HERE, at the one place every chart reads a series colour from, and
+ * not only in the readers (`readSeries`, ScatterChart's `readScatterSeries`):
+ * the value is interpolated into the legend swatch's inline `style` (where a
+ * `;` opened extra declarations) and the SVG `fill`, and a `SeriesStyle` built
+ * anywhere else would otherwise reach both unchecked. A rejected colour falls
+ * back to the palette slot.
+ */
 export declare const seriesColor: (series: SeriesStyle, index: number) => string;
 export declare const BarChart: ComponentSpec;
 export declare const LineChart: ComponentSpec;

@@ -12615,8 +12615,8 @@ function normalisePath(raw) {
   if (!raw) return "/";
   let value = String(raw);
   if (value.startsWith("#")) value = value.slice(1);
-  const queryAt = value.indexOf("?");
-  if (queryAt >= 0) value = value.slice(0, queryAt);
+  const cut = value.search(/[?#]/);
+  if (cut >= 0) value = value.slice(0, cut);
   value = value.replace(/\/{2,}/g, "/");
   if (!value || value === "/") return "/";
   if (!value.startsWith("/")) value = "/" + value;

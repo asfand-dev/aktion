@@ -534,14 +534,25 @@ $app(Big())</code></pre>
         <code>fn</code> with <code>toString()</code>, runs it in a
         Blob&#8209;URL Web Worker, and resolves with the result.
       </p>
-<pre><code>$result = 0
-
-function crunch() {
-  $util.worker((n) =&gt; {
+      <p>
+        <strong><code>fn</code> must be a host JavaScript function.</strong> A lambda
+        written in the program is the evaluator&rsquo;s closure: its
+        <code>toString()</code> is the runtime&rsquo;s own wrapper, not your code, so
+        a real Worker cannot run it &mdash; only the no&#8209;Worker fallback would.
+        Define the function in host code and read it by name from the program:
+      </p>
+<pre><code>&lt;script&gt;
+  // Host JavaScript: a real function, so the worker receives its source.
+  window.sumOfRoots = function (n) {
     let total = 0
     for (let i = 0; i &lt; n; i++) total += Math.sqrt(i)
     return total
-  }, 5e7).then(r =&gt; { $result = r })
+  }
+&lt;/script&gt;</code></pre>
+<pre><code>$result = 0
+
+function crunch() {
+  $util.worker(sumOfRoots, 5e7).then(r =&gt; { $result = r })
 }
 
 $app(Column([
@@ -549,8 +560,12 @@ $app(Column([
   Text(`Result: ${$result}`)
 ], { gap: "md" }))</code></pre>
       <p>
-        Because the function is serialised it <strong>must not close over outer
-        variables</strong> &mdash; pass everything it needs as arguments. When
+        The program reaches <code>sumOfRoots</code> as a host global, which the
+        default global&#8209;access policy allows; <code>"safe"</code> does not, and an
+        allow&#8209;list array must name it (see
+        <a href="security.html#policy-custom">Security</a>). Because the function is
+        serialised it <strong>must not close over outer variables</strong> &mdash; pass
+        everything it needs as arguments. When
         <code>Worker</code>, <code>Blob</code> or
         <code>URL.createObjectURL</code> is unavailable, the call falls back to
         running inline (still async), so the promise contract never changes.

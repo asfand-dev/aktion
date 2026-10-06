@@ -679,8 +679,19 @@ export declare class ReturnSignal {
  * `[x, , y, ...rest]`) against a source value into a flat list of
  * `name → value` pairs. Shared by `let`-destructuring statements and
  * destructured function / lambda parameters so both honour defaults,
- * renames, holes, and rest the same way. Does NOT touch `loopVars` —
+ * renames, holes, and rest the same way. Leaves `loopVars` as it found it —
  * the caller decides how to bind + restore.
+ *
+ * Reads follow JavaScript:
+ *
+ *   - an array pattern takes its values from any iterable — a string, a
+ *     `Set`, a `Map` (`[[k, v]] = map`), an iterator — not only an array;
+ *   - an object pattern reads properties of any non-null value, boxing a
+ *     primitive (`{ length } = "abc"`) and including arrays (`{ 0: first }`),
+ *     except the names no DSL read may reach (`constructor`, `__proto__`,
+ *     `prototype` — see {@link FORBIDDEN_PROPERTY_NAMES});
+ *   - a default sees the leaves bound before it (`{ a, b = a + 1 }`,
+ *     `[x, y = x * 2]`).
  */
 export declare function resolvePatternBindings(pattern: DestructuringPattern, source: unknown, ctx: EvaluationContext): Array<{
     name: string;
@@ -736,3 +747,30 @@ export declare function evaluateUserComponent(node: UserComponentNode, ctx: Eval
  * value on a future remount (React-like reset-on-unmount).
  */
 export declare function clearInstanceHooks(ctx: EvaluationContext, instanceKey: string): void;
+/**
+ * Flatten a Aktion 0.5 theme config into the flat
+ * `{tokenKey: string}` shape the host element applies as CSS variables.
+ *
+ * Only the structured form is accepted:
+ *
+ *   `$theme({ name, colors: {...}, radius: {...}, font: {...}, direction })`
+ *
+ * Groups flatten with a stable naming convention:
+ *   `colors.primary`     → `colorPrimary`
+ *   `radius.md`          → `radiusMd`
+ *   `font.family`        → `fontFamily`
+ *
+ * Top-level metadata keys (`name`, `direction`) are accepted but never
+ * emitted as CSS variables. The legacy flat-shape form
+ * (`$theme({colorPrimary: "...", ...})`) and free-form CSS variable
+ * keys (`$theme({"--color-x": "..."})`) were removed in SUIS/2: the
+ * runtime ignores unknown top-level keys silently to keep streaming
+ * partial themes safe, but the schema validator surfaces them as
+ * advisory warnings (§15) so authors can migrate.
+ */
+export declare const STRUCTURED_THEME_GROUPS: Set<string>;
+export declare const THEME_METADATA_KEYS: Set<string>;
+/** Canonical spacing keys → the flat-token spelling used by ThemeTokens. */
+export declare const SPACING_THEME_KEY_ALIASES: Record<string, string>;
+/** Group name → flat-token prefix (e.g. `shadows.md` → `shadowMd`). */
+export declare const THEME_GROUP_PREFIX: Record<string, string>;

@@ -55,13 +55,15 @@ export declare function findAsyncModifiers(source: string): SourceLocation[];
 export interface CheckJavaScriptOptions {
     /**
      * The module text the program was parsed from. Needed for E102 (`async`
-     * modifiers leave no trace in the AST); without it that rule is skipped.
+     * modifiers leave no trace in the AST); without it that rule is skipped,
+     * and a `$name(…)` diagnostic assumes nothing sits between the name and
+     * its `(`.
      */
     source?: string;
 }
 /**
  * Check a `.aktion.js` / `.aktion.ts` module for constructs whose Aktion
- * meaning differs from their JavaScript meaning (E101–E126, W201–W202).
+ * meaning differs from their JavaScript meaning (E101–E127, W201–W202).
  *
  * Run on the program as the author wrote it, after {@link normalizeComponentForms}.
  * Every diagnostic carries `path`, a stable `code` and the author's
@@ -99,6 +101,18 @@ export declare function asyncModifierDiagnostic(loc: SourceLocation, path: strin
  *     bare `return` (without `loc`, so coverage gains no phantom line), so
  *     falling off the end yields `undefined` instead of the last expression
  *     (S24).
+ *   - **Positional calls** — every component this module declares is marked
+ *     `javascript`, and every call it makes to a user component with an
+ *     object-literal argument is marked `positional`. When such a call reaches
+ *     a `javascript` component, its arguments bind as JavaScript binds them,
+ *     so an object literal (`KVRow({ key: "a", value: "1" })`) is the value of
+ *     the parameter at its position instead of a named-props bag that silently
+ *     reroutes or drops it. TypeScript types such a call with the component's
+ *     plain signature, so this is what the caller's types say. The evaluator
+ *     decides by the declaration, not by the import's spelling, so
+ *     `"./cards"` and `"./cards.aktion.js"` bind alike. Calls that reach
+ *     `.aktion` components, and every call written in a `.aktion` module,
+ *     keep the DSL's named props.
  *
  * Mutates and returns `program` (the frontend owns the freshly parsed tree).
  * Run only on a module {@link checkJavaScriptSemantics} accepted.

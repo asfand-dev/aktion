@@ -35,8 +35,8 @@ export type RouteListener = (detail: RouteChangeDetail) => void;
 export interface NavigationInfo {
     /** The path the user is trying to reach (normalised). */
     to: string;
-    /** The path being left (null on the very first navigation). */
-    from: string | null;
+    /** The path being left (the router always has a current path, the default one at first). */
+    from: string;
 }
 /**
  * A navigation guard decides whether a pending navigation may proceed.

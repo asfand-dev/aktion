@@ -11,5 +11,7 @@ export declare const ProgressRing: ComponentSpec;
 export declare const ChatBubble: ComponentSpec;
 export declare const Kbd: ComponentSpec;
 export declare const Popover: ComponentSpec;
+export declare const TOAST_TONES: readonly ["default", "primary", "success", "warning", "danger", "info"];
+export declare const TOASTS_POSITIONS: readonly ["top-right", "top-left", "top-center", "bottom-right", "bottom-left", "bottom-center"];
 export declare const Toast: ComponentSpec;
 export declare const Toasts: ComponentSpec;

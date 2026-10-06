@@ -29,5 +29,16 @@ export declare const Box: ComponentSpec;
 export declare const Fragment: ComponentSpec;
 export declare const Grid: ComponentSpec;
 export declare const AspectRatio: ComponentSpec;
+/**
+ * Parse a `ratio` shorthand — `16:9`, `4/3` (CSS's own spelling) or a decimal
+ * like `1.78` — into an `aspect-ratio` value, or null when it is not one.
+ *
+ * Shared by AspectRatio and Image, which used to carry two parsers that
+ * disagreed. Both components must be POSITIVE: `aspect-ratio: 0 / 1` (or a
+ * negative ratio) is invalid, the declaration is dropped, and an
+ * `overflow: hidden` box collapses to zero height — an invisible element with
+ * no error.
+ */
+export declare function parseAspectRatio(raw: unknown): string | null;
 export declare const ScrollArea: ComponentSpec;
 export declare const Modal: ComponentSpec;

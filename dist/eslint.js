@@ -461,7 +461,8 @@ const aktionRecommendedRules = {
   // widening (2026-10-02) it parses to the same `Lambda` handler
   // (`tests/eslint-corpus-sweep.test.ts` pins the round trip). The override is
   // kept so existing `.aktion` corpora are not restyled by an upgrade; the
-  // TypeScript preset below enforces the `properties` form instead.
+  // TypeScript preset below switches the rule on in `properties` mode instead,
+  // which reports only `{ title: title }` — never a handler, in either form.
   "object-shorthand": "off",
   // GENUINE GRAMMAR INCOMPATIBILITY: `parseExportStatement` in
   // `src/parser/parser.ts` throws an explicit parse error on `export { … }`
@@ -526,20 +527,39 @@ const aktionRecommendedRules = {
   // `docs/demos/blocks/signup-wizard.aktion` and
   // `docs/demos/blocks/profile-header.aktion`, the only two files in this
   // corpus with a `case N: return …` shaped switch statement.
-  "unicorn/switch-case-braces": "off"
+  "unicorn/switch-case-braces": "off",
+  // GENUINE GRAMMAR INCOMPATIBILITY, same root cause as
+  // `unicorn/switch-case-braces` above: `unicorn/prefer-switch`'s autofix
+  // turns an `if (x === "a") … else if (x === "b") … else if …` chain of three
+  // or more branches into a `switch`, and keeps every block consequent
+  // braced, so a branch that declares something becomes
+  // `case "ok": { const label = …; return … }` — measured: `parse()` rejects
+  // the output with `Expected Punctuation ":" but got Identifier "label"`.
+  "unicorn/prefer-switch": "off",
+  // DSL-IDIOM FALSE POSITIVE: an action that writes a module-level atom
+  // (`export $draft = ""` … `export function addTodo() { $draft = "" }`) is how
+  // Aktion state changes — assigning a `$` atom is what re-renders, and an
+  // action or event handler is where that assignment happens.
+  // `unicorn/no-top-level-assignment-in-function` reports every such write
+  // (measured: 18 times across `create-aktion/template/todos-app` and
+  // `chatbot`'s `store.aktion`).
+  "unicorn/no-top-level-assignment-in-function": "off"
 };
 const aktionTypeScriptRules = {
-  // RECONFIGURED, not off: method shorthand (`{ onClick() { … } }`) parses to
-  // the same handler since the parser widening, but the guide keeps handlers in
-  // property form; `properties` enforces only `{ title }` for `{ title: title }`,
-  // which the JS-semantics layer keeps working after renaming locals (W1).
+  // SWITCHED ON, a style choice rather than a guard: `properties` mode reports
+  // (and fixes) only `{ title: title }` → `{ title }`, which the JS-semantics
+  // layer keeps working after renaming locals (W1). It checks no handler —
+  // neither method shorthand (`{ onClick() { … } }`, which parses to the same
+  // handler since the parser widening) nor `onClick: function () { … }`
+  // (measured).
   "object-shorthand": ["error", "properties"],
   // GENUINE GRAMMAR INCOMPATIBILITY, reconfigured rather than off: a braced
   // case body parses as an object literal (no `BlockStatement` production, see
   // above), so unicorn's default `always` corrupts every switch it fixes, while
   // `avoid` only ever REMOVES braces. It does not report braces around a body
   // that declares something (`case 1: { const y = x … }`), which still fails
-  // to parse.
+  // to parse — so `unicorn/prefer-switch`, whose fix writes such bodies, is
+  // off below.
   "unicorn/switch-case-braces": ["error", "avoid"],
   // GENUINE GRAMMAR INCOMPATIBILITY: the fix creates an `export { … } from …`
   // list, which `parseExportStatement` rejects (see above).
@@ -585,6 +605,16 @@ const aktionTypeScriptRules = {
   // DSL-IDIOM FALSE POSITIVE: `$app(…)` and `$effect(…)` are bare top-level
   // calls by design (see above).
   "unicorn/no-top-level-side-effects": "off",
+  // GENUINE GRAMMAR INCOMPATIBILITY: the fix turns an if/else-if chain into a
+  // `switch` whose braced case bodies parse as object literals; `avoid` above
+  // does not remove the braces around a body that declares something (see
+  // `aktionRecommendedRules`; measured on `.aktion.js`).
+  "unicorn/prefer-switch": "off",
+  // DSL-IDIOM FALSE POSITIVE: an exported action writing the module's own
+  // atom is how state changes — and, an import being a read-only binding in
+  // TypeScript (TS2632), the only way another module can change it (see
+  // `aktionRecommendedRules`).
+  "unicorn/no-top-level-assignment-in-function": "off",
   // DSL-IDIOM FALSE POSITIVE: exported state is `export let $count = 0`, a
   // `let` that importing modules write to.
   "import-x/no-mutable-exports": "off",
@@ -597,12 +627,13 @@ const aktionPropsLiteralRule = {
   meta: {
     type: "problem",
     docs: {
-      description: "Require the props of an Aktion library component call to be an object literal written at the call site, without spreads (needs type information)",
+      description: "Require the props of an Aktion library component call to be an object literal written at the call site, without spreads, and flag an object literal Aktion reads as props where TypeScript matched a positional parameter (needs type information)",
       recommended: true
     },
     messages: {
       propsNotLiteral: 'Aktion only reads props from an object literal written at the call site — inline it: Button("Go", { …opts }) is not supported either (spreads are dropped), so list the props.',
-      propsSpread: "Spreads inside component props are ignored by Aktion — list the props explicitly (`{ variant: extra.variant, … }`)."
+      propsSpread: "Spreads inside component props are ignored by Aktion — list the props explicitly (`{ variant: extra.variant, … }`).",
+      objectReadAsProps: "Aktion reads this object as the component's named props, not as its `{{parameter}}` argument, because `{{key}}` is a prop name: {{effect}}. Pass {{subject}} by name instead (`{{named}}`)."
     },
     schema: []
   },
@@ -622,11 +653,24 @@ const aktionPropsLiteralRule = {
         if (!tsCall) return;
         const signature = checker.getResolvedSignature(tsCall);
         if (!signature) return;
-        for (const [index, argument] of node.arguments.entries()) {
-          if (argument.type === "SpreadElement") return;
-          if (parameterAt(signature, index)?.getName() !== PROPS_PARAMETER) continue;
+        const spreadAt = node.arguments.findIndex((argument) => argument.type === "SpreadElement");
+        const checked = spreadAt < 0 ? node.arguments : node.arguments.slice(0, spreadAt);
+        const tsArguments = checked.map((argument) => nodeMap.get(argument));
+        if (tsArguments.some((argument) => argument === void 0)) return;
+        const call = {
+          checker,
+          tsCall,
+          arguments: checked,
+          tsArguments,
+          complete: spreadAt < 0
+        };
+        const clean = resolvedCleanly(call, signature);
+        for (const [index, argument] of checked.entries()) {
           const bag = withoutTypeOnlyWrappers(argument);
+          const isBag = clean ? parameterAt(signature, index)?.getName() === PROPS_PARAMETER : bagByCandidates(call, index, bag);
+          if (!isBag) continue;
           if (bag.type !== "ObjectExpression") {
+            if (isAnyTyped(call, index)) continue;
             context.report({ node: argument, messageId: "propsNotLiteral" });
             continue;
           }
@@ -636,6 +680,7 @@ const aktionPropsLiteralRule = {
             }
           }
         }
+        if (clean) checkPositionalObject(context, call, signature);
       }
     };
   }
@@ -643,6 +688,7 @@ const aktionPropsLiteralRule = {
 const COMPONENT_NAME = /^[A-Z]/;
 const PROPS_PARAMETER = "props";
 const DSL_MODULE = "aktion-runtime/dsl";
+const ANY_TYPE_FLAG = 1;
 const TYPE_ONLY_WRAPPERS = /* @__PURE__ */ new Set([
   "TSAsExpression",
   "TSSatisfiesExpression",
@@ -656,6 +702,137 @@ function withoutTypeOnlyWrappers(node) {
   }
   return current;
 }
+function resolvedCleanly(call, signature) {
+  const { checker } = call;
+  const declaration = signature.getDeclaration();
+  if (!declaration) return false;
+  if (!signature.getParameters().every((parameter) => parameter.valueDeclaration?.parent === declaration)) {
+    return false;
+  }
+  if (typeof checker.isTypeAssignableTo !== "function") return true;
+  return call.tsArguments.every((argument, index) => {
+    const parameter = parameterAt(signature, index);
+    return parameter !== void 0 && checker.isTypeAssignableTo(checker.getTypeAtLocation(argument), slotType(call, parameter));
+  });
+}
+function isAnyTyped(call, index) {
+  return (call.checker.getTypeAtLocation(call.tsArguments[index]).flags & ANY_TYPE_FLAG) !== 0;
+}
+function bagByCandidates(call, index, bag) {
+  const { checker } = call;
+  if (!call.complete || typeof checker.isTypeAssignableTo !== "function") return false;
+  const slots = calleeSignatures(call).filter((signature) => acceptsArgumentCount(signature, call.arguments.length)).map((signature) => parameterAt(signature, index)).filter((parameter) => parameter !== void 0);
+  if (!slots.some((parameter) => parameter.getName() === PROPS_PARAMETER)) return false;
+  const type = checker.getTypeAtLocation(call.tsArguments[index]);
+  const positional = slots.filter((parameter) => parameter.getName() !== PROPS_PARAMETER);
+  if (positional.some((parameter) => checker.isTypeAssignableTo(type, slotType(call, parameter)))) return false;
+  return bag.type === "ObjectExpression" || looksLikeProps(call, type);
+}
+function looksLikeProps(call, type) {
+  const { checker } = call;
+  const objectType = typeof checker.getNonPrimitiveType === "function" ? checker.getNonPrimitiveType() : void 0;
+  if (!objectType || typeof checker.isArrayLikeType !== "function") return false;
+  const nonNullable = checker.getNonNullableType(type);
+  const members = nonNullable.isUnion() ? nonNullable.types : [nonNullable];
+  const names = bagPropertyNames(call);
+  return members.every(
+    (member) => member.getCallSignatures().length === 0 && !checker.isArrayLikeType(member) && checker.isTypeAssignableTo(member, objectType)
+  ) && members.some((member) => member.getProperties().some((property) => names.has(property.getName())));
+}
+function checkPositionalObject(context, call, signature) {
+  if (!call.complete || call.arguments.length === 0) return;
+  let index = -1;
+  for (let i = call.arguments.length - 1; i >= 0; i -= 1) {
+    if (withoutTypeOnlyWrappers(call.arguments[i]).type === "ObjectExpression") {
+      index = i;
+      break;
+    }
+  }
+  if (index < 0) return;
+  const parameter = parameterAt(signature, index);
+  if (!parameter || parameter.getName() === PROPS_PARAMETER) return;
+  const literal = withoutTypeOnlyWrappers(call.arguments[index]);
+  const names = bagPropertyNames(call);
+  const keys = literal.properties.flatMap((property) => property.type === "Property" ? [propertyKey(property)] : []);
+  const known = keys.find((key) => key !== null && names.has(key));
+  if (known === void 0 || known === null) return;
+  const dropped = keys.filter((key) => key === null || !names.has(key)).map((key) => key === null ? "[…]" : key);
+  if (call.arguments.length === 1 && !electsLoneObject(call, parameter, keys, dropped.length > 0)) return;
+  const effects = [];
+  if (dropped.length > 0) {
+    const list = dropped.map((key) => `\`${key}\``).join(", ");
+    effects.push(dropped.length === 1 ? `${list} is not a prop and is dropped` : `${list} are not props and are dropped`);
+  }
+  if (index < call.arguments.length - 1) {
+    effects.push(`the argument after it lands in \`${parameter.getName()}\` instead`);
+  }
+  if (effects.length === 0) effects.push(`nothing reaches \`${parameter.getName()}\``);
+  const following = call.arguments.length - 1 - index;
+  const subject = following === 0 ? "it" : `it, and the argument${following === 1 ? "" : "s"} after it,`;
+  const entries = /* @__PURE__ */ new Set([`${parameter.getName()}: { … }`]);
+  for (let i = index + 1; i < call.arguments.length; i += 1) {
+    const name = parameterAt(signature, i)?.getName();
+    entries.add(name !== void 0 && name !== PROPS_PARAMETER && names.has(name) ? `${name}: …` : "…");
+  }
+  context.report({
+    node: call.arguments[index],
+    messageId: "objectReadAsProps",
+    data: {
+      parameter: parameter.getName(),
+      key: known,
+      effect: effects.join(", and "),
+      subject,
+      named: `{ ${[...entries].join(", ")} }`
+    }
+  });
+}
+function electsLoneObject(call, parameter, keys, dropsKeys) {
+  const signatures = calleeSignatures(call);
+  if (!signatures.some((signature) => signature.getParameters()[0]?.getName() === PROPS_PARAMETER)) return false;
+  if (!dropsKeys && keys.includes(parameter.getName())) return false;
+  const slots = Math.max(
+    0,
+    ...signatures.map((signature) => signature.getParameters().filter((p) => p.getName() !== PROPS_PARAMETER).length)
+  );
+  return slots > 1 || !dropsKeys;
+}
+function propertyKey(property) {
+  if (property.computed) return null;
+  if (property.key.type === "Identifier") return property.key.name;
+  if (property.key.type === "Literal") return String(property.key.value);
+  return null;
+}
+function calleeSignatures(call) {
+  call.signatures ??= call.checker.getTypeAtLocation(call.tsCall.expression).getCallSignatures();
+  return call.signatures;
+}
+function bagPropertyNames(call) {
+  if (call.bagNames) return call.bagNames;
+  const names = /* @__PURE__ */ new Set();
+  for (const signature of calleeSignatures(call)) {
+    for (const parameter of signature.getParameters()) {
+      if (parameter.getName() !== PROPS_PARAMETER) continue;
+      const type = call.checker.getNonNullableType(slotType(call, parameter));
+      for (const property of call.checker.getPropertiesOfType(type)) names.add(property.getName());
+    }
+  }
+  call.bagNames = names;
+  return names;
+}
+function slotType(call, parameter) {
+  const { checker } = call;
+  const type = typeof checker.getTypeOfSymbol === "function" ? checker.getTypeOfSymbol(parameter) : checker.getTypeOfSymbolAtLocation(parameter, call.tsCall);
+  return isRestParameter(parameter) ? type.getNumberIndexType() ?? type : type;
+}
+function acceptsArgumentCount(signature, count) {
+  const parameters = signature.getParameters();
+  const rest = parameters.length > 0 && isRestParameter(parameters[parameters.length - 1]);
+  let required = 0;
+  for (const [index, parameter] of parameters.entries()) {
+    if (!isOptionalParameter(parameter)) required = index + 1;
+  }
+  return count >= required && (rest || count <= parameters.length);
+}
 function parameterAt(signature, index) {
   const parameters = signature.getParameters();
   const restIndex = parameters.length - 1;
@@ -663,9 +840,15 @@ function parameterAt(signature, index) {
   if (last !== void 0 && index >= restIndex && isRestParameter(last)) return last;
   return parameters[index];
 }
+function parameterDeclaration(parameter) {
+  return parameter.valueDeclaration;
+}
 function isRestParameter(parameter) {
-  const declaration = parameter.valueDeclaration;
-  return declaration?.dotDotDotToken !== void 0;
+  return parameterDeclaration(parameter)?.dotDotDotToken !== void 0;
+}
+function isOptionalParameter(parameter) {
+  const declaration = parameterDeclaration(parameter);
+  return declaration?.dotDotDotToken !== void 0 || declaration?.questionToken !== void 0 || declaration?.initializer !== void 0;
 }
 function isDeclaredInModuleGraph(sourceCode, callee) {
   for (let scope = sourceCode.getScope(callee); scope; scope = scope.upper) {
@@ -679,6 +862,78 @@ function isDslImport(definition) {
   const parent = definition.parent;
   return parent?.source?.value === DSL_MODULE;
 }
+const aktionRouterLiteralRule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description: "Require the route table of `$router(…)`, and the `routes` of each layout arm, to be an object literal written at the call site, without spreads or computed paths",
+      recommended: true
+    },
+    messages: {
+      tableNotLiteral: '`$router` reads its route table by syntax — pass an object literal written here and list every arm (`$router({ "/": Home(), default: NotFound() })`); anything else renders nothing.',
+      armSpread: "Aktion reads route tables by syntax and skips spread entries, so these arms never match — list each arm explicitly.",
+      armComputed: 'Aktion reads each route path by syntax and ignores a computed one, so this arm never matches — write the path as a string key (`"/users/:id": …`).',
+      routesNotLiteral: "A layout arm's `routes` is read by syntax — write the child routes as an object literal here; anything else leaves `outlet` empty."
+    },
+    schema: []
+  },
+  create(context) {
+    const { sourceCode } = context;
+    const checkTable = (table) => {
+      for (const entry of table.properties) {
+        if (entry.type === "SpreadElement") {
+          context.report({ node: entry, messageId: "armSpread" });
+          continue;
+        }
+        if (entry.computed) {
+          context.report({ node: entry.key, messageId: "armComputed" });
+          continue;
+        }
+        const arm = withoutTypeOnlyWrappers(entry.value);
+        if (arm.type === "ObjectExpression") checkArm(arm);
+      }
+    };
+    const checkArm = (arm) => {
+      let isLayout = false;
+      let routes = null;
+      for (const entry of arm.properties) {
+        if (entry.type === "SpreadElement") {
+          context.report({ node: entry, messageId: "armSpread" });
+          continue;
+        }
+        const key = staticKey(entry);
+        if (key === "layout") isLayout = true;
+        else if (key === "routes") routes = entry.value;
+      }
+      if (!isLayout || routes === null) return;
+      const child = withoutTypeOnlyWrappers(routes);
+      if (child.type === "ObjectExpression") checkTable(child);
+      else context.report({ node: routes, messageId: "routesNotLiteral" });
+    };
+    return {
+      CallExpression(node) {
+        const { callee } = node;
+        if (callee.type !== "Identifier" || callee.name !== ROUTER) return;
+        if (isDeclaredInModuleGraph(sourceCode, callee)) return;
+        const first = node.arguments[0];
+        if (!first) {
+          context.report({ node, messageId: "tableNotLiteral" });
+          return;
+        }
+        const table = withoutTypeOnlyWrappers(first);
+        if (table.type === "ObjectExpression") checkTable(table);
+        else context.report({ node: first, messageId: "tableNotLiteral" });
+      }
+    };
+  }
+};
+const ROUTER = "$router";
+function staticKey(property) {
+  if (property.computed) return null;
+  if (property.key.type === "Identifier") return property.key.name;
+  if (property.key.type === "Literal") return String(property.key.value);
+  return null;
+}
 const aktionEslintPlugin = {
   meta: {
     name: "aktion-runtime",
@@ -688,7 +943,8 @@ const aktionEslintPlugin = {
     aktion: aktionProcessor
   },
   rules: {
-    "props-literal": aktionPropsLiteralRule
+    "props-literal": aktionPropsLiteralRule,
+    "router-literal": aktionRouterLiteralRule
   }
 };
 const recommendedConfig = [
@@ -723,7 +979,8 @@ const aktionTypeScriptConfig = [
     files: ["**/*.aktion.ts", "**/*.aktion.js"],
     rules: {
       ...aktionTypeScriptRules,
-      "aktion/props-literal": "error"
+      "aktion/props-literal": "error",
+      "aktion/router-literal": "error"
     }
   }
 ];
@@ -735,6 +992,7 @@ export {
   aktionProcessor,
   aktionPropsLiteralRule,
   aktionRecommendedRules,
+  aktionRouterLiteralRule,
   aktionTypeScriptConfig,
   aktionTypeScriptRules,
   applyInsertions,
