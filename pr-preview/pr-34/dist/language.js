@@ -37334,14 +37334,16 @@ function declarationStart(lines, loc, name, exported) {
 function collectDeclaredTopLevelNames(program) {
   const declared = /* @__PURE__ */ new Set();
   const exported = /* @__PURE__ */ new Set();
-  const add = (key, isExported) => {
+  const kinds = /* @__PURE__ */ new Map();
+  const add = (key, isExported, kind = "other") => {
     declared.add(key);
     if (isExported === true) exported.add(key);
+    if (!kinds.has(key)) kinds.set(key, kind);
   };
   for (const stmt of program.statements) {
     switch (stmt.kind) {
       case "Import":
-        for (const spec of stmt.specifiers) add(bindingKey(spec.local, spec.isState), false);
+        for (const spec of stmt.specifiers) add(bindingKey(spec.local, spec.isState), false, "import");
         break;
       case "ComponentDeclaration":
       case "ActionDeclaration":
@@ -37351,14 +37353,18 @@ function collectDeclaredTopLevelNames(program) {
         add(`$${stmt.name}`, stmt.exported);
         break;
       case "DestructureStatement":
-        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) add(name, false);
+        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) {
+          add(name, false, "destructuring");
+        }
         break;
       case "Assignment":
-        if (stmt.declaration !== void 0) add(bindingKey(stmt.identifier, stmt.isState), stmt.exported);
+        if (stmt.declaration !== void 0) {
+          add(bindingKey(stmt.identifier, stmt.isState), stmt.exported, stmt.declaration === "const" ? "const" : "other");
+        }
         break;
     }
   }
-  return { declared, exported };
+  return { declared, exported, kinds };
 }
 const WRITABLE_LEGACY_ROOTS = /* @__PURE__ */ new Set(["aktion", "theme"]);
 function bindingKey(name, isState) {
@@ -37389,10 +37395,23 @@ function isWrittenElsewhere(program, declaration, key) {
   };
   return visit(program.statements);
 }
+function exportMessage(key, kind, declarationExported) {
+  const head = `\`export ${key}\` writes to \`${key}\`, which`;
+  if (kind === "import") {
+    return `${head} this file imports. An import can be neither assigned nor re-exported under its own name — import it under another local name (\`import { ${key} as … }\`) and write \`export let ${key} = …\` here.`;
+  }
+  if (kind === "destructuring") {
+    return `${head} a destructuring declares, and \`export\` is not supported on a destructuring. Take \`${key}\` out of the pattern, declare it on its own with \`export let ${key} = …\` in its place, and drop the \`export\` here.`;
+  }
+  if (kind === "const") {
+    return declarationExported ? `${head} its own exported declaration declares with \`const\`, which this assignment writes. Change that \`const\` to \`let\` and drop the \`export\` here.` : `${head} another statement declares with \`const\`, which this assignment writes. Put \`export\` on the declaration and change its \`const\` to \`let\` (\`export let ${key} = …\`), and drop the \`export\` here. If nothing imports \`${key}\`, changing \`const\` to \`let\` and dropping the \`export\` here is enough.`;
+  }
+  return declarationExported ? `\`export ${key}\` writes to \`${key}\`, whose own declaration is already exported. JavaScript has no \`export\` on an assignment — drop the \`export\` here.` : `${head} another statement already declares. JavaScript has no \`export\` on an assignment, and \`export let\` here would redeclare it — put \`export\` on the declaration (\`export let ${key} = …\`, \`export function …\`) and drop it here. If nothing imports \`${key}\`, dropping it here is enough.`;
+}
 function lintBareDeclarations(program, source) {
   const warnings = [];
   const lines = source.split(/\r?\n/);
-  const { declared, exported: exportedDeclarations } = collectDeclaredTopLevelNames(program);
+  const { declared, exported: exportedDeclarations, kinds } = collectDeclaredTopLevelNames(program);
   const bound = /* @__PURE__ */ new Set();
   for (const stmt of program.statements) {
     if (stmt.kind !== "Assignment") continue;
@@ -37408,7 +37427,7 @@ function lintBareDeclarations(program, source) {
     const prefix = exported ? "export " : "";
     let message;
     if (alreadyBound) {
-      message = exportedDeclarations.has(key) ? `\`export ${key}\` writes to \`${key}\`, whose own declaration is already exported. JavaScript has no \`export\` on an assignment — drop the \`export\` here.` : `\`export ${key}\` writes to \`${key}\`, which another statement already declares. JavaScript has no \`export\` on an assignment, and \`export let\` here would redeclare it — put \`export\` on the declaration (\`export let ${key} = …\`, \`export function …\`) and drop it here. If nothing imports \`${key}\`, dropping it here is enough.`;
+      message = exportMessage(key, kinds.get(key) ?? "other", exportedDeclarations.has(key));
     } else {
       const needsLet = stmt.isState || isWrittenElsewhere(program, stmt, key);
       const reason = stmt.isState ? "a state atom is written, and `const` would make that a TypeError in JavaScript" : needsLet ? "it is assigned again elsewhere in the file" : "nothing else writes it";
