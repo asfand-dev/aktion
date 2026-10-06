@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Language · Aktion</title>
-  <meta name="description" content="The Aktion language reference — a strict subset of JavaScript with reactive semantics. Program structure, $state, expressions, control flow, the `$util` runtime helper namespace, and the full JavaScript global surface." />
+  <meta name="description" content="The Aktion language reference — JavaScript syntax with reactive semantics. Program structure, $state, expressions, control flow, the `$util` runtime helper namespace, and the full JavaScript global surface." />
   <script>
     (function () {
       try {
@@ -69,22 +69,26 @@
         <span class="hero-eyebrow">Reference</span>
         <h1>Language.</h1>
         <p class="lead">
-          Aktion is a <strong>strict subset of JavaScript</strong> with reactive
-          semantics layered on top. Its syntax is JavaScript &mdash; functions,
-          arrows, template literals, spread, optional chaining &mdash; and the
-          runtime adds two things: it makes <code>$state</code> reactive and it
-          renders the component tree you pass to <code>$app(&hellip;)</code>. If you
-          know JavaScript, you already know almost all of this page.
+          Aktion is <strong>JavaScript syntax</strong> with reactive
+          semantics layered on top &mdash; functions, arrows, template literals,
+          spread, optional chaining &mdash; and the runtime adds two things: it
+          makes <code>$state</code> reactive and it renders the component tree you
+          pass to <code>$app(&hellip;)</code>. If you know JavaScript, you already
+          know almost all of this page.
         </p>
         <p>
-          &ldquo;Subset&rdquo; describes the syntax Aktion reads, not a guarantee that
-          every <code>.aktion</code> file is valid JavaScript. A plain
-          <code>.aktion</code> file parses as JavaScript when every top-level binding
-          is declared (<code>export const NAME = &hellip;</code>,
-          <code>let $count = 0</code>), but Aktion also accepts programs a JavaScript
-          parser rejects: a bare <code>export NAME = &hellip;</code>, a duplicate
-          <code>let</code>, a top-level <code>return</code>, <code>await</code> outside
-          an <code>async</code> function, a stray <code>break</code>, or
+          That is not a guarantee that every <code>.aktion</code> file is valid
+          JavaScript. A plain <code>.aktion</code> file can be written to parse as
+          JavaScript &mdash; declare every top-level binding
+          (<code>export const NAME = &hellip;</code>,
+          <code>export let $count = 0</code>) and avoid what Aktion accepts but a
+          JavaScript parser rejects &mdash; but nothing enforces it. For example: a
+          bare <code>export NAME = &hellip;</code>, a duplicate <code>let</code> or
+          <code>const</code>, a reserved word as a name
+          (<code>const class = 1</code>), duplicate parameter names, a legacy octal
+          (<code>010</code>), <code>delete x</code>, a top-level
+          <code>return</code>, <code>await</code> inside a non-async function, a
+          stray <code>break</code> or <code>continue</code>, or
           <code>a?.b = 1</code>. A module named <code>.aktion.js</code> or
           <code>.aktion.ts</code> is real JavaScript or TypeScript and is
           <a href="typescript.html#aktion-ts">checked against JavaScript semantics</a>.
@@ -217,7 +221,7 @@ $app(Column([
         handler has written since.</li>
         <li><strong>From a handler or an effect</strong> it is an ordinary write.</li>
       </ul>
-<pre><code>aktion = app()
+<pre><code>$app(app())
 
 function app() {
   $n = 5                       // render: declared once, then left alone
@@ -466,7 +470,7 @@ $app(Column([
 
       <h2 id="globals">Full JavaScript globals</h2>
       <p>
-        Because Aktion is a subset of JavaScript, the entire JS global surface
+        Because Aktion runs JavaScript, the entire JS global surface
         resolves by name inside <code>function</code> / <code>effect</code> /
         lambda bodies &mdash; no import, no escape hatch. That includes the
         standard library (<code>Math</code>, <code>JSON</code>,
