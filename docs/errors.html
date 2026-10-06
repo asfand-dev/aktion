@@ -284,14 +284,21 @@ app.addEventListener("error", (e) =&gt; {
         otherwise the render would re-trigger itself forever &mdash; and logs a
         warning. Seeing it means you are writing reactive state in render
         position other than as a set-once declaration (a <code>$name = &hellip;</code>
-        nested in an <code>if</code> or loop, or a compound write such as
+        nested in an <code>if</code> or loop, directly in an arrow or
+        function-expression body, or a compound write such as
         <code>$name++</code>).
       </p>
       <p>
+        A <code>$name = &hellip;</code> written directly in the body of a
+        <code>function</code> declaration (not an arrow or function expression) is a
+        set-once declaration while rendering; only a PascalCase component gets its
+        own copy per instance, while in a lowercase function every call shares one
+        atom, and an existing top-level atom of that name wins.
+      </p>
+      <p>
         The fix is to move the write into an event handler or an effect, or to
-        seed it with a <code>$name = &hellip;</code> written directly in the
-        function body (a set-once declaration while rendering, whatever the
-        function&rsquo;s name or case) or the <code>$state</code> hook. See
+        seed it as component-local state with a PascalCase component or the
+        <code>$state</code> hook. See
         <a href="reactivity.html">Reactivity &amp; rendering</a>.
       </p>
 

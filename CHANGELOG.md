@@ -9,7 +9,14 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ### The "State Write During Render" Warning Describes the Real Cause
 
-- The warning printed when a reactive write runs while the UI renders said the cause was a `$name = …` at the top of a lowercase function and that a PascalCase component was needed for set-once state. That was wrong: a `$name = …` written directly in a function body is a set-once declaration while rendering, whatever the function's name or case. The warning, and the matching Troubleshooting, Error handling and Reactivity pages, now name the real triggers: the same write nested in an `if` or a loop, or a compound write such as `$name++`.
+- The warning printed when a reactive write runs while the UI renders blamed a
+  `$name = …` at the top of a lowercase function and said a PascalCase
+  component was needed for set-once state. It now says what actually happens: a
+  `$name = …` directly in a `function` declaration's body is set-once while
+  rendering, only a PascalCase component gets its own copy per instance, and the
+  warning fires for the same write nested in an `if` or loop, directly in an
+  arrow or function expression, or as a compound write such as `$name++`. The
+  Troubleshooting, Error handling and Reactivity pages say the same.
 
 ## 2026-10-05
 
