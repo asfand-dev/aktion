@@ -1,0 +1,45 @@
+// Hero Banner — marketing intro with eyebrow, headline, highlights, an inline
+// email capture that validates + confirms, a trust strip and social proof.
+$app(Container([Column([hero, trust], { gap: "lg" })], { size: "lg" }))
+
+$email = ""
+$joined = false
+emailValid = $email.includes("@") && $email.includes(".")
+
+function join() {
+  if (!emailValid) return
+  $joined = true
+  $toast.success("You're on the early-access list!")
+}
+
+capture = $joined
+  ? Callout("You're in!", { description: `We'll reach out at ${$email}.`, icon: "circle-check", variant: "success" })
+  : Row([
+      StackItem(Input("email", { type: "email", value: $email, placeholder: "you@example.com" }), { grow: 1 }),
+      Button("Request access", { variant: "primary", icon: "paper-plane", disabled: !emailValid, onClick: join })
+    ], { gap: "sm", align: "end" })
+
+hero = Card([Column([
+  Badge("Now in public beta", { tone: "primary", icon: "rocket" }),
+  Text("Ship rich, reactive UIs in a single file", { variant: "title" }),
+  Text("Aktion turns a compact, streaming-first DSL into polished interfaces — no build step, no template juggling, works in any framework.", { variant: "large", tone: "muted" }),
+  capture,
+  Row([
+    Row([Icon("circle-check", { color: "var(--rui-color-success)", size: "sm" }), Text("No credit card", { variant: "small", tone: "muted" })], { gap: "xs", align: "center" }),
+    Row([Icon("circle-check", { color: "var(--rui-color-success)", size: "sm" }), Text("Cancel anytime", { variant: "small", tone: "muted" })], { gap: "xs", align: "center" }),
+    Row([Icon("circle-check", { color: "var(--rui-color-success)", size: "sm" }), Text("Open source", { variant: "small", tone: "muted" })], { gap: "xs", align: "center" })
+  ], { gap: "lg", wrap: true })
+], { gap: "md" })])
+
+trust = Card([Column([
+  Text("TRUSTED BY TEAMS AT", { variant: "small-heavy", tone: "muted" }),
+  Row([
+    AvatarGroup({ items: [{ name: "Acme" }, { name: "Globex" }, { name: "Initech" }, { name: "Umbrella" }, { name: "Hooli" }], max: 5 }),
+    Spacer(),
+    Stats([
+      { label: "Active teams", value: "4,200+" },
+      { label: "Uptime", value: "99.98%", tone: "success" },
+      { label: "Avg. setup", value: "3 min" }
+    ], { layout: "strip" })
+  ], { align: "center", wrap: true, gap: "lg" })
+], { gap: "md" })])

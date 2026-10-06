@@ -1,0 +1,77 @@
+// Signup Wizard — a 4-step onboarding flow with a step indicator, per-step
+// validation, a review summary and a finished state. Custom step machine built
+// from Steps + Card + conditional bodies.
+$app(Container([Column([header, Card([Column([indicator, Separator("horizontal"), body, Separator("horizontal"), controls], { gap: "lg" })])], { gap: "lg" })], { size: "md" }))
+
+steps = ["Account", "Workspace", "Team", "Review"]
+$step = 0
+
+$fullName = ""
+$email = ""
+$workspace = ""
+$plan = "pro"
+$invites = ""
+
+emailValid = $email.includes("@") && $email.includes(".")
+stepValid = $step == 0 ? ($fullName.length > 1 && emailValid) : $step == 1 ? $workspace.length > 1 : true
+isLast = $step == steps.length - 1
+
+function next() {
+  if (!stepValid) return
+  if ($step < steps.length - 1) $step = $step + 1
+}
+
+function back() {
+  if ($step > 0) $step = $step - 1
+}
+
+$finished = false
+function finish() { $finished = true }
+
+inviteList = $invites.split(",").map(s => s.trim()).filter(s => s.length > 0)
+
+header = PageHeader("Set up your account", { subtitle: `Step ${$step + 1} of ${steps.length}`, breadcrumbs: false })
+
+indicator = Steps(steps.map((s, i) => ({ title: s, active: i == $step, details: i < $step ? "Done" : null })))
+
+function stepBody(step) {
+  switch (step) {
+    case 0: return Column([
+      FormControl("Full name", { field: Input("fullName", { value: $fullName, placeholder: "Ada Lovelace" }) }),
+      FormControl("Work email", { field: Input("email", { type: "email", value: $email, placeholder: "you@company.com" }), hint: $email.length > 0 && !emailValid ? "Enter a valid email." : null })
+    ], { gap: "md" })
+    case 1: return Column([
+      FormControl("Workspace name", { field: Input("workspace", { value: $workspace, placeholder: "Acme Inc" }) }),
+      FormControl("Plan", { field: ToggleGroup("plan", { items: [{ value: "starter", label: "Starter" }, { value: "pro", label: "Pro" }, { value: "scale", label: "Scale" }], value: $plan }) })
+    ], { gap: "md" })
+    case 2: return Column([
+      FormControl("Invite teammates", { field: TextArea("invites", { value: $invites, rows: 3, placeholder: "comma-separated emails" }) }),
+      inviteList.length > 0 ? BadgeList(inviteList, { tone: "info" }) : Callout("Optional", { description: "You can invite people later from settings.", icon: "circle-info", variant: "info" })
+    ], { gap: "md" })
+    default: return DescriptionList([
+      DescriptionItem("Name", { value: $fullName || "—", icon: "user" }),
+      DescriptionItem("Email", { value: $email || "—", icon: "envelope" }),
+      DescriptionItem("Workspace", { value: $workspace || "—", icon: "building" }),
+      DescriptionItem("Plan", { value: $util.capitalize($plan), icon: "gem" }),
+      DescriptionItem("Invites", { value: inviteList.length > 0 ? `${inviteList.length} people` : "None", icon: "users" })
+    ])
+  }
+}
+
+doneView = Card([Center([Column([
+  Icon("party-horn", { size: "lg", color: "var(--rui-color-success)" }),
+  SectionHeader("All set!", { subtitle: `${$workspace || "Your workspace"} is ready.` }),
+  Button("Open workspace", { variant: "primary", icon: "arrow-right" })
+], { gap: "md", align: "center" })], { minHeight: "200px" })])
+
+body = Show($finished, { fallback: stepBody($step), children: doneView })
+
+controls = Show(!$finished, {
+  children: Row([
+    Button("Back", { variant: "ghost", icon: "arrow-left", disabled: $step == 0, onClick: back }),
+    Spacer(),
+    isLast
+      ? Button("Finish setup", { variant: "primary", icon: "check", onClick: finish })
+      : Button("Continue", { variant: "primary", icon: "arrow-right", disabled: !stepValid, onClick: next })
+  ], { align: "center" })
+})
