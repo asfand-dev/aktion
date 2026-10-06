@@ -1,0 +1,315 @@
+// Sales Pipeline CRM — the revenue cockpit for Meridian Grid. Advance a deal on the stage
+// board and the KPIs, the weighted forecast, the leaderboard and the team feed all
+// recompute; the quarter switch re-scopes every one of them.
+// Starting point for: any sales / partnership / fundraising pipeline console.
+// Uses: $store deals, KanbanBoard in Tabs beside a DataGrid, Drawer detail + note composer,
+//       $form new-deal modal, BarChart forecast, quota Progress leaderboard.
+$app(Column([header, filters, kpis, dealsCard, Grid([forecastCard, leaderboardCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" }), activityCard, dealDrawer, newDealModal], { gap: "lg", padding: "md" }))
+
+stages = [
+  { key: "discovery", label: "Discovery", tone: "default", prob: 0.15 },
+  { key: "demo", label: "Demo", tone: "info", prob: 0.35 },
+  { key: "proposal", label: "Proposal", tone: "primary", prob: 0.55 },
+  { key: "negotiation", label: "Negotiation", tone: "warning", prob: 0.8 },
+  { key: "won", label: "Closed won", tone: "success", prob: 1 }
+]
+quarters = [
+  { key: "q3", label: "Q3 FY26", months: ["2026-07", "2026-08", "2026-09"], names: ["Jul", "Aug", "Sep"] },
+  { key: "q4", label: "Q4 FY26", months: ["2026-10", "2026-11", "2026-12"], names: ["Oct", "Nov", "Dec"] },
+  { key: "q1", label: "Q1 FY27", months: ["2027-01", "2027-02", "2027-03"], names: ["Jan", "Feb", "Mar"] }
+]
+reps = [
+  { id: "u1", name: "Priya Raman", title: "Enterprise AE", quota: 240000, avatar: "https://picsum.photos/seed/meridian-priya/96/96" },
+  { id: "u2", name: "Tomás Ferreira", title: "Enterprise AE", quota: 240000, avatar: "https://picsum.photos/seed/meridian-tomas/96/96" },
+  { id: "u3", name: "Alina Kovács", title: "Mid-market AE", quota: 160000, avatar: "https://picsum.photos/seed/meridian-alina/96/96" },
+  { id: "u4", name: "Daniel Osei", title: "Mid-market AE", quota: 160000, avatar: "https://picsum.photos/seed/meridian-daniel/96/96" }
+]
+
+crm = $store({
+  deals: [
+    { id: "d1", company: "Halden Freight", amount: 148000, stage: "negotiation", owner: "u1", close: "2026-08-21", opened: "2026-05-28", adj: 0.05, segment: "Enterprise", source: "Inbound", contacts: [["Ingrid Halden", "COO"], ["Marek Voss", "Ops Tech Lead"]] },
+    { id: "d2", company: "Corveau Bank", amount: 96000, stage: "proposal", owner: "u3", close: "2026-09-04", opened: "2026-06-10", adj: 0, segment: "Mid-market", source: "Partner", contacts: [["Céline Corveau", "CTO"], ["Owen Brand", "Data Platform Lead"]] },
+    { id: "d3", company: "Nordwell Health", amount: 212000, stage: "demo", owner: "u2", close: "2026-09-25", opened: "2026-06-30", adj: -0.05, segment: "Enterprise", source: "Outbound", contacts: [["Ruth Nordwell", "Chief Medical Officer"], ["Sam Achebe", "VP Infrastructure"]] },
+    { id: "d4", company: "Pikeline Logistics", amount: 54000, stage: "discovery", owner: "u4", close: "2026-09-18", opened: "2026-07-22", adj: 0, segment: "Mid-market", source: "Webinar", contacts: [["Piet Kastel", "Logistics Director"], ["Nora Quill", "Systems Analyst"]] },
+    { id: "d5", company: "Brightsill Energy", amount: 178000, stage: "won", owner: "u1", close: "2026-07-30", opened: "2026-05-12", adj: 0, segment: "Enterprise", source: "Inbound", contacts: [["Erik Brightsill", "VP Grid Operations"], ["Hana Lindqvist", "Procurement"]] },
+    { id: "d6", company: "Marrowgate Retail", amount: 63000, stage: "won", owner: "u3", close: "2026-08-04", opened: "2026-06-19", adj: 0, segment: "Mid-market", source: "Referral", contacts: [["Joel Marrow", "Head of Digital"], ["Tara Sinclair", "Store Systems"]] },
+    { id: "d7", company: "Cyrix Labs", amount: 41000, stage: "lost", owner: "u4", close: "2026-07-17", opened: "2026-05-30", adj: 0, segment: "SMB", source: "Outbound", contacts: [["Vik Cyril", "R&D Director"], ["Mia Odell", "Lab Operations"]] },
+    { id: "d8", company: "Vanderlin Media", amount: 88000, stage: "proposal", owner: "u2", close: "2026-08-28", opened: "2026-06-05", adj: 0.05, segment: "Mid-market", source: "Referral", contacts: [["Lena Vanderlin", "Publisher"], ["Rafi Osman", "Head of Data"]] },
+    { id: "d9", company: "Selkirk Foods", amount: 32000, stage: "discovery", owner: "u3", close: "2026-09-11", opened: "2026-08-01", adj: 0, segment: "SMB", source: "Inbound", contacts: [["Gordon Selkirk", "Supply Chain Lead"]] },
+    { id: "d10", company: "Torvald Marine", amount: 124000, stage: "demo", owner: "u1", close: "2026-09-30", opened: "2026-07-08", adj: 0, segment: "Enterprise", source: "Conference", contacts: [["Astrid Torvald", "Fleet Director"], ["Bo Kristensen", "IT Manager"]] },
+    { id: "d11", company: "Ashcombe Insurance", amount: 265000, stage: "proposal", owner: "u2", close: "2026-10-16", opened: "2026-06-24", adj: -0.05, segment: "Enterprise", source: "Outbound", contacts: [["Margaret Ashcombe", "Group CIO"], ["Devon Pike", "Head of Claims Tech"]] },
+    { id: "d12", company: "Quillon Robotics", amount: 74000, stage: "discovery", owner: "u4", close: "2026-11-06", opened: "2026-08-05", adj: 0, segment: "Mid-market", source: "Inbound", contacts: [["Yusuf Quillon", "VP Engineering"], ["Hilde Braun", "Automation Lead"]] },
+    { id: "d13", company: "Petravue Mining", amount: 158000, stage: "negotiation", owner: "u1", close: "2026-12-11", opened: "2026-07-14", adj: 0, segment: "Enterprise", source: "Partner", contacts: [["Ana Petravue", "COO"], ["Colin Redfern", "Site Systems Manager"]] },
+    { id: "d14", company: "Lindholm Group", amount: 47000, stage: "lost", owner: "u3", close: "2026-10-02", opened: "2026-07-02", adj: 0, segment: "SMB", source: "Webinar", contacts: [["Sven Lindholm", "Managing Director"]] },
+    { id: "d15", company: "Auberon Rail", amount: 112000, stage: "demo", owner: "u4", close: "2026-11-20", opened: "2026-08-06", adj: 0.05, segment: "Mid-market", source: "Conference", contacts: [["Marta Auberon", "Network Operations"], ["Tobias Frei", "Signalling Lead"]] },
+    { id: "d16", company: "Kestrel Dynamics", amount: 132000, stage: "won", owner: "u2", close: "2026-10-24", opened: "2026-08-02", adj: 0, segment: "Mid-market", source: "Referral", contacts: [["Nina Kestrel", "Head of Platform"], ["Amir Sadiq", "Principal Engineer"]] },
+    { id: "d17", company: "Castellane Ports", amount: 340000, stage: "discovery", owner: "u2", close: "2027-02-05", opened: "2026-08-03", adj: 0, segment: "Enterprise", source: "Outbound", contacts: [["Louis Castellane", "Port Authority CIO"], ["Femke de Groot", "Terminal Operations"]] },
+    { id: "d18", company: "Nyquist Semiconductors", amount: 195000, stage: "demo", owner: "u1", close: "2027-01-22", opened: "2026-07-30", adj: 0, segment: "Enterprise", source: "Partner", contacts: [["Karin Nyquist", "VP Manufacturing"], ["Elias Roth", "Yield Analytics"]] },
+    { id: "d19", company: "Redmoor Utilities", amount: 86000, stage: "proposal", owner: "u3", close: "2027-03-13", opened: "2026-08-04", adj: 0, segment: "Mid-market", source: "Inbound", contacts: [["Beatrice Redmoor", "Head of Metering"], ["Idris Cole", "Grid Data Lead"]] },
+    { id: "d20", company: "Thal & Roe Legal", amount: 58000, stage: "won", owner: "u4", close: "2027-01-30", opened: "2026-08-01", adj: 0, segment: "SMB", source: "Referral", contacts: [["Rosalind Thal", "Managing Partner"], ["Peter Roe", "Practice Technology"]] }
+  ],
+  notes: [
+    { id: "n1", dealId: "d1", body: "Ops validated the failover SLA in the sandbox — no blockers left.", author: "Priya Raman", at: "2026-08-05" },
+    { id: "n2", dealId: "d3", body: "Clinical data residency needs an EU region commitment in writing.", author: "Tomás Ferreira", at: "2026-08-02" },
+    { id: "n3", dealId: "d11", body: "Procurement wants a three-year price lock before signature.", author: "Tomás Ferreira", at: "2026-07-29" }
+  ],
+  feed: [
+    { actor: "Priya Raman", title: "Halden Freight moved to Negotiation", description: "Legal review scheduled for 12 Aug", time: "2 hours ago", icon: "arrow-right", tone: "info" },
+    { actor: "Tomás Ferreira", title: "Security review cleared on Nordwell Health", description: "SOC 2 evidence pack accepted", time: "5 hours ago", icon: "shield-halved", tone: "success" },
+    { actor: "Alina Kovács", title: "Marrowgate Retail closed won", description: "$63,000 on a 24-month term", time: "Yesterday", icon: "trophy", tone: "success" },
+    { actor: "Daniel Osei", title: "Cyrix Labs closed lost", description: "Renewed with the incumbent vendor", time: "2 days ago", icon: "circle-xmark", tone: "danger" },
+    { actor: "Priya Raman", title: "Discount approval requested on Petravue Mining", description: "18% off list, pending VP sign-off", time: "3 days ago", icon: "file-signature", tone: "warning" },
+    { actor: "Tomás Ferreira", title: "Ashcombe Insurance proposal sent", description: "$265,000 three-year platform agreement", time: "4 days ago", icon: "paper-plane", tone: "info" }
+  ],
+  setStage: (s, id, stage) => { s.deals = s.deals.map(d => d.id == id ? { ...d, stage } : d) },
+  add: (s, deal) => { s.deals = [deal, ...s.deals] },
+  addNote: (s, note) => { s.notes = [...s.notes, note] },
+  log: (s, entry) => { s.feed = [entry, ...s.feed].slice(0, 24) }
+})
+
+$quarter = "q3"
+$owner = "all"
+$search = ""
+$committed = false
+$view = "board"
+$openId = null
+$note = ""
+$newOpen = false
+$sort = { key: "Amount", direction: "desc" }
+$page = 1
+
+usd = n => `$${$util.format(Math.round(n), "compact")}`
+repById = id => reps.find(r => r.id == id) ?? reps[0]
+stageOf = key => stages.find(s => s.key == key)
+stageIndex = key => stages.findIndex(s => s.key == key)
+stageLabel = d => d.stage == "lost" ? "Closed lost" : stageOf(d.stage).label
+stageTone = d => d.stage == "lost" ? "danger" : stageOf(d.stage).tone
+probOf = d => d.stage == "won" ? 1 : d.stage == "lost" ? 0 : $util.clamp(stageOf(d.stage).prob + (d.adj ?? 0), 0.05, 0.95)
+
+qtr = quarters.find(q => q.key == $quarter) ?? quarters[0]
+matches = d => qtr.months.includes(d.close.slice(0, 7)) && ($owner == "all" || d.owner == $owner) && ($search == "" || d.company.toLowerCase().includes($search.toLowerCase()))
+committed = d => d.stage == "negotiation" || d.stage == "won"
+base = crm.deals.filter(d => matches(d))
+scoped = $committed ? base.filter(d => committed(d)) : base
+openDeals = scoped.filter(d => d.stage != "won" && d.stage != "lost")
+wonDeals = scoped.filter(d => d.stage == "won")
+lostDeals = scoped.filter(d => d.stage == "lost")
+pipelineValue = $util.sum(openDeals.map(d => d.amount))
+weighted = $util.sum(openDeals.map(d => d.amount * probOf(d))) + $util.sum(wonDeals.map(d => d.amount))
+decided = wonDeals.length + lostDeals.length
+winRate = decided > 0 ? wonDeals.length / decided : 0
+cycles = wonDeals.map(d => $util.diffDays(d.opened, d.close))
+avgCycle = cycles.length > 0 ? Math.round($util.avg(cycles)) : 0
+
+repWon = id => $util.sum(scoped.filter(d => d.owner == id && d.stage == "won").map(d => d.amount))
+repPipe = id => $util.sum(scoped.filter(d => d.owner == id && d.stage != "won" && d.stage != "lost").map(d => d.amount))
+repCount = id => scoped.filter(d => d.owner == id).length
+attainTone = r => repWon(r.id) >= r.quota * 0.7 ? "success" : repWon(r.id) >= r.quota * 0.3 ? "warning" : "danger"
+ranked = [...reps].sort((a, b) => repWon(b.id) - repWon(a.id))
+
+// ---- Actions ---------------------------------------------------------------
+function advance(d) {
+  const i = stageIndex(d.stage) + 1
+  if (i <= 0 || i >= stages.length) return
+  const to = stages[i]
+  crm.setStage(d.id, to.key)
+  crm.log({ actor: repById(d.owner).name, title: `${d.company} moved to ${to.label}`, description: `${usd(d.amount)} now weighted at ${$util.percent(to.prob)}`, time: "just now", icon: to.key == "won" ? "trophy" : "arrow-right", tone: to.key == "won" ? "success" : "info" })
+  $toast.success(`${d.company} → ${to.label}`)
+}
+
+function markLost(d) {
+  crm.setStage(d.id, "lost")
+  crm.log({ actor: repById(d.owner).name, title: `${d.company} marked closed lost`, description: `${usd(d.amount)} removed from the forecast`, time: "just now", icon: "circle-xmark", tone: "danger" })
+  $toast.warning(`${d.company} moved to closed lost`)
+}
+
+function saveNote(d) {
+  if ($note.trim().length < 3) return
+  crm.addNote({ id: $util.uuid(), dealId: d.id, body: $note.trim(), author: "You", at: "just now" })
+  crm.log({ actor: "You", title: `Note added on ${d.company}`, description: $util.truncate($note.trim(), 70), time: "just now", icon: "note-sticky", tone: "default" })
+  $note = ""
+  $toast.success("Note saved to the deal")
+}
+
+function logTouch() {
+  const target = $util.first($util.sort(openDeals, "close", "asc"))
+  if (!target) return
+  crm.log({ actor: repById(target.owner).name, title: `Follow-up call logged on ${target.company}`, description: `Nearest close date in ${qtr.label} — ${target.close}`, time: "just now", icon: "phone", tone: "info" })
+  $toast.info(`Call logged on ${target.company}`)
+}
+
+function resetFilters() {
+  $owner = "all"
+  $search = ""
+  $committed = false
+}
+
+function openNew(stage) {
+  newDeal.reset()
+  newDeal.setField("stage", stage)
+  $newOpen = true
+}
+
+newDeal = $form({
+  values: { company: "", amount: 60000, stage: "discovery", owner: "u1", close: "2026-09-30" },
+  rules: {
+    company: [$util.rules.required("Which account is this?"), $util.rules.minLength(3, "Use the full account name")],
+    amount: [$util.rules.required("Add an expected value"), $util.rules.min(5000, "Anything under $5,000 goes through self-serve")],
+    close: [$util.rules.required("Pick an expected close date")]
+  },
+  onSubmit: (v) => {
+    crm.add({ id: $util.uuid(), company: v.company, amount: Number(v.amount) || 0, stage: v.stage, owner: v.owner, close: v.close, opened: "2026-08-07", adj: 0, segment: "Mid-market", source: "Outbound", contacts: [] })
+    crm.log({ actor: repById(v.owner).name, title: `${v.company} added to ${stageOf(v.stage).label}`, description: `${usd(Number(v.amount) || 0)} · expected ${v.close}`, time: "just now", icon: "circle-plus", tone: "primary" })
+    $newOpen = false
+    $toast.success(`${v.company} added to the pipeline`)
+  }
+})
+
+// ---- Header, filters, KPIs -------------------------------------------------
+header = PageHeader("Sales pipeline", {
+  breadcrumbs: ["Revenue", "Pipeline"],
+  subtitle: `Meridian Grid · ${qtr.label} · ${usd(pipelineValue)} open across ${$util.plural(openDeals.length, "deal")}`,
+  status: Badge(decided > 0 ? `${$util.percent(winRate)} win rate` : "No decisions yet", { tone: winRate >= 0.5 ? "success" : "warning", icon: "trophy" }),
+  actions: [ToggleGroup("quarter", { items: quarters.map(q => ({ value: q.key, label: q.label })), value: $quarter, size: "sm", label: "Fiscal quarter" }), Button("New deal", { variant: "primary", icon: "plus", onClick: () => openNew("discovery") })]
+})
+
+filters = Toolbar({
+  searchable: true,
+  searchPlaceholder: "Search accounts…",
+  searchValue: $search,
+  left: [
+    Select("ownerFilter", { items: [SelectItem("all", { label: "All reps" }), ...reps.map(r => SelectItem(r.id, { label: r.name }))], value: $owner, label: "Filter by owner", labelHidden: true }),
+    FilterPill("Committed only", { active: $committed, count: base.filter(d => committed(d)).length, icon: "circle-check", onToggle: (v) => { $committed = v } })
+  ],
+  right: [Button("Reset", { variant: "ghost", size: "sm", icon: "rotate-left", onClick: resetFilters }), Button("Log a call", { variant: "secondary", size: "sm", icon: "phone", onClick: logTouch, disabled: openDeals.length == 0 })]
+})
+
+kpis = Stats([
+  StatCard("Pipeline value", { value: usd(pipelineValue), icon: "chart-pie", tone: "primary", hint: `${$util.plural(openDeals.length, "open deal")} in ${qtr.label}` }),
+  StatCard("Weighted forecast", { value: usd(weighted), icon: "bullseye", tone: "info", hint: "Stage-weighted, closed won included" }),
+  StatCard("Win rate", { value: decided > 0 ? $util.percent(winRate) : "—", icon: "trophy", tone: winRate >= 0.5 ? "success" : "warning", hint: `${wonDeals.length} won · ${lostDeals.length} lost` }),
+  StatCard("Avg. cycle", { value: avgCycle > 0 ? `${avgCycle} days` : "—", icon: "stopwatch", tone: "default", hint: "Created to close, won deals" })
+], { layout: "grid" })
+
+// ---- Board and table -------------------------------------------------------
+function dealCard(d) {
+  const next = stages[stageIndex(d.stage) + 1]
+  return Column([
+    KanbanCard(d.company, { description: `${usd(d.amount)} · closes ${d.close}`, tags: [`${Math.round(probOf(d) * 100)}% likely`, d.segment], assignee: repById(d.owner).name, tone: stageTone(d), icon: "building", onClick: () => { $openId = d.id } }),
+    Row([Button(next ? `Advance to ${next.label}` : "Booked", { variant: "ghost", size: "xs", icon: "forward-step", disabled: !next, onClick: () => advance(d) }), Spacer(), IconButton("circle-info", { label: `Open ${d.company}`, variant: "ghost", size: "xs", onClick: () => { $openId = d.id } })], { align: "center", gap: "xs" })
+  ], { gap: "2xs", key: d.id })
+}
+
+boardView = Show(scoped.length > 0, {
+  fallback: EmptyState("Nothing in this view", { icon: "filter-circle-xmark", description: "Widen the owner filter, clear the search, or switch quarter.", actions: [Button("Reset filters", { variant: "secondary", icon: "rotate-left", onClick: resetFilters })] }),
+  children: KanbanBoard(stages.map(s => KanbanColumn(s.label, { items: scoped.filter(d => d.stage == s.key).map(d => dealCard(d)), tone: s.tone, actions: [IconButton("plus", { label: `New deal in ${s.label}`, variant: "ghost", size: "xs", onClick: () => openNew(s.key) })] })))
+})
+
+tableView = Show(scoped.length > 0, {
+  fallback: EmptyState("No deals match these filters", { icon: "table-list", description: "Every deal in this quarter is filtered out." }),
+  children: DataGrid({
+    columns: [
+      Col("Account", { values: scoped.map(d => d.company), sortable: true, width: "220px" }),
+      Col("Owner", { values: scoped.map(d => PersonChip(repById(d.owner).name, { role: repById(d.owner).title, avatarSrc: repById(d.owner).avatar })) }),
+      Col("Stage", { values: scoped.map(d => Badge(stageLabel(d), { tone: stageTone(d), size: "sm" })), filterable: true }),
+      Col("Amount", { values: scoped.map(d => d.amount), format: "currency", align: "right", sortable: true }),
+      Col("Prob.", { values: scoped.map(d => $util.percent(probOf(d))), align: "right", headerTooltip: "Stage-weighted close probability" }),
+      Col("Close", { values: scoped.map(d => d.close), format: "date", align: "right", sortable: true }),
+      Col("", { align: "right", values: scoped.map(d => Row([
+        IconButton("forward-step", { label: `Advance ${d.company}`, variant: "ghost", size: "sm", disabled: stageIndex(d.stage) < 0 || stageIndex(d.stage) >= stages.length - 1, onClick: () => advance(d) }),
+        IconButton("arrow-up-right-from-square", { label: `Open ${d.company}`, variant: "ghost", size: "sm", onClick: () => { $openId = d.id } })
+      ], { gap: "xs", justify: "end" })) })
+    ],
+    rowIds: scoped.map(d => d.id), sort: $sort, page: $page, perPage: 8, striped: true,
+    exportable: true, exportFilename: "meridian-pipeline.csv", onRowClick: (index, row, id) => { $openId = id }
+  })
+})
+
+dealsCard = Card([
+  SectionHeader("Deals", { eyebrow: "PIPELINE", subtitle: `${$util.plural(scoped.length, "deal")} in ${qtr.label}${$owner == "all" ? "" : ` · ${repById($owner).name}`}`, status: Pill($committed ? "Committed only" : "All stages", { tone: $committed ? "activating" : "neutral" }) }),
+  Tabs([
+    TabItem("board", { label: "Board", icon: "table-columns", badge: String(openDeals.length), children: [boardView] }),
+    TabItem("table", { label: "Table", icon: "table-list", badge: String(scoped.length), children: [tableView] })
+  ], { value: $view })
+])
+
+// ---- Forecast, leaderboard, activity ---------------------------------------
+inMonth = m => scoped.filter(d => d.close.slice(0, 7) == m && d.stage != "lost")
+monthFull = qtr.months.map(m => $util.sum(inMonth(m).map(d => d.amount)))
+monthWeighted = qtr.months.map(m => Math.round($util.sum(inMonth(m).map(d => d.amount * probOf(d)))))
+
+forecastCard = Card([
+  SectionHeader("Forecast by close month", { eyebrow: qtr.label, subtitle: "Weighted commit against full pipeline value" }),
+  BarChart(qtr.names, { series: [Series("Weighted", { values: monthWeighted }), Series("Full value", { values: monthFull })], height: 240, yAxisLabel: "USD", ariaLabel: `Forecast for ${qtr.label} by close month, weighted commit against full pipeline value` }),
+  Callout("info", { title: `Weighted commit for ${qtr.label}: ${usd(weighted)}`, description: "Advancing a deal on the board lifts its probability and re-cuts these bars.", icon: "wand-magic-sparkles", compact: true })
+])
+
+leaderboardCard = Card([
+  SectionHeader("Rep leaderboard", { eyebrow: "QUOTA", subtitle: `Closed won against ${qtr.label} quota` }),
+  Table([
+    Col("Rep", ranked.map(r => PersonChip(r.name, { role: r.title, avatarSrc: r.avatar }))),
+    Col("Deals", ranked.map(r => String(repCount(r.id))), { align: "right" }),
+    Col("Open pipeline", ranked.map(r => usd(repPipe(r.id))), { align: "right" }),
+    Col("Attainment", ranked.map(r => Progress(repWon(r.id), { max: r.quota, label: `${usd(repWon(r.id))} of ${usd(r.quota)}`, tone: attainTone(r) })), { width: "220px" })
+  ], { striped: true, density: "compact", ariaLabel: "Rep quota attainment" })
+])
+
+activityCard = Card([
+  SectionHeader("Team activity", { eyebrow: "FEED", subtitle: "Newest first — every board move lands here", actions: [Button("Log a call", { variant: "ghost", size: "sm", icon: "phone", onClick: logTouch, disabled: openDeals.length == 0 })] }),
+  ActivityLog(crm.feed.slice(0, 8), { emptyLabel: "No activity logged yet" })
+])
+
+// ---- Deal drawer -----------------------------------------------------------
+selected = crm.deals.find(d => d.id == $openId)
+
+function dealDetail(d) {
+  const contacts = d.contacts ?? []
+  const notes = crm.notes.filter(n => n.dealId == d.id)
+  return Column([
+    DescriptionList([
+      DescriptionItem("Stage", { value: Badge(stageLabel(d), { tone: stageTone(d), size: "sm" }), icon: "signal" }),
+      DescriptionItem("Amount", { value: $util.currency(d.amount, "USD"), icon: "sack-dollar" }),
+      DescriptionItem("Probability", { value: $util.percent(probOf(d)), icon: "percent" }),
+      DescriptionItem("Expected close", { value: d.close, icon: "calendar-day" }),
+      DescriptionItem("Owner", { value: repById(d.owner).name, icon: "user-tie" }),
+      DescriptionItem("Segment", { value: `${d.segment} · ${d.source}`, icon: "signs-post" })
+    ]),
+    Separator("horizontal", { label: "Contacts" }),
+    contacts.length > 0 ? Row(contacts.map(c => PersonChip(c[0], { role: c[1] })), { gap: "sm", wrap: true }) : Text("No contacts logged on this account yet.", { variant: "small", tone: "muted" }),
+    Separator("horizontal", { label: "Activity" }),
+    Timeline([
+      TimelineItem("Opportunity created", { time: d.opened, description: `${d.segment} account sourced via ${d.source}`, icon: "flag", tone: "info" }),
+      ...notes.map(n => TimelineItem(n.body, { time: n.at, description: `Note by ${n.author}`, icon: "note-sticky" })),
+      TimelineItem(`Now in ${stageLabel(d)}`, { time: `${$util.diffDays(d.opened, d.close)} day cycle`, description: `${$util.percent(probOf(d))} weighted · ${usd(d.amount * probOf(d))} expected`, icon: "location-crosshairs", tone: stageTone(d) })
+    ]),
+    Separator("horizontal", { label: "Add a note" }),
+    TextArea("dealNote", { label: "Note", labelHidden: true, placeholder: "Summarise the last conversation…", rows: 3, value: $note, autoResize: true, maxLength: 240 }),
+    Buttons([Button("Save note", { variant: "secondary", icon: "plus", disabled: $note.trim().length < 3, onClick: () => saveNote(d) })])
+  ], { gap: "md" })
+}
+
+dealDrawer = Drawer(selected ? selected.company : "Deal", {
+  open: $openId != null, side: "right", width: "520px", onClose: () => { $openId = null },
+  children: selected ? [dealDetail(selected)] : [Text("Pick a deal from the board or the table.", { tone: "muted" })],
+  footer: selected ? [
+    Button("Advance stage", { variant: "primary", icon: "forward-step", disabled: stageIndex(selected.stage) < 0 || stageIndex(selected.stage) >= stages.length - 1, onClick: () => advance(selected) }),
+    Button("Mark lost", { variant: "danger", icon: "ban", disabled: selected.stage == "lost" || selected.stage == "won", onClick: () => markLost(selected) })
+  ] : []
+})
+
+// ---- New deal modal --------------------------------------------------------
+newDealModal = Modal("New deal", {
+  open: $newOpen, size: "md", closeOnBackdrop: true, onClose: () => { $newOpen = false },
+  children: [Column([
+    FormSection("Account", [
+      FormControl("Company", { field: Input("ndCompany", { placeholder: "e.g. Halden Freight", value: newDeal.values.company, error: newDeal.errors.company, onBlur: () => newDeal.touch("company") }), required: true }),
+      FormControl("Deal value", { field: NumberInput("ndAmount", { value: newDeal.values.amount, min: 0, step: 5000, prefix: "$", error: newDeal.errors.amount, onBlur: () => newDeal.touch("amount") }), hint: "Annual contract value in USD" })
+    ], { helper: "One row per opportunity — split a multi-year term into its booking year." }),
+    FormSection("Ownership", [
+      FormControl("Stage", { field: Select("ndStage", { items: stages.filter(s => s.key != "won").map(s => SelectItem(s.key, { label: s.label })), value: newDeal.values.stage }) }),
+      FormControl("Owner", { field: Select("ndOwner", { items: reps.map(r => SelectItem(r.id, { label: `${r.name} — ${r.title}` })), value: newDeal.values.owner }) }),
+      FormControl("Expected close", { field: DatePicker("ndClose", { value: newDeal.values.close, min: "2026-07-01", max: "2027-03-31", error: newDeal.errors.close }), hint: "The deal lands in whichever quarter this date falls in." })
+    ])
+  ], { gap: "lg" })],
+  footer: [Button("Cancel", { variant: "ghost", onClick: () => { $newOpen = false } }), Button("Create deal", { variant: "primary", icon: "check", loading: newDeal.submitting, onClick: () => newDeal.submit() })]
+})
