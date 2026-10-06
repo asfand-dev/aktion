@@ -26,14 +26,16 @@ export interface ParseOptions {
      */
     statementBlocks?: boolean;
     /**
-     * Parse `this` as an ordinary identifier instead of reporting it. `.aktion`
-     * has no `this`, so by default it is a parse error at the word. The
-     * `.aktion.js` / `.aktion.ts` frontends set this because their checker
-     * already reports it as E103. A module with any parse error gets only the
-     * parse errors (the semantic checks need a complete tree), so a parse error
-     * for `this` would also hide every other diagnostic in that module.
+     * Parse `this`, `super` and `debugger` as ordinary identifiers instead of
+     * reporting them. `.aktion` has none of them, so by default each is a parse
+     * error at the word. The `.aktion.js` / `.aktion.ts` frontends set this
+     * because their checker reports a read of any of them as E103. A module with
+     * any parse error gets only the parse errors (the semantic checks need a
+     * complete tree), so a parse error would also hide every other diagnostic in
+     * that module. Declaring one of them as a name (`let this`) is then accepted
+     * by the parser, as `let this` was before this option existed.
      */
-    allowThis?: boolean;
+    allowUnsupportedWords?: boolean;
 }
 export declare function parse(source: string, options?: ParseOptions): Program;
 /**

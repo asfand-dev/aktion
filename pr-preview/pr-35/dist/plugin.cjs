@@ -696,7 +696,7 @@ function parse(source, options = {}) {
     softNewlines: options.softNewlines
   });
   const openLiteral = tokens[tokens.length - 2]?.open === true;
-  const ctx = new ParserContext(tokens, comments, options.softNewlines, options.statementBlocks === true, options.allowThis === true);
+  const ctx = new ParserContext(tokens, comments, options.softNewlines, options.statementBlocks === true, options.allowUnsupportedWords === true);
   const statements = [];
   const errors = [];
   while (!ctx.isEnd()) {
@@ -1566,12 +1566,12 @@ function parseReturn(ctx) {
 }
 const EOF_TOKEN = { type: "EOF", value: "", line: 0, column: 0 };
 class ParserContext {
-  constructor(tokens, comments = [], softNewlines, statementBlocks = false, allowThis = false) {
+  constructor(tokens, comments = [], softNewlines, statementBlocks = false, allowUnsupportedWords = false) {
     this.tokens = tokens;
     this.comments = comments;
     this.softNewlines = softNewlines;
     this.statementBlocks = statementBlocks;
-    this.allowThis = allowThis;
+    this.allowUnsupportedWords = allowUnsupportedWords;
   }
   index = 0;
   /**
@@ -1803,6 +1803,7 @@ function parseImportStatement(ctx) {
       imported = ctx.consume().value;
       isState = true;
     } else if (importedTok.type === "Identifier") {
+      rejectUnsupportedWord(ctx, importedTok);
       imported = ctx.consume().value;
     } else {
       throw {
@@ -1820,6 +1821,7 @@ function parseImportStatement(ctx) {
         local = ctx.consume().value;
         aliasIsState = true;
       } else if (aliasTok.type === "Identifier") {
+        rejectUnsupportedWord(ctx, aliasTok);
         local = ctx.consume().value;
       } else {
         throw {
@@ -1878,7 +1880,7 @@ const UNSUPPORTED_WORD_MESSAGES = /* @__PURE__ */ new Map([
   ["debugger", "`debugger` is not supported in Aktion — remove it, or log the value with `$console.log(…)`."]
 ]);
 function rejectUnsupportedWord(ctx, tok) {
-  if (tok.type !== "Identifier" || ctx.allowThis && tok.value === "this") return;
+  if (tok.type !== "Identifier" || ctx.allowUnsupportedWords) return;
   const message = UNSUPPORTED_WORD_MESSAGES.get(tok.value);
   if (message) throw { message, line: tok.line, column: tok.column };
 }
@@ -2557,7 +2559,7 @@ function parsePrimary(ctx) {
       const softNewlines = part.offset === void 0 ? void 0 : ctx.softNewlinesWithin(part.offset, part.source.length, TEMPLATE_SUB_PREFIX.length);
       const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`, {
         ...softNewlines ? { softNewlines } : {},
-        ...ctx.allowThis ? { allowThis: true } : {}
+        ...ctx.allowUnsupportedWords ? { allowUnsupportedWords: true } : {}
       });
       if (tok.open !== true) {
         const problem = interpolationError(sub, part.source, part.line, part.column);
@@ -8499,6 +8501,8 @@ const MESSAGES = {
   E101: "`await` is not supported in Aktion modules: Aktion bodies run synchronously, so `await x` is the Promise itself and a statement-level `await f()` is skipped. Chain it instead — `f().then((value) => { … })` — or use `$http(…)` and its `.onDone`.",
   E102: "`async` functions are not supported: Aktion runs them synchronously and returns their value, not a Promise. Remove `async` and chain Promises with `.then(…)`.",
   E103this: "`this` is always null in Aktion — there are no methods or classes; pass the value as a parameter.",
+  E103super: "`super` is not available in Aktion — there are no classes or inheritance; call the function you need directly.",
+  E103debugger: "`debugger` is not available in Aktion — remove it, or log the value with `$console.log(…)`.",
   E103arguments: "`arguments` is not available in Aktion — use a rest parameter `(...args)`.",
   E104: "`var` is not supported in Aktion modules — use `let` or `const`.",
   E105: (name) => `\`${name}\` is reassigned after a closure captured it. Aktion closures copy values when they are created, so the closure would not see — or keep — the new value. Use a \`$state\` atom, \`$ref(…)\` inside a component, or an object box (\`const box = { value: … }\`).`,
@@ -9212,6 +9216,14 @@ class Analyzer {
           this.report("E103", loc, MESSAGES.E103this);
           break;
         }
+        if (expr.name === "super") {
+          this.report("E103", loc, MESSAGES.E103super);
+          break;
+        }
+        if (expr.name === "debugger") {
+          this.report("E103", loc, MESSAGES.E103debugger);
+          break;
+        }
         if (expr.name === "arguments") {
           this.report("E103", loc, MESSAGES.E103arguments);
           break;
@@ -9256,6 +9268,11 @@ class Analyzer {
         this.expr(expr.alternate, conditional);
         break;
       case "Call":
+        if (expr.callee === "this" || expr.callee === "super" || expr.callee === "debugger") {
+          this.report("E103", expr.loc, MESSAGES[expr.callee === "this" ? "E103this" : expr.callee === "super" ? "E103super" : "E103debugger"]);
+          for (const arg of expr.arguments) this.expr(arg, neutral);
+          break;
+        }
         this.call(expr, context);
         break;
       case "MethodCall":
@@ -9938,7 +9955,7 @@ const aktionFrontend = {
   }
 };
 function compileJavaScriptModule(code, path, options = {}) {
-  const parseOptions = { statementBlocks: true, allowThis: true };
+  const parseOptions = { statementBlocks: true, allowUnsupportedWords: true };
   if (options.softNewlines && options.softNewlines.size > 0) parseOptions.softNewlines = options.softNewlines;
   const parsed = parse(code, parseOptions);
   if (parsed.errors.length > 0) {

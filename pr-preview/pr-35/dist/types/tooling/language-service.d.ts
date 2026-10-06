@@ -57,10 +57,10 @@ export declare function getDiagnostics(source: string, library: ComponentLibrary
  *     bodies run synchronously and nothing unwraps the thenable, so the value is
  *     the PROMISE. `const ok = await $util.copy(v)` is therefore always truthy.
  *     A bare `await f()` whose value is discarded is not flagged — only a use.
- *   - a line that starts with `(`, `[` or a template literal right after an
- *     unterminated statement. JavaScript continues the previous expression
- *     (`f⏎(1)` is `f(1)`); Aktion ends the statement at the line break, so it is
- *     two statements.
+ *   - `continuation-line` — a line that starts with `(`, `[` or a template
+ *     literal right after an unterminated statement. JavaScript continues the
+ *     previous expression (`f⏎(1)` is `f(1)`); Aktion ends the statement at the
+ *     line break, so it is two statements.
  */
 export declare function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[];
 /**
