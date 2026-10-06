@@ -158,7 +158,12 @@ describe("no-undef over every .aktion file with the plain recommended config", (
       }
       for (const name of undeclared(source, config)) names.add(name);
     }
-    expect([...names].sort()).toEqual(HOST_GLOBALS);
+    // A subset, not an equality: whether ESLint's own environment already knows
+    // a host name such as `URL` varies between runs (it did between a local run
+    // and CI), and that is not what this checks. What must never appear here is
+    // a name the runtime injects.
+    expect([...names].filter((name) => !HOST_GLOBALS.includes(name))).toEqual([]);
+    expect(["document", "window"].filter((name) => !names.has(name))).toEqual([]);
     // A file this repo's own parser rejects is skipped (the validate sweep owns
     // those); the corpus must not quietly shrink to nothing.
     expect(parseFailures.length).toBeLessThan(files.length / 10);
