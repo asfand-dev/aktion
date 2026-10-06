@@ -11,6 +11,12 @@ describe("generatePrompt", () => {
     expect(text).toContain("CardHeader(title: string");
   });
 
+  it("does not claim that every Aktion program is valid JavaScript", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).toContain("a declarative language in JavaScript syntax");
+    expect(text).not.toContain("every program is valid JS");
+  });
+
   it("toggles tool/binding sections by feature flag", () => {
     const minimal = generatePrompt(defaultLibrary, { toolCalls: false, bindings: false });
     expect(minimal).not.toContain("## Reactive State");

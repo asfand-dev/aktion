@@ -5,6 +5,12 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-06
+
+### System Prompt No Longer Says Every Program Is Valid JavaScript
+
+- The full system prompt told the model that Aktion is a strict subset of JavaScript and that every program is valid JavaScript. Aktion accepts programs JavaScript rejects (a bare `export NAME = …`, a duplicate `let`, a top-level `return`, …), so the prompt now says Aktion is a declarative language in JavaScript syntax and to write it the way you would write JavaScript.
+
 ## 2026-10-05
 
 ### Precise TypeScript Types for Every Component and Built-in
