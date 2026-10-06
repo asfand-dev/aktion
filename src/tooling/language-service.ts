@@ -25,7 +25,8 @@
  * adapters — never a second parser.
  */
 
-import { parse, collectPatternNames } from "../parser/index.js";
+import { parse, tokenize, collectPatternNames } from "../parser/index.js";
+import type { Token } from "../parser/lexer.js";
 import type { DestructuringPattern } from "../parser/types.js";
 import type { ComponentLibrary, ComponentSpec, PropSpec } from "../library/types.js";
 import { findComponent } from "../library/registry.js";
@@ -133,7 +134,7 @@ export function getDiagnostics(
     // worst silent bugs (#1 scope leak, #2 placeholder stripping, #3 Date
     // compares, #5 unicode escapes) are now fixed in the runtime, so linting
     // them would flag correct code.
-    ...lintProgram(program, library),
+    ...lintProgram(program, source, library),
   ];
 }
 
@@ -156,20 +157,113 @@ export function getDiagnostics(
  *     bodies run synchronously and nothing unwraps the thenable, so the value is
  *     the PROMISE. `const ok = await $util.copy(v)` is therefore always truthy.
  *     A bare `await f()` whose value is discarded is not flagged — only a use.
+ *   - a line that starts with `(` or `[` right after an unterminated statement.
+ *     JavaScript continues the previous expression (`f⏎(1)` is `f(1)`); Aktion
+ *     ends the statement at the line break, so it is two statements.
  */
 export function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[] {
-  return lintProgram(parse(source), library);
+  return lintProgram(parse(source), source, library);
 }
 
 function lintProgram(
   program: ReturnType<typeof parse>,
+  source: string,
   library?: ComponentLibrary,
 ): Diagnostic[] {
   return [
     ...(library ? lintUnknownComponents(program, library) : []),
     ...lintShadowedI18n(program),
     ...lintAwaitedValue(program),
+    ...lintContinuationLine(program, source),
   ];
+}
+
+/** Statement kinds that end in an expression and take no terminator of their own. */
+const UNTERMINATED_STATEMENT_KINDS: ReadonlySet<string> = new Set([
+  "ExpressionStatement",
+  "Assignment",
+  "DestructureStatement",
+]);
+
+/** Token types that can end an expression, so that a `(` or `[` on the next line could continue it. */
+const EXPRESSION_END_TOKENS: ReadonlySet<Token["type"]> = new Set<Token["type"]>([
+  "Identifier",
+  "StateIdentifier",
+  "Number",
+  "String",
+  "TemplateString",
+  "Regex",
+  "Boolean",
+  "Null",
+]);
+
+/**
+ * Flag a line that starts with `(` or `[` right after a statement that has no
+ * terminator. JavaScript continues the previous expression there, so `f⏎(1)` is
+ * the call `f(1)` and `a⏎[1].forEach(g)` indexes `a`. Aktion ends a statement at
+ * the line break, so the same text is two statements and the call or the index
+ * is silently not made. Neither parse fails, so only a warning can say so.
+ *
+ * Fires only between two sibling statements, so `if (c)⏎(f)()` (a body on the
+ * next line) is not flagged, and only when the token before the line break can
+ * end an expression. A `;` there ends the statement in both languages. A `}` is
+ * skipped because it is ambiguous (`const f = () => {}⏎(g)` is two statements in
+ * JavaScript as well).
+ *
+ * In a `.aktion.ts` module a call whose multi-line type arguments were erased
+ * reads as this shape (`foo<⏎T⏎>(x)` becomes `foo` and `(x)`), because this
+ * pass sees the erased text without the frontend's soft newlines.
+ */
+function lintContinuationLine(program: ReturnType<typeof parse>, source: string): Diagnostic[] {
+  const warnings: Diagnostic[] = [];
+  let tokens: Token[] | undefined;
+
+  const check = (previous: Record<string, unknown>, node: Record<string, unknown>): void => {
+    if (node["kind"] !== "ExpressionStatement" || !UNTERMINATED_STATEMENT_KINDS.has(String(previous["kind"]))) return;
+    const at = node["loc"] as Position | undefined;
+    if (!at) return;
+    tokens ??= tokenize(source);
+    const index = tokens.findIndex((t) => t.line === at.line && t.column === at.column);
+    const head = tokens[index];
+    if (head?.type !== "Punctuation" || (head.value !== "(" && head.value !== "[")) return;
+    let before = index - 1;
+    while (before >= 0 && tokens[before]!.type === "Newline") before -= 1;
+    const last = tokens[before];
+    if (!last || last.line === head.line) return;
+    const closesExpression = last.type === "Punctuation" && (last.value === ")" || last.value === "]");
+    if (!closesExpression && !EXPRESSION_END_TOKENS.has(last.type)) return;
+    const example = head.value === "(" ? "f⏎(1)` is `f(1)" : "f⏎[1]` is `f[1]";
+    warnings.push({
+      line: at.line,
+      column: at.column,
+      severity: "warning",
+      message:
+        `This line starts with \`${head.value}\`, so JavaScript would continue the previous line ` +
+        `(\`${example}\`). Aktion ends a statement at the line break and reads this as a new one, ` +
+        "so the call or index is not made. End the previous statement with `;` to say so, " +
+        "or put both on one line to continue it.",
+    });
+  };
+
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach((child: unknown, i) => {
+        const previous: unknown = node[i - 1];
+        if (previous && typeof previous === "object" && child && typeof child === "object") {
+          check(previous as Record<string, unknown>, child as Record<string, unknown>);
+        }
+        visit(child);
+      });
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (key !== "loc") visit(value);
+    }
+  };
+
+  visit(program.statements);
+  return warnings;
 }
 
 /**
