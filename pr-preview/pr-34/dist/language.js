@@ -37333,26 +37333,34 @@ function declarationStart(lines, loc, name, exported) {
 }
 function collectDeclaredTopLevelNames(program) {
   const declared = /* @__PURE__ */ new Set();
+  const exported = /* @__PURE__ */ new Set();
+  const add = (key, isExported) => {
+    declared.add(key);
+    if (isExported === true) exported.add(key);
+  };
   for (const stmt of program.statements) {
     switch (stmt.kind) {
       case "Import":
-        for (const spec of stmt.specifiers) declared.add(bindingKey(spec.local, spec.isState));
+        for (const spec of stmt.specifiers) add(bindingKey(spec.local, spec.isState), false);
         break;
       case "ComponentDeclaration":
       case "ActionDeclaration":
+        add(stmt.name, stmt.exported);
+        break;
       case "HookDeclaration":
-        declared.add(stmt.name);
+        add(`$${stmt.name}`, stmt.exported);
         break;
       case "DestructureStatement":
-        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) declared.add(name);
+        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) add(name, false);
         break;
       case "Assignment":
-        if (stmt.declaration !== void 0) declared.add(bindingKey(stmt.identifier, stmt.isState));
+        if (stmt.declaration !== void 0) add(bindingKey(stmt.identifier, stmt.isState), stmt.exported);
         break;
     }
   }
-  return declared;
+  return { declared, exported };
 }
+const WRITABLE_LEGACY_ROOTS = /* @__PURE__ */ new Set(["aktion", "theme"]);
 function bindingKey(name, isState) {
   return isState === true ? `$${name}` : name;
 }
@@ -37365,6 +37373,11 @@ function isWrittenElsewhere(program, declaration, key) {
     const rec = node;
     if (rec["kind"] === "Assignment" && bindingKey(String(rec["identifier"]), rec["isState"]) === key) {
       return true;
+    }
+    if ((rec["kind"] === "ForOfStatement" || rec["kind"] === "ForInStatement") && rec["declaration"] === void 0) {
+      const pattern = rec["pattern"];
+      const names = pattern ? collectPatternNames(pattern) : [String(rec["item"])];
+      if (names.includes(key)) return true;
     }
     if (rec["kind"] === "BuiltinCall" && WRITE_BUILTINS.has(String(rec["name"]))) {
       const target = rec["arguments"]?.[0];
@@ -37379,7 +37392,7 @@ function isWrittenElsewhere(program, declaration, key) {
 function lintBareDeclarations(program, source) {
   const warnings = [];
   const lines = source.split(/\r?\n/);
-  const declared = collectDeclaredTopLevelNames(program);
+  const { declared, exported: exportedDeclarations } = collectDeclaredTopLevelNames(program);
   const bound = /* @__PURE__ */ new Set();
   for (const stmt of program.statements) {
     if (stmt.kind !== "Assignment") continue;
@@ -37388,12 +37401,14 @@ function lintBareDeclarations(program, source) {
     bound.add(key);
     if (stmt.declaration !== void 0) continue;
     const exported = stmt.exported === true;
+    if (exported && !alreadyBound) exportedDeclarations.add(key);
     if (alreadyBound && !exported) continue;
+    if (!exported && !stmt.isState && WRITABLE_LEGACY_ROOTS.has(stmt.identifier)) continue;
     const { line, column } = declarationStart(lines, stmt.loc, key, exported);
     const prefix = exported ? "export " : "";
     let message;
     if (alreadyBound) {
-      message = `\`export ${key}\` writes to \`${key}\`, which another statement already declares. JavaScript has no \`export\` on an assignment and \`export let\` would redeclare it — drop the \`export\`, or declare \`${key}\` once with \`export let\`.`;
+      message = exportedDeclarations.has(key) ? `\`export ${key}\` writes to \`${key}\`, whose own declaration is already exported. JavaScript has no \`export\` on an assignment — drop the \`export\` here.` : `\`export ${key}\` writes to \`${key}\`, which another statement already declares. JavaScript has no \`export\` on an assignment, and \`export let\` here would redeclare it — put \`export\` on the declaration (\`export let ${key} = …\`, \`export function …\`) and drop it here. If nothing imports \`${key}\`, dropping it here is enough.`;
     } else {
       const needsLet = stmt.isState || isWrittenElsewhere(program, stmt, key);
       const reason = stmt.isState ? "a state atom is written, and `const` would make that a TypeError in JavaScript" : needsLet ? "it is assigned again elsewhere in the file" : "nothing else writes it";
