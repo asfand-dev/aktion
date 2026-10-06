@@ -895,14 +895,16 @@ function parseStatementImpl(ctx, _topLevel) {
     const start2 = ctx.snapshot();
     try {
       return parseExpressionStatement(ctx);
-    } catch {
-      ctx.restore(start2);
+    } catch (err) {
+      const failedAt = ctx.snapshot();
       ctx.takePending();
-      let depth = 0;
-      do {
-        const tok = ctx.consume();
-        if (tok.type === "Punctuation") depth += tok.value === "{" ? 1 : tok.value === "}" ? -1 : 0;
-      } while (depth > 0 && !ctx.isEnd());
+      const error = err;
+      const { close, errorDepth } = scanBraces(ctx, start2, error);
+      if (error.__definitive || close < 0 || errorDepth !== 1 || !BLOCK_LIKE_ERROR.test(error.message)) {
+        ctx.restore(failedAt);
+        throw err;
+      }
+      ctx.restore(close + 1);
       throw { message: BLOCK_STATEMENT_MESSAGE, line: head.line, column: head.column };
     }
   }
@@ -1018,7 +1020,7 @@ function canStartOperand(ctx, token, offset) {
 function parseFunctionDecl(ctx) {
   const start2 = ctx.expect("Keyword", "function");
   const isHook = ctx.peek().type === "StateIdentifier";
-  const nameTok = isHook ? ctx.consume() : ctx.expect("Identifier");
+  const nameTok = isHook ? ctx.consume() : ctx.expectName();
   const params = parseFunctionParams(ctx);
   const body = parseBlock(ctx);
   skipTerminator(ctx);
@@ -1078,6 +1080,7 @@ function parseFunctionParamList(ctx) {
         if (defaultValue) param.defaultValue = defaultValue;
         params.push(param);
       } else if (tok.type === "Identifier" || tok.type === "Keyword") {
+        rejectUnsupportedWord(ctx, tok);
         const nameTok = ctx.consume();
         let defaultValue;
         if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -1290,6 +1293,7 @@ function parseDeclarator(ctx, keyword, start2) {
     identifier = ctx.consume().value;
     isState = true;
   } else if (head.type === "Identifier") {
+    rejectUnsupportedWord(ctx, head);
     identifier = ctx.consume().value;
   } else {
     throw {
@@ -1375,7 +1379,7 @@ function parsePatternBody(ctx, patternKind) {
         }
         break;
       }
-      const nameTok = ctx.expect("Identifier");
+      const nameTok = ctx.expectName();
       let defaultValue;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
         ctx.consume();
@@ -1402,7 +1406,7 @@ function parsePatternBody(ctx, patternKind) {
         ctx.consume();
         isRest = true;
       }
-      const keyTok = isRest ? ctx.expect("Identifier") : parsePatternKey(ctx);
+      const keyTok = isRest ? ctx.expectName() : parsePatternKey(ctx);
       const key2 = keyTok.type === "Number" ? String(numericLiteralValue(keyTok.value)) : keyTok.value;
       let alias = key2;
       let sourceKey;
@@ -1414,12 +1418,14 @@ function parsePatternBody(ctx, patternKind) {
           sourceKey = key2;
           nestedPattern = parseDestructuringPattern(ctx);
         } else {
-          const aliasTok = ctx.expect("Identifier");
+          const aliasTok = ctx.expectName();
           sourceKey = key2;
           alias = aliasTok.value;
         }
       } else if (keyTok.type !== "Identifier") {
         throw patternKeyNeedsName(keyTok);
+      } else if (!isRest) {
+        rejectUnsupportedWord(ctx, keyTok);
       }
       let defaultValue;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -1709,6 +1715,12 @@ class ParserContext {
     }
     return this.consume();
   }
+  /** `expect("Identifier")` for a name being declared or bound, which may not be `this`, `super` or `debugger`. */
+  expectName() {
+    const tok = this.expect("Identifier");
+    rejectUnsupportedWord(this, tok);
+    return tok;
+  }
   recoverToNextLine() {
     while (!this.isEnd() && this.peek().type !== "Newline" && this.peek().type !== "Semicolon") this.consume();
     if (this.peek().type === "Newline" || this.peek().type === "Semicolon") this.consume();
@@ -1725,6 +1737,7 @@ function parseAssignment(ctx) {
   let identifier = "";
   let isState = false;
   if (head.type === "Identifier") {
+    rejectUnsupportedWord(ctx, head);
     identifier = ctx.consume().value;
   } else if (head.type === "StateIdentifier") {
     identifier = ctx.consume().value;
@@ -1847,6 +1860,29 @@ const UNSUPPORTED_WORD_MESSAGES = /* @__PURE__ */ new Map([
   ],
   ["debugger", "`debugger` is not supported in Aktion — remove it, or log the value with `$console.log(…)`."]
 ]);
+function rejectUnsupportedWord(ctx, tok) {
+  if (tok.type !== "Identifier" || ctx.allowThis && tok.value === "this") return;
+  const message = UNSUPPORTED_WORD_MESSAGES.get(tok.value);
+  if (message) throw { message, line: tok.line, column: tok.column };
+}
+const BLOCK_LIKE_ERROR = /^(Expected |Unexpected token |Labels )/;
+function scanBraces(ctx, open, error) {
+  let depth = 0;
+  let errorDepth = 0;
+  for (let i = open; ; i += 1) {
+    const tok = ctx.tokenAt(i);
+    if (!tok || tok.type === "EOF") return { close: -1, errorDepth };
+    if (errorDepth === 0 && (tok.line > error.line || tok.line === error.line && tok.column >= error.column)) {
+      errorDepth = depth;
+    }
+    if (tok.type !== "Punctuation") continue;
+    if (tok.value === "{" || tok.value === "(" || tok.value === "[") depth += 1;
+    else if (tok.value === "}" || tok.value === ")" || tok.value === "]") {
+      depth -= 1;
+      if (depth === 0) return { close: i, errorDepth };
+    }
+  }
+}
 const BLOCK_STATEMENT_MESSAGE = "Aktion has no block statements or block scoping — a `{` at the start of a statement can only open an object literal, and this is not one. Hoist the body out of the braces (a `case X:` body needs none), or move it into a function.";
 const ASYNC_REASON = "it runs functions synchronously and returns their value, not a Promise. Remove `async` and chain Promises with `.then(…)`.";
 const IMPORT_TYPE_MESSAGE = "`import type` is not supported in a `.aktion` file — Aktion has no static types, so remove it (a `.aktion.ts` module may use it: types are erased before parsing).";
@@ -2433,7 +2469,7 @@ function parsePrimary(ctx) {
       if (looksLikeFunctionExpr) {
         const start2 = tok;
         ctx.consume();
-        const selfName = ctx.peek().type === "Identifier" ? ctx.consume().value : void 0;
+        const selfName = ctx.peek().type === "Identifier" ? ctx.expectName().value : void 0;
         const params = parseFunctionParams(ctx);
         const body = parseBlock(ctx);
         return {
@@ -2546,8 +2582,7 @@ function parsePrimary(ctx) {
     return { kind: "StateRef", name: tok.value };
   }
   if (tok.type === "Identifier") {
-    const unsupported = ctx.allowThis && tok.value === "this" ? void 0 : UNSUPPORTED_WORD_MESSAGES.get(tok.value);
-    if (unsupported) throw { message: unsupported, line: tok.line, column: tok.column };
+    rejectUnsupportedWord(ctx, tok);
     ctx.consume();
     if (ctx.peek().type === "Operator" && ctx.peek().value === "=>") {
       ctx.consume();
@@ -2838,7 +2873,7 @@ function parseForHead(ctx) {
   if (ctx.peek().type === "Punctuation" && (ctx.peek().value === "[" || ctx.peek().value === "{")) {
     pattern = parseDestructuringPattern(ctx);
   } else {
-    item = ctx.expect("Identifier").value;
+    item = ctx.expectName().value;
   }
   if (kind === "for-in") {
     ctx.expect("Keyword", "in");
@@ -2955,7 +2990,7 @@ function parseTryStatement(ctx) {
             column: tok.column
           };
         }
-        const name = tok.type === "Identifier" ? ctx.consume().value : void 0;
+        const name = tok.type === "Identifier" ? ctx.expectName().value : void 0;
         ctx.expect("Punctuation", ")");
         return name;
       });
@@ -3037,6 +3072,7 @@ function parseLambdaParamList(ctx) {
         break;
       }
       if (tok.type !== "Identifier") return null;
+      rejectUnsupportedWord(ctx, tok);
       ctx.consume();
       const param = { name: tok.value };
       if (isRest) param.rest = true;
@@ -3158,6 +3194,7 @@ function parseObjectProps(ctx) {
     let value;
     let method2 = false;
     if (!computedKey && keyTok.type === "Identifier" && after.type === "Punctuation" && (after.value === "," || after.value === "}")) {
+      rejectUnsupportedWord(ctx, keyTok);
       value = { kind: "Identifier", name: key2, loc: { line: keyTok.line, column: keyTok.column } };
     } else if (after.type === "Punctuation" && after.value === "(") {
       const params = parseFunctionParams(ctx);

@@ -29,8 +29,9 @@ export interface ParseOptions {
      * Parse `this` as an ordinary identifier instead of reporting it. `.aktion`
      * has no `this`, so by default it is a parse error at the word. The
      * `.aktion.js` / `.aktion.ts` frontends set this because their checker
-     * already reports it as E103 — a diagnostic, which keeps the rest of the
-     * enclosing function checked, where a parse error would drop the function.
+     * already reports it as E103. A module with any parse error gets only the
+     * parse errors (the semantic checks need a complete tree), so a parse error
+     * for `this` would also hide every other diagnostic in that module.
      */
     allowThis?: boolean;
 }

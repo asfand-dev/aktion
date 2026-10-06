@@ -887,14 +887,16 @@ function parseStatementImpl(ctx, _topLevel) {
     const start = ctx.snapshot();
     try {
       return parseExpressionStatement(ctx);
-    } catch {
-      ctx.restore(start);
+    } catch (err) {
+      const failedAt = ctx.snapshot();
       ctx.takePending();
-      let depth = 0;
-      do {
-        const tok = ctx.consume();
-        if (tok.type === "Punctuation") depth += tok.value === "{" ? 1 : tok.value === "}" ? -1 : 0;
-      } while (depth > 0 && !ctx.isEnd());
+      const error = err;
+      const { close, errorDepth } = scanBraces(ctx, start, error);
+      if (error.__definitive || close < 0 || errorDepth !== 1 || !BLOCK_LIKE_ERROR.test(error.message)) {
+        ctx.restore(failedAt);
+        throw err;
+      }
+      ctx.restore(close + 1);
       throw { message: BLOCK_STATEMENT_MESSAGE, line: head.line, column: head.column };
     }
   }
@@ -1010,7 +1012,7 @@ function canStartOperand(ctx, token, offset) {
 function parseFunctionDecl(ctx) {
   const start = ctx.expect("Keyword", "function");
   const isHook = ctx.peek().type === "StateIdentifier";
-  const nameTok = isHook ? ctx.consume() : ctx.expect("Identifier");
+  const nameTok = isHook ? ctx.consume() : ctx.expectName();
   const params = parseFunctionParams(ctx);
   const body = parseBlock(ctx);
   skipTerminator(ctx);
@@ -1070,6 +1072,7 @@ function parseFunctionParamList(ctx) {
         if (defaultValue) param.defaultValue = defaultValue;
         params.push(param);
       } else if (tok.type === "Identifier" || tok.type === "Keyword") {
+        rejectUnsupportedWord(ctx, tok);
         const nameTok = ctx.consume();
         let defaultValue;
         if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -1282,6 +1285,7 @@ function parseDeclarator(ctx, keyword, start) {
     identifier = ctx.consume().value;
     isState = true;
   } else if (head.type === "Identifier") {
+    rejectUnsupportedWord(ctx, head);
     identifier = ctx.consume().value;
   } else {
     throw {
@@ -1367,7 +1371,7 @@ function parsePatternBody(ctx, patternKind) {
         }
         break;
       }
-      const nameTok = ctx.expect("Identifier");
+      const nameTok = ctx.expectName();
       let defaultValue;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
         ctx.consume();
@@ -1394,7 +1398,7 @@ function parsePatternBody(ctx, patternKind) {
         ctx.consume();
         isRest = true;
       }
-      const keyTok = isRest ? ctx.expect("Identifier") : parsePatternKey(ctx);
+      const keyTok = isRest ? ctx.expectName() : parsePatternKey(ctx);
       const key = keyTok.type === "Number" ? String(numericLiteralValue(keyTok.value)) : keyTok.value;
       let alias = key;
       let sourceKey;
@@ -1406,12 +1410,14 @@ function parsePatternBody(ctx, patternKind) {
           sourceKey = key;
           nestedPattern = parseDestructuringPattern(ctx);
         } else {
-          const aliasTok = ctx.expect("Identifier");
+          const aliasTok = ctx.expectName();
           sourceKey = key;
           alias = aliasTok.value;
         }
       } else if (keyTok.type !== "Identifier") {
         throw patternKeyNeedsName(keyTok);
+      } else if (!isRest) {
+        rejectUnsupportedWord(ctx, keyTok);
       }
       let defaultValue;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -1701,6 +1707,12 @@ class ParserContext {
     }
     return this.consume();
   }
+  /** `expect("Identifier")` for a name being declared or bound, which may not be `this`, `super` or `debugger`. */
+  expectName() {
+    const tok = this.expect("Identifier");
+    rejectUnsupportedWord(this, tok);
+    return tok;
+  }
   recoverToNextLine() {
     while (!this.isEnd() && this.peek().type !== "Newline" && this.peek().type !== "Semicolon") this.consume();
     if (this.peek().type === "Newline" || this.peek().type === "Semicolon") this.consume();
@@ -1717,6 +1729,7 @@ function parseAssignment(ctx) {
   let identifier = "";
   let isState = false;
   if (head.type === "Identifier") {
+    rejectUnsupportedWord(ctx, head);
     identifier = ctx.consume().value;
   } else if (head.type === "StateIdentifier") {
     identifier = ctx.consume().value;
@@ -1839,6 +1852,29 @@ const UNSUPPORTED_WORD_MESSAGES = /* @__PURE__ */ new Map([
   ],
   ["debugger", "`debugger` is not supported in Aktion — remove it, or log the value with `$console.log(…)`."]
 ]);
+function rejectUnsupportedWord(ctx, tok) {
+  if (tok.type !== "Identifier" || ctx.allowThis && tok.value === "this") return;
+  const message = UNSUPPORTED_WORD_MESSAGES.get(tok.value);
+  if (message) throw { message, line: tok.line, column: tok.column };
+}
+const BLOCK_LIKE_ERROR = /^(Expected |Unexpected token |Labels )/;
+function scanBraces(ctx, open, error) {
+  let depth = 0;
+  let errorDepth = 0;
+  for (let i = open; ; i += 1) {
+    const tok = ctx.tokenAt(i);
+    if (!tok || tok.type === "EOF") return { close: -1, errorDepth };
+    if (errorDepth === 0 && (tok.line > error.line || tok.line === error.line && tok.column >= error.column)) {
+      errorDepth = depth;
+    }
+    if (tok.type !== "Punctuation") continue;
+    if (tok.value === "{" || tok.value === "(" || tok.value === "[") depth += 1;
+    else if (tok.value === "}" || tok.value === ")" || tok.value === "]") {
+      depth -= 1;
+      if (depth === 0) return { close: i, errorDepth };
+    }
+  }
+}
 const BLOCK_STATEMENT_MESSAGE = "Aktion has no block statements or block scoping — a `{` at the start of a statement can only open an object literal, and this is not one. Hoist the body out of the braces (a `case X:` body needs none), or move it into a function.";
 const ASYNC_REASON = "it runs functions synchronously and returns their value, not a Promise. Remove `async` and chain Promises with `.then(…)`.";
 const IMPORT_TYPE_MESSAGE = "`import type` is not supported in a `.aktion` file — Aktion has no static types, so remove it (a `.aktion.ts` module may use it: types are erased before parsing).";
@@ -2425,7 +2461,7 @@ function parsePrimary(ctx) {
       if (looksLikeFunctionExpr) {
         const start = tok;
         ctx.consume();
-        const selfName = ctx.peek().type === "Identifier" ? ctx.consume().value : void 0;
+        const selfName = ctx.peek().type === "Identifier" ? ctx.expectName().value : void 0;
         const params = parseFunctionParams(ctx);
         const body = parseBlock(ctx);
         return {
@@ -2538,8 +2574,7 @@ function parsePrimary(ctx) {
     return { kind: "StateRef", name: tok.value };
   }
   if (tok.type === "Identifier") {
-    const unsupported = ctx.allowThis && tok.value === "this" ? void 0 : UNSUPPORTED_WORD_MESSAGES.get(tok.value);
-    if (unsupported) throw { message: unsupported, line: tok.line, column: tok.column };
+    rejectUnsupportedWord(ctx, tok);
     ctx.consume();
     if (ctx.peek().type === "Operator" && ctx.peek().value === "=>") {
       ctx.consume();
@@ -2830,7 +2865,7 @@ function parseForHead(ctx) {
   if (ctx.peek().type === "Punctuation" && (ctx.peek().value === "[" || ctx.peek().value === "{")) {
     pattern = parseDestructuringPattern(ctx);
   } else {
-    item = ctx.expect("Identifier").value;
+    item = ctx.expectName().value;
   }
   if (kind === "for-in") {
     ctx.expect("Keyword", "in");
@@ -2947,7 +2982,7 @@ function parseTryStatement(ctx) {
             column: tok.column
           };
         }
-        const name = tok.type === "Identifier" ? ctx.consume().value : void 0;
+        const name = tok.type === "Identifier" ? ctx.expectName().value : void 0;
         ctx.expect("Punctuation", ")");
         return name;
       });
@@ -3029,6 +3064,7 @@ function parseLambdaParamList(ctx) {
         break;
       }
       if (tok.type !== "Identifier") return null;
+      rejectUnsupportedWord(ctx, tok);
       ctx.consume();
       const param = { name: tok.value };
       if (isRest) param.rest = true;
@@ -3150,6 +3186,7 @@ function parseObjectProps(ctx) {
     let value;
     let method2 = false;
     if (!computedKey && keyTok.type === "Identifier" && after.type === "Punctuation" && (after.value === "," || after.value === "}")) {
+      rejectUnsupportedWord(ctx, keyTok);
       value = { kind: "Identifier", name: key, loc: { line: keyTok.line, column: keyTok.column } };
     } else if (after.type === "Punctuation" && after.value === "(") {
       const params = parseFunctionParams(ctx);
@@ -37358,7 +37395,23 @@ function lintProgram(program, source, library) {
 const UNTERMINATED_STATEMENT_KINDS = /* @__PURE__ */ new Set([
   "ExpressionStatement",
   "Assignment",
-  "DestructureStatement"
+  "DestructureStatement",
+  "EffectDeclaration",
+  "Return",
+  "ThrowStatement",
+  "Await",
+  "IfStatement",
+  "WhileStatement",
+  "ForOfStatement",
+  "ForInStatement",
+  "ForClassicStatement"
+]);
+const BODY_STATEMENT_KINDS = /* @__PURE__ */ new Set([
+  "IfStatement",
+  "WhileStatement",
+  "ForOfStatement",
+  "ForInStatement",
+  "ForClassicStatement"
 ]);
 const EXPRESSION_END_TOKENS = /* @__PURE__ */ new Set([
   "Identifier",
@@ -37373,26 +37426,47 @@ const EXPRESSION_END_TOKENS = /* @__PURE__ */ new Set([
 function lintContinuationLine(program, source) {
   const warnings = [];
   let tokens;
+  let indexAt;
+  const closesArrowBody = (close) => {
+    let depth = 0;
+    for (let i = close; i >= 0; i -= 1) {
+      const tok = tokens[i];
+      if (tok.type !== "Punctuation") continue;
+      if (tok.value === "}") depth += 1;
+      else if (tok.value === "{" && --depth === 0) {
+        const before = tokens[i - 1];
+        return before?.type === "Operator" && before.value === "=>";
+      }
+    }
+    return false;
+  };
   const check = (previous, node) => {
     if (node["kind"] !== "ExpressionStatement" || !UNTERMINATED_STATEMENT_KINDS.has(String(previous["kind"]))) return;
     const at = node["loc"];
     if (!at) return;
-    tokens ?? (tokens = tokenize(source));
-    const index = tokens.findIndex((t) => t.line === at.line && t.column === at.column);
+    if (!tokens) {
+      tokens = tokenize(source);
+      indexAt = new Map(tokens.map((t, i) => [`${t.line}:${t.column}`, i]));
+    }
+    const index = indexAt.get(`${at.line}:${at.column}`) ?? -1;
     const head = tokens[index];
-    if (head?.type !== "Punctuation" || head.value !== "(" && head.value !== "[") return;
+    if (!head) return;
+    const startsTemplate = head.type === "TemplateString" || head.type === "String" && head.template === true;
+    const startsBracket = head.type === "Punctuation" && (head.value === "(" || head.value === "[");
+    if (!startsTemplate && !startsBracket) return;
     let before = index - 1;
     while (before >= 0 && tokens[before].type === "Newline") before -= 1;
     const last = tokens[before];
-    if (!last || last.line === head.line) return;
+    if (!last) return;
     const closesExpression = last.type === "Punctuation" && (last.value === ")" || last.value === "]");
-    if (!closesExpression && !EXPRESSION_END_TOKENS.has(last.type)) return;
-    const example = head.value === "(" ? "f⏎(1)` is `f(1)" : "f⏎[1]` is `f[1]";
+    const closesLiteral = last.type === "Punctuation" && last.value === "}" && !BODY_STATEMENT_KINDS.has(String(previous["kind"])) && !closesArrowBody(before);
+    if (!closesExpression && !closesLiteral && !EXPRESSION_END_TOKENS.has(last.type)) return;
+    const what = startsTemplate ? "a template literal, so JavaScript would read the previous line as its tag (`` f⏎`x` `` is `` f`x` ``)" : `\`${head.value}\`, so JavaScript would continue the previous line (\`${head.value === "(" ? "f⏎(1)` is `f(1)" : "f⏎[1]` is `f[1]"}\`)`;
     warnings.push({
       line: at.line,
       column: at.column,
       severity: "warning",
-      message: `This line starts with \`${head.value}\`, so JavaScript would continue the previous line (\`${example}\`). Aktion ends a statement at the line break and reads this as a new one, so the call or index is not made. End the previous statement with \`;\` to say so, or put both on one line to continue it.`
+      message: `This line starts with ${what}. Aktion ends a statement at the line break and reads this as a new one, so the call, index or tag is not made. End the previous statement with \`;\` to say so, or put both on one line to continue it.`
     });
   };
   const visit = (node) => {
