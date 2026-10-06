@@ -37322,36 +37322,66 @@ function lintProgram(program, library) {
     ...lintInvalidRegExp(program)
   ];
 }
+const REGEXP_WARNING_PREFIX = "This engine rejects this regular expression";
+const MAX_REGEXP_REASON = 160;
 function lintInvalidRegExp(program) {
   const warnings = [];
-  const stringLiteral = (node) => {
-    if (!node || typeof node !== "object") return void 0;
+  const calleeOf = (node) => {
+    const callee = node["callee"];
+    return typeof callee === "string" ? callee : callee?.["kind"] === "Identifier" ? callee["name"] : void 0;
+  };
+  const isRegExpConstruction = (node) => {
+    if (!node || typeof node !== "object") return false;
     const rec = node;
-    return rec["kind"] === "Literal" && typeof rec["value"] === "string" ? rec["value"] : void 0;
+    return (rec["kind"] === "New" || rec["kind"] === "Call") && calleeOf(rec) === "RegExp";
+  };
+  const resolve = (node) => {
+    const args = node["arguments"];
+    if (!Array.isArray(args) || args.length === 0) return void 0;
+    if (args.some((a) => a?.["kind"] === "Spread")) return void 0;
+    const first = args[0];
+    const second = args[1];
+    let pattern;
+    let inheritedFlags;
+    if (first["kind"] === "Literal" && typeof first["value"] === "string") {
+      pattern = first["value"];
+    } else if (isRegExpConstruction(first)) {
+      const inner = resolve(first);
+      if (!inner) return void 0;
+      try {
+        new RegExp(inner.pattern, inner.flags);
+      } catch {
+        return void 0;
+      }
+      pattern = inner.pattern;
+      inheritedFlags = inner.flags;
+    } else {
+      return void 0;
+    }
+    if (second === void 0 || second["kind"] === "Identifier" && second["name"] === "undefined") {
+      return { pattern, flags: inheritedFlags };
+    }
+    if (second["kind"] === "Literal" && typeof second["value"] === "string") {
+      return { pattern, flags: second["value"] };
+    }
+    return void 0;
   };
   const check = (node) => {
-    const callee = node["callee"];
-    const calleeName = typeof callee === "string" ? callee : callee?.["kind"] === "Identifier" ? callee["name"] : void 0;
-    if (calleeName !== "RegExp") return;
-    const args = node["arguments"];
-    if (!Array.isArray(args) || args.length === 0 || args.length > 2) return;
-    const pattern = stringLiteral(args[0]);
-    if (pattern === void 0) return;
-    let flags;
-    if (args.length === 2) {
-      flags = stringLiteral(args[1]);
-      if (flags === void 0) return;
-    }
+    const resolved = resolve(node);
+    if (!resolved) return;
     try {
-      new RegExp(pattern, flags);
+      new RegExp(resolved.pattern, resolved.flags);
     } catch (err) {
       const loc = node["loc"];
-      const detail = err instanceof Error ? err.message : String(err);
+      let reason = err instanceof Error ? err.message : String(err);
+      const echoed = `Invalid regular expression: /${resolved.pattern}/${resolved.flags ?? ""}: `;
+      if (reason.startsWith(echoed)) reason = reason.slice(echoed.length);
+      if (reason.length > MAX_REGEXP_REASON) reason = `${reason.slice(0, MAX_REGEXP_REASON)}…`;
       warnings.push({
         line: loc?.line ?? 0,
         column: loc?.column ?? 0,
         severity: "warning",
-        message: `Invalid regular expression — ${detail}. The runtime swallows this error and the expression evaluates to null, so a match against it silently reads as "no match".`
+        message: `${REGEXP_WARNING_PREFIX}: ${reason}. Aktion evaluates a rejected regular expression to null instead of throwing, so \`.test(…)\` quietly reports no match. Which syntax is accepted depends on the JavaScript engine (Node version) running the linter.`
       });
     }
   };
@@ -37362,7 +37392,7 @@ function lintInvalidRegExp(program) {
       return;
     }
     const rec = node;
-    if (rec["kind"] === "New" || rec["kind"] === "Call") check(rec);
+    if (isRegExpConstruction(rec)) check(rec);
     for (const key of Object.keys(rec)) {
       if (key !== "loc") visit(rec[key]);
     }
