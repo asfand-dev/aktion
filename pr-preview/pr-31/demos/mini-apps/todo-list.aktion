@@ -1,0 +1,91 @@
+// To-do List — the classic starter: add tasks, complete them, filter by
+// status, reorder by drag, clear completed, and persist everything to
+// localStorage. Starting point for: any task / checklist productivity app.
+// Uses: $store({ persist, history }), Sortable drag-reorder, $form, SegmentedControl.
+$app(Center([Container([Column([header, addRow, filters, list, footer], { gap: "md" })], { size: "sm" })], { minHeight: "85vh" }))
+
+todos = $store({
+  persist: "todo.items",
+  history: 50,
+  items: [
+    { id: "t1", title: "Read the Aktion docs", done: true },
+    { id: "t2", title: "Build a starter app", done: false },
+    { id: "t3", title: "Ship to production", done: false }
+  ],
+  add: (s, title) => { s.items = [...s.items, { id: $util.uuid(), title, done: false }] },
+  toggle: (s, id) => { s.items = s.items.map(t => t.id == id ? { ...t, done: !t.done } : t) },
+  remove: (s, id) => { s.items = s.items.filter(t => t.id != id) },
+  rename: (s, id, title) => { s.items = s.items.map(t => t.id == id ? { ...t, title } : t) },
+  reorder: (s, items) => { s.items = items },
+  clearDone: (s) => { s.items = s.items.filter(t => !t.done) }
+})
+
+$filter = "all"
+$draft = ""
+
+remaining = todos.items.filter(t => !t.done).length
+done = todos.items.length - remaining
+visible = todos.items.filter(t => $filter == "all" ? true : $filter == "active" ? !t.done : t.done)
+
+function add() {
+  const title = $draft.trim()
+  if (!title) return
+  todos.add(title)
+  $draft = ""
+}
+
+header = PageHeader("To-do List", {
+  subtitle: `${remaining} ${$util.plural(remaining, "task")} left`,
+  badge: Badge(`${done}/${todos.items.length} done`, { tone: done == todos.items.length && todos.items.length > 0 ? "success" : "neutral" }),
+  actions: [
+    Button("Undo", { variant: "ghost", icon: "rotate-left", size: "sm", onClick: () => todos.undo(), disabled: !todos.canUndo }),
+    Button("Redo", { variant: "ghost", icon: "rotate-right", size: "sm", onClick: () => todos.redo(), disabled: !todos.canRedo })
+  ]
+})
+
+addRow = Row([
+  StackItem(OnKeyboard(Input("draft", { placeholder: "What needs doing?", value: $draft }), {
+    onKeyDown: (e) => { if (e.key == "Enter") add() }
+  }), { grow: 1 }),
+  Button("Add", { variant: "primary", icon: "plus", onClick: add, disabled: !$draft.trim() })
+], { gap: "sm", align: "end" })
+
+filters = Row([
+  SegmentedControl(["all", "active", "done"], { value: $filter, onChange: (v) => { $filter = v } }),
+  Spacer(),
+  Text(`${done} completed`, { variant: "small", tone: "muted" })
+], { align: "center" })
+
+function row(t) {
+  return Box([Row([
+    Checkbox(`done-${t.id}`, { value: t.done, onChange: () => todos.toggle(t.id) }),
+    StackItem(Text(t.title, { tone: t.done ? "muted" : "default", style: t.done ? "strike" : null }), { grow: 1 }),
+    Badge(t.done ? "done" : "active", { tone: t.done ? "success" : "info", size: "xs" }),
+    IconButton("trash", { label: "Delete", variant: "ghost", size: "sm", onClick: () => todos.remove(t.id) })
+  ], { gap: "sm", align: "center" })], {
+    key: t.id, padding: "sm", border: "subtle", background: "surface"
+  })
+}
+
+list = Card([
+  Show(visible.length > 0, {
+    fallback: EmptyState($filter == "done" ? "Nothing completed yet" : "All clear!", {
+      icon: $filter == "done" ? "list-check" : "mug-hot",
+      description: $filter == "done" ? "Check off a task to see it here." : "Add a task above to get started."
+    }),
+    children: $filter == "all"
+      ? Sortable(visible.map(row), { onReorder: (from, to) => {
+          const next = [...todos.items]
+          const [moved] = next.splice(from, 1)
+          next.splice(to, 0, moved)
+          todos.reorder(next)
+        } })
+      : Column(visible.map(row), { gap: "sm" })
+  })
+])
+
+footer = Row([
+  Text($filter == "all" ? "Drag to reorder" : "Reordering is available on the “all” filter", { variant: "small", tone: "muted" }),
+  Spacer(),
+  Button("Clear completed", { variant: "ghost", size: "sm", icon: "broom", onClick: () => todos.clearDone(), disabled: done == 0 })
+], { align: "center" })
