@@ -33320,8 +33320,15 @@ const injected = [
   "slots",
   "theme"
 ];
+const hostGlobals = [
+  "atob",
+  "btoa",
+  "console",
+  "structuredClone"
+];
 const manifest = {
-  injected
+  injected,
+  hostGlobals
 };
 const WRITABLE = /* @__PURE__ */ new Set(["aktion", "theme"]);
 function buildGlobals() {
@@ -33330,6 +33337,7 @@ function buildGlobals() {
   for (const entry of builtinCatalog) names.add(entry.sigil);
   for (const entry of namespaceCatalog) names.add(entry.sigil);
   for (const name of manifest.injected) names.add(name);
+  for (const name of manifest.hostGlobals) names.add(name);
   const out = {};
   for (const name of [...names].sort()) out[name] = WRITABLE.has(name) ? "writable" : "readonly";
   return out;
@@ -33705,6 +33713,7 @@ aktionEslintPlugin.configs = {
   typescript: aktionTypeScriptConfig
 };
 export {
+  aktionGlobals,
   aktionProcessor,
   aktionPropsLiteralRule,
   aktionRecommendedRules,
@@ -33715,7 +33724,6 @@ export {
   computeLineStarts,
   aktionEslintPlugin as default,
   findBareExportInsertions,
-  aktionGlobals as globals,
   lineColumnToOffset,
   offsetToLineColumn,
   rangeOverlapsInsertion,

@@ -33322,8 +33322,15 @@ const injected = [
   "slots",
   "theme"
 ];
+const hostGlobals = [
+  "atob",
+  "btoa",
+  "console",
+  "structuredClone"
+];
 const manifest = {
-  injected
+  injected,
+  hostGlobals
 };
 const WRITABLE = /* @__PURE__ */ new Set(["aktion", "theme"]);
 function buildGlobals() {
@@ -33332,6 +33339,7 @@ function buildGlobals() {
   for (const entry of builtinCatalog) names.add(entry.sigil);
   for (const entry of namespaceCatalog) names.add(entry.sigil);
   for (const name of manifest.injected) names.add(name);
+  for (const name of manifest.hostGlobals) names.add(name);
   const out = {};
   for (const name of [...names].sort()) out[name] = WRITABLE.has(name) ? "writable" : "readonly";
   return out;
@@ -33706,6 +33714,7 @@ aktionEslintPlugin.configs = {
   recommended: recommendedConfig,
   typescript: aktionTypeScriptConfig
 };
+exports.aktionGlobals = aktionGlobals;
 exports.aktionProcessor = aktionProcessor;
 exports.aktionPropsLiteralRule = aktionPropsLiteralRule;
 exports.aktionRecommendedRules = aktionRecommendedRules;
@@ -33716,7 +33725,6 @@ exports.applyInsertions = applyInsertions;
 exports.computeLineStarts = computeLineStarts;
 exports.default = aktionEslintPlugin;
 exports.findBareExportInsertions = findBareExportInsertions;
-exports.globals = aktionGlobals;
 exports.lineColumnToOffset = lineColumnToOffset;
 exports.offsetToLineColumn = offsetToLineColumn;
 exports.rangeOverlapsInsertion = rangeOverlapsInsertion;
