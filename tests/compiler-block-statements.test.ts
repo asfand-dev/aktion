@@ -78,8 +78,9 @@ describe("E113 — block statements", () => {
     expect(stmt.loc).toEqual({ line: 1, column: 1 });
   });
 
-  it("`.aktion` keeps reading a statement-position `{` as an object literal", () => {
+  it("`.aktion` keeps reading a statement-position `{` as an object literal, and says why a block is not one", () => {
     const program = parse(lines("function go() {", "  {", "    const x = 1", "  }", "}"));
-    expect(program.errors[0]!.message).toMatch(/Expected Punctuation ":"/);
+    expect(program.errors[0]).toMatchObject({ line: 2, column: 3 });
+    expect(program.errors[0]!.message).toMatch(/^Aktion has no block statements or block scoping/);
   });
 });

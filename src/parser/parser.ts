@@ -78,6 +78,14 @@ export interface ParseOptions {
    * statement-position `{` as an object literal.
    */
   statementBlocks?: boolean;
+  /**
+   * Parse `this` as an ordinary identifier instead of reporting it. `.aktion`
+   * has no `this`, so by default it is a parse error at the word. The
+   * `.aktion.js` / `.aktion.ts` frontends set this because their checker
+   * already reports it as E103 — a diagnostic, which keeps the rest of the
+   * enclosing function checked, where a parse error would drop the function.
+   */
+  allowThis?: boolean;
 }
 
 export function parse(source: string, options: ParseOptions = {}): Program {
@@ -87,7 +95,7 @@ export function parse(source: string, options: ParseOptions = {}): Program {
     softNewlines: options.softNewlines,
   });
   const openLiteral = tokens[tokens.length - 2]?.open === true;
-  const ctx = new ParserContext(tokens, comments, options.softNewlines, options.statementBlocks === true);
+  const ctx = new ParserContext(tokens, comments, options.softNewlines, options.statementBlocks === true, options.allowThis === true);
   const statements: Statement[] = [];
   const errors: ParseError[] = [];
 
@@ -363,6 +371,27 @@ function parseStatementImpl(ctx: ParserContext, _topLevel: boolean): Statement |
     const block = parseBlock(ctx);
     skipTerminator(ctx);
     return { kind: "ExpressionStatement", expression: block, loc: { line: head.line, column: head.column } };
+  }
+  if (head.type === "Punctuation" && head.value === "{") {
+    // Without `statementBlocks` a statement-position `{` can only be an object
+    // literal. One that does not parse as such is nearly always a block
+    // (`{ const x = 1 }`, `case 2: { … }`), whose real problem is that Aktion
+    // has none — the object-literal error ("Expected ':' but got …") names an
+    // inner token and says nothing about that.
+    const start = ctx.snapshot();
+    try {
+      return parseExpressionStatement(ctx);
+    } catch {
+      ctx.restore(start);
+      ctx.takePending();
+      // Step over the whole block so its own closing `}` is not reported again.
+      let depth = 0;
+      do {
+        const tok = ctx.consume();
+        if (tok.type === "Punctuation") depth += tok.value === "{" ? 1 : tok.value === "}" ? -1 : 0;
+      } while (depth > 0 && !ctx.isEnd());
+      throw { message: BLOCK_STATEMENT_MESSAGE, line: head.line, column: head.column } satisfies ParseError;
+    }
   }
   const saved = ctx.snapshot();
   if (couldStartAssignment(ctx)) {
@@ -1276,6 +1305,8 @@ class ParserContext {
     private readonly softNewlines?: ReadonlySet<number>,
     /** `ParseOptions.statementBlocks`. */
     readonly statementBlocks = false,
+    /** `ParseOptions.allowThis`. */
+    readonly allowThis = false,
   ) {}
 
   isEnd(): boolean {
@@ -1580,6 +1611,31 @@ const DYNAMIC_IMPORT_MESSAGE =
 const IMPORT_META_MESSAGE =
   "`import.meta` is not supported in Aktion — pass the value in from the host page instead.";
 
+/**
+ * JavaScript words that are valid expressions to this grammar (plain
+ * identifiers) but mean nothing in Aktion. Without an error they used to parse
+ * and then read `null` (`this.x`), call an undefined function (`super.foo()`)
+ * or do nothing (`debugger`).
+ */
+const UNSUPPORTED_WORD_MESSAGES: ReadonlyMap<string, string> = new Map([
+  [
+    "this",
+    "`this` is not supported in Aktion — there are no classes or methods, so nothing is ever bound to it. " +
+      "Pass the value as a parameter instead.",
+  ],
+  [
+    "super",
+    "`super` is not supported in Aktion — there are no classes or inheritance. " +
+      "Call the function you need directly.",
+  ],
+  ["debugger", "`debugger` is not supported in Aktion — remove it, or log the value with `$console.log(…)`."],
+]);
+
+const BLOCK_STATEMENT_MESSAGE =
+  "Aktion has no block statements or block scoping — a `{` at the start of a statement can only open an " +
+  "object literal, and this is not one. Hoist the body out of the braces (a `case X:` body needs none), " +
+  "or move it into a function.";
+
 /** Why `async` arrows, function expressions and methods are rejected (statement-level `async function` is a no-op). */
 const ASYNC_REASON =
   "it runs functions synchronously and returns their value, not a Promise. " +
@@ -1647,8 +1703,8 @@ function parseExportStatement(ctx: ParserContext): Statement {
   if (next.type === "Punctuation" && next.value === "{") {
     throw {
       message:
-        "`export { … }` lists are not supported yet — use inline `export <declaration>` " +
-        "(e.g. `export function Foo() {…}`, `export $count = 0`).",
+        "`export { … }` lists (and re-export lists) are not supported — declare each binding with `export` " +
+        "where it is defined (e.g. `export function Foo() {…}`, `export let $count = 0`, `export const NAME = …`).",
       line: next.line,
       column: next.column,
     } satisfies ParseError;
@@ -2465,7 +2521,10 @@ function parsePrimary(ctx: ParserContext): Expression {
       const softNewlines = part.offset === undefined
         ? undefined
         : ctx.softNewlinesWithin(part.offset, part.source.length, TEMPLATE_SUB_PREFIX.length);
-      const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`, softNewlines ? { softNewlines } : {});
+      const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`, {
+        ...(softNewlines ? { softNewlines } : {}),
+        ...(ctx.allowThis ? { allowThis: true } : {}),
+      });
       // An interpolation that is not one complete expression is an error, at
       // its own position — never a silent `""` (which used to swallow
       // `${import.meta.env.X}`, `${10n}`, `${async () => …}` and plain typos).
@@ -2518,6 +2577,8 @@ function parsePrimary(ctx: ParserContext): Expression {
     return { kind: "StateRef", name: tok.value };
   }
   if (tok.type === "Identifier") {
+    const unsupported = ctx.allowThis && tok.value === "this" ? undefined : UNSUPPORTED_WORD_MESSAGES.get(tok.value);
+    if (unsupported) throw { message: unsupported, line: tok.line, column: tok.column } satisfies ParseError;
     ctx.consume();
     // Unparenthesised single-param arrow: `x => expr` or `x => { … }`.
     if (ctx.peek().type === "Operator" && ctx.peek().value === "=>") {

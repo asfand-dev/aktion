@@ -100,8 +100,10 @@ export function compileJavaScriptModule(
   path: string,
   options: CompileJavaScriptOptions = {},
 ): FrontendResult {
-  // Statement blocks parse as blocks, so E113 reports them once at the `{`.
-  const parseOptions: ParseOptions = { statementBlocks: true };
+  // Statement blocks parse as blocks, so E113 reports them once at the `{`;
+  // `this` parses as an identifier, so E103 reports it without dropping the
+  // function around it.
+  const parseOptions: ParseOptions = { statementBlocks: true, allowThis: true };
   if (options.softNewlines && options.softNewlines.size > 0) parseOptions.softNewlines = options.softNewlines;
   const parsed = parse(code, parseOptions);
   if (parsed.errors.length > 0) {
