@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generatePrompt } from "../src/prompt/generator.js";
 import { defaultLibrary } from "../src/library/index.js";
+import { parse } from "../src/parser/index.js";
 
 describe("generatePrompt", () => {
   it("includes syntax, components, and root rule", () => {
@@ -15,6 +16,24 @@ describe("generatePrompt", () => {
     const text = generatePrompt(defaultLibrary);
     expect(text).toContain("a declarative language in JavaScript syntax");
     expect(text).not.toContain("every program is valid JS");
+    expect(text).not.toContain("strict subset");
+  });
+
+  it("does not call the chat prompt a strict subset of JavaScript", () => {
+    const text = generatePrompt(defaultLibrary, { mode: "chat" });
+    expect(text).toContain("a declarative language in JavaScript syntax");
+    expect(text).not.toContain("strict subset");
+  });
+
+  it("only lists as unsupported what the parser rejects", () => {
+    for (const source of [
+      "class A { }",
+      "const f = async () => { return 1 }",
+      "const x = tag`a`",
+      "function f() { { let a = 1 } return 1 }",
+    ]) {
+      expect(parse(source).errors, source).not.toEqual([]);
+    }
   });
 
   it("toggles tool/binding sections by feature flag", () => {
