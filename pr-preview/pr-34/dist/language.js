@@ -37322,11 +37322,13 @@ function lintProgram(program, library, options, source) {
     ...options.bareDeclarations === true ? lintBareDeclarations(program, source) : []
   ];
 }
-function declarationStart(lines, loc, head) {
+function declarationStart(lines, loc, name, exported) {
   const line = loc?.line ?? 0;
   const column = loc?.column ?? 0;
   const before = (lines[line - 1] ?? "").slice(0, Math.max(column - 1, 0));
-  const match = new RegExp(`(^|[^\\w$])(${head})\\s*$`).exec(before);
+  const escaped = name.replace(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`);
+  const head = `${exported ? String.raw`export\s+` : ""}${escaped}`;
+  const match = new RegExp(String.raw`(^|[^\w$])(${head})\s*$`).exec(before);
   return match ? { line, column: match.index + match[1].length + 1 } : { line, column };
 }
 function lintBareDeclarations(program, source) {
@@ -37353,7 +37355,7 @@ function lintBareDeclarations(program, source) {
         bound.add(key);
         if (stmt.declaration !== void 0 || !isFirst && stmt.exported !== true) break;
         const exported = stmt.exported === true ? "export " : "";
-        const { line, column } = declarationStart(lines, stmt.loc, `${exported ? "export\\s+" : ""}${key.replace("$", "\\$")}`);
+        const { line, column } = declarationStart(lines, stmt.loc, key, stmt.exported === true);
         warnings.push({
           line,
           column,
