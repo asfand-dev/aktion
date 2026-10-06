@@ -142,7 +142,7 @@ body = Card([
         <tbody>
           <tr><td><code>$name = value</code></td><td><strong>Reactive atom.</strong> A tracked cell &mdash; reading subscribes the surrounding component / effect, writing notifies subscribers and re-renders.</td></tr>
           <tr><td><code>name = value</code></td><td><strong>Plain binding.</strong> A non-reactive alias captured once; reading it never subscribes.</td></tr>
-          <tr><td><code>function name()</code></td><td><strong>Component or action.</strong> A function declaration creates both: invoked in a render position its return value is rendered (a function with no <code>return</code> simply renders nothing); referenced from an event handler its body runs for side effects. First-letter case (<code>Card</code> vs <code>card</code>) does not decide component versus action; it only decides whether each call gets its own <a href="#set-once">per-instance state</a>. Reusing a <em>built-in</em> component's name is flagged by the validator &mdash; unless the body calls that same name (the wrapper pattern: inside its own body the name refers to the built-in, so <code>function Badge(l) { return Badge(l, { tone: "success" }) }</code> extends the library Badge instead of recursing).</td></tr>
+          <tr><td><code>function name()</code></td><td><strong>Component or action.</strong> A function declaration creates both: invoked in a render position its return value is rendered (a function with no <code>return</code> simply renders nothing); referenced from an event handler its body runs for side effects. First-letter case (<code>Card</code> vs <code>card</code>) does not decide component versus action; it does decide whether each call gets its own <a href="#set-once">per-instance state</a> and whether the call is memoized (see <a href="#state">Reactive state</a>). Reusing a <em>built-in</em> component's name is flagged by the validator &mdash; unless the body calls that same name (the wrapper pattern: inside its own body the name refers to the built-in, so <code>function Badge(l) { return Badge(l, { tone: "success" }) }</code> extends the library Badge instead of recursing).</td></tr>
         </tbody>
       </table>
       <p>
@@ -206,8 +206,11 @@ $app(Column([
         are compared shallowly, so (as in React) a fresh inline-lambda prop each
         render makes the child re-render &mdash; hoist the handler to a stable
         binding to skip it. First-letter case does not decide whether state is seeded
-        once (see <a href="#set-once">Set-once</a>), only whether each call gets its
-        own copy of it.
+        once, but it does decide two other things: whether each call gets its own
+        copy of it (see <a href="#set-once">Set-once</a>) and whether the call is
+        memoized. Over re-renders that only change a sibling atom, a lowercase
+        <code>showAge</code> re-runs with every render of its caller, while a
+        PascalCase <code>ShowAge</code> runs once.
       </p>
 
       <h3 id="set-once">Set-once: <code>$x = &hellip;</code> in a function body</h3>
@@ -239,7 +242,11 @@ function reset() {
 }</code></pre>
       <p>
         <code>let $n = 5</code> and the bare <code>$n = 5</code> behave identically
-        here. Three things decide what is shared:
+        at runtime. A JavaScript linter reads the function-body <code>let</code> as a
+        local of <code>app()</code>, so with the <code>aktion-runtime/eslint</code>
+        processor it can report the <code>$n</code> in <code>reset()</code> as
+        <code>no-undef</code>; Aktion itself treats both as the one shared atom.
+        Three things decide what is shared:
       </p>
       <ul>
         <li>Only a PascalCase component gets its own copy per instance. In a

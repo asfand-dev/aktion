@@ -147,8 +147,10 @@ do not let a tool re-sort a module's imports.
 
 A function declaration is **both** a component and an action; whether it renders
 depends on whether it returns a tree and where it is called. `function myCard(t) {
-return Card([Text(t)]) }` renders fine. PascalCase / camelCase is a readability
-convention only.
+return Card([Text(t)]) }` renders fine. Case does not change whether it renders, but only a PascalCase
+component gets its own state per instance and is memoized (it re-executes only when
+its own inputs change); a lowercase function shares one atom between its calls and
+re-runs with every render of its caller.
 
 ### No `return` renders nothing
 

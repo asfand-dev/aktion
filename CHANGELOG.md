@@ -20,8 +20,8 @@ Each entry is dated and summarises what was added, changed, or fixed.
   set-once while the UI renders and an ordinary write from a handler. Nested in
   an `if` or loop, or directly in an arrow or function expression, it is always
   an ordinary write, with a single `console.warn` as the only signal. Only a
-  PascalCase component gets its own copy per instance, and an existing top-level
-  atom of that name wins.
+  PascalCase component gets its own copy per instance and is memoized between
+  renders, and an existing top-level atom of that name wins.
 - Documented the two supported ways to write shared state from several modules
   (an exported `let` atom with an exported setter action, and an exported
   `$store` written by property), and that writing an imported `$` atom directly

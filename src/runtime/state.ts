@@ -145,7 +145,8 @@ export class StateStore {
    * Whether a render is currently in progress. Used by the evaluator to give
    * a function body's top-level `$x = expr` *set-once* (declaration)
    * semantics while rendering — so a function used to build the UI seeds its
-   * state once and preserves later mutations, regardless of name case.
+   * state once and preserves later mutations, regardless of name case (only a
+   * PascalCase component gets its own copy per instance).
    */
   isRendering(): boolean {
     return this.rendering;
