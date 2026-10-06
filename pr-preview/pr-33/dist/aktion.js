@@ -12703,7 +12703,7 @@ import { $count } from "./store.aktion"`
 }`
   },
   function: {
-    summary: "Declare a component or action — first-letter case does not matter.",
+    summary: "Declare a component or action — first-letter case does not decide which, only per-instance state and memoization (PascalCase).",
     syntax: "function name(params) { ... }",
     example: "function Greeting(name) {\n  return Text(`Hello ${name}`)\n}"
   },
@@ -36306,7 +36306,8 @@ class Hu {
    * Whether a render is currently in progress. Used by the evaluator to give
    * a function body's top-level `$x = expr` *set-once* (declaration)
    * semantics while rendering — so a function used to build the UI seeds its
-   * state once and preserves later mutations, regardless of name case.
+   * state once and preserves later mutations, regardless of name case (only a
+   * PascalCase component gets its own copy per instance).
    */
   isRendering() {
     return this.rendering;
@@ -63200,7 +63201,7 @@ form\${1} = Column([
   },
   {
     name: "Component",
-    description: "Reusable component declaration — first-letter case is not significant; a function with no `return` simply renders nothing.",
+    description: "Reusable component declaration — first-letter case does not decide whether it renders (PascalCase also gets per-instance state and memoization); a function with no `return` simply renders nothing.",
     template: `function \${1:UserCard}(\${2:user}) {
   return Card([
     Avatar(\${2:user}.name),

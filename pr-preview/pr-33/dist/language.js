@@ -5389,7 +5389,7 @@ const keywordDocs = {
     example: "export function Card2({ title }) {\n  return Card([CardHeader(title)])\n}"
   },
   function: {
-    summary: "Declare a component or action — first-letter case does not matter.",
+    summary: "Declare a component or action — first-letter case does not decide which, only per-instance state and memoization (PascalCase).",
     syntax: "function name(params) { ... }",
     example: "function Greeting(name) {\n  return Text(`Hello ${name}`)\n}"
   },
@@ -39913,7 +39913,7 @@ const snippetCatalog = [
   },
   {
     name: "Component",
-    description: "Reusable component declaration — first-letter case is not significant; a function with no `return` simply renders nothing.",
+    description: "Reusable component declaration — first-letter case does not decide whether it renders (PascalCase also gets per-instance state and memoization); a function with no `return` simply renders nothing.",
     template: "function ${1:UserCard}(${2:user}) {\n  return Card([\n    Avatar(${2:user}.name),\n    Text(${2:user}.role)\n  ])\n}\n\nlist = $users.map(u => ${1:UserCard}(u))"
   },
   {
