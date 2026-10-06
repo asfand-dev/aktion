@@ -1,15 +1,19 @@
 /**
- * `aktion-runtime/eslint`'s `aktionGlobals` is a projection of the catalogues
- * and the DSL manifest. Three layers guard it:
+ * `aktion-runtime/eslint`'s `aktionGlobals` is built from `src/dsl/manifest.json`
+ * alone (so the eslint bundle does not carry the component library); this file
+ * compares it with the catalogues and the runtime. Three layers guard it:
  *
- *   1. it contains every name those sources list (the first describe block) —
- *      this only checks the record against its own inputs;
- *   2. the sources themselves match what the runtime binds
- *      (`tests/dsl-types.test.ts` probes every manifest `injected` and
- *      `hostGlobals` name);
+ *   1. the first describe block compares it with the catalogues and the manifest
+ *      lists, which only checks the record against its own inputs;
+ *   2. `tests/dsl-types.test.ts` checks the manifest against what the runtime
+ *      binds (every `injected` and `hostGlobals` name, and the component and
+ *      `$`-name lists);
  *   3. the runtime probe below, which asks the runtime which names it resolves
- *      and requires `no-undef` to know every one of them, so a name the runtime
- *      gains but the manifest lacks fails here too.
+ *      and requires `no-undef` to know every one. It only tries names that exist
+ *      on the test realm's `globalThis` (`Object.getOwnPropertyNames`), such as
+ *      `structuredClone`; it cannot notice a new injected binding that is not a
+ *      global (a route-style name, a component, a `$`-builtin), which layers 1
+ *      and 2 cover.
  *
  * The corpus sweep then runs `no-undef` over every real `.aktion` file.
  */
@@ -229,11 +233,12 @@ describe("every name the runtime resolves is known to no-undef", () => {
   ];
 
   it("no-undef reports none of the globals the runtime binds under an empty host policy", async () => {
-    // With `setGlobalAccessPolicy([])` no host global passes the policy, so what
-    // still resolves is what the runtime itself provides: its curated standard
-    // library names (`Math`, `structuredClone`, …), the library components and
-    // the injected bindings. Candidates are every identifier-shaped name on the
-    // test realm's global object.
+    // With `setGlobalAccessPolicy([])` no host global passes the policy, so of
+    // the candidates only the runtime's curated standard library names (`Math`,
+    // `JSON`, `structuredClone`, …) still resolve. Candidates are every
+    // identifier-shaped name on the test realm's global object, so this covers
+    // runtime-bound names that are also globals, not new route-style bindings,
+    // components or `$`-builtins.
     const candidates = Object.getOwnPropertyNames(globalThis).filter(
       (name) => /^[A-Za-z_][\w]*$/.test(name) && parse(`$app(Text(String(${name} == null)))`).errors.length === 0,
     );

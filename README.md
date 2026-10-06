@@ -1908,23 +1908,29 @@ own tooling on the same technique.
 
 A `.aktion` file uses `Container`, `$state`, `route`, `params` and the rest
 without importing them, so core `no-undef` reports every one unless ESLint is
-told they exist. `aktionGlobals` is that list, built from the same component,
-builtin and namespace catalogues the editor tooling reads plus the `injected`
-and `hostGlobals` names in `src/dsl/manifest.json`; `configs.recommended`
-applies it to the processor's virtual `**/*.aktion/*.ts` block, and it is also
-`aktionEslint.globals` on the plugin object. It follows its sources, which
-`tests/dsl-types.test.ts` checks against what the runtime binds, and
-`tests/eslint-globals.test.ts` asks the runtime which names it resolves and
-requires `no-undef` to know every one.
+told they exist. `aktionGlobals` is that list, built from `src/dsl/manifest.json`
+alone (the file the generated types come from, so the ESLint entry does not
+bundle the component library); `configs.recommended` applies it to the
+processor's virtual `**/*.aktion/*.ts` block, and it is also
+`aktionEslint.globals` on the plugin object. `tests/dsl-types.test.ts` checks
+the manifest against what the runtime binds, and `tests/eslint-globals.test.ts`
+compares the record with the catalogues and probes the runtime: it asks which
+names on the test realm's global object the runtime resolves and requires
+`no-undef` to know each one (it cannot notice a new non-global binding such as
+a route-style name, a component or a `$`-builtin; the manifest checks cover
+those).
 
-It lists what Aktion provides: components, `$`-builtins, the injected bindings,
-and `atob`, `btoa`, `console` and `structuredClone` (the host names the
-generated `globals.d.ts` also declares). The context-only names `params`,
-`outlet`, `children`, `slots` and `cleanup` are declared program-wide but hold
-a value only inside the construct that binds them; at top level they are
-`null`. Other host globals a program may reach (`document`, `window`, `URL`,
-`crypto`, …) depend on your environment and the global-access policy — add them
-yourself, for example `globals.browser` from the
+It lists the components, the `$`-builtins, the injected bindings, and `atob`,
+`btoa`, `console` and `structuredClone`. Of those last four only
+`structuredClone` is provided by the runtime itself (under every global-access
+policy); `atob`, `btoa` and `console` are policy-gated host globals exactly
+like `URL`, and are listed because the generated `globals.d.ts` declares them,
+not because Aktion unconditionally provides them. The context-only names
+`params`, `outlet`, `children`, `slots` and `cleanup` are declared
+program-wide but hold a value only inside the construct that binds them; at top
+level they are `null`. Other host globals a program may reach (`document`,
+`window`, `URL`, `crypto`, …) depend on your environment and the global-access
+policy — add them yourself, for example `globals.browser` from the
 [`globals`](https://www.npmjs.com/package/globals) package. A program's own
 keyword-less bindings (`count = 0`) are not declarations to a JavaScript
 linter either; write `let count = 0` / `const …` to have `no-undef` see them.
