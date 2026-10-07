@@ -5389,7 +5389,7 @@ const keywordDocs = {
     example: "export function Card2({ title }) {\n  return Card([CardHeader(title)])\n}"
   },
   function: {
-    summary: "Declare a component or action — first-letter case does not decide which, only per-instance state and memoization (PascalCase).",
+    summary: "Declare a component or action — first-letter case does not decide whether it renders or can be used as an action, only per-instance state and memoization (PascalCase).",
     syntax: "function name(params) { ... }",
     example: "function Greeting(name) {\n  return Text(`Hello ${name}`)\n}"
   },
