@@ -172,6 +172,15 @@ export function getDiagnostics(
  *     bodies run synchronously and nothing unwraps the thenable, so the value is
  *     the PROMISE. `const ok = await $util.copy(v)` is therefore always truthy.
  *     A bare `await f()` whose value is discarded is not flagged — only a use.
+ *   - `invalid-regexp` — a regular expression whose pattern or flags the engine
+ *     rejects: a `/…/flags` literal, `new RegExp("…", "…")` or `RegExp("…", "…")`
+ *     with string-literal arguments. The runtime swallows the `SyntaxError` and
+ *     the expression becomes `null`, so a broken validator reads as "no match".
+ *     The check constructs the RegExp with the RegExp engine of the Node that
+ *     runs the linter, so what it accepts follows that Node's version (newer
+ *     syntax such as duplicate named groups or `(?i:…)` modifiers is rejected
+ *     before Node 23/24). A non-literal argument (`new RegExp(pattern)`) is
+ *     skipped.
  *   - `bare-declaration` (opt-in: `{ bareDeclarations: true }`) — a top-level
  *     binding written without `let` / `const`: `export B = 1`, `export $s = 4`, or the first `y = 4` of a name. The
  *     keyword is optional to the runtime (it changes nothing about reactivity),
@@ -199,8 +208,137 @@ function lintProgram(
     ...(library ? lintUnknownComponents(program, library) : []),
     ...lintShadowedI18n(program),
     ...lintAwaitedValue(program),
+    ...lintInvalidRegExp(program),
     ...(options.bareDeclarations === true ? lintBareDeclarations(program, source) : []),
   ];
+}
+
+/** How an `invalid-regexp` warning begins; tests and hosts can match on it. */
+const REGEXP_WARNING_PREFIX = "This engine rejects this regular expression";
+
+/** Longest engine reason echoed into a warning (a flags error repeats the flags verbatim). */
+const MAX_REGEXP_REASON = 160;
+
+/**
+ * Flag a regular expression the JavaScript engine refuses to construct.
+ *
+ * A `/pattern/flags` literal is desugared by the parser to
+ * `new RegExp("pattern", "flags")`, so one walk covers the literal, the
+ * `new RegExp(…)` form and the plain `RegExp(…)` call. At run time the
+ * evaluator catches the `SyntaxError` the constructor throws, logs it with
+ * `console.error` and evaluates the expression to `null` — so
+ *
+ * ```js
+ * const isCode = (s) => /^[(]+$/v.test(s)   // `[(]` is invalid under the v flag
+ * ```
+ *
+ * quietly never matches (`null.test` is `null`, a falsy "no match"), and other
+ * uses (`s.replace(null, …)`) quietly misbehave. Nothing else in the toolchain
+ * looks at the pattern.
+ *
+ * Only calls whose pattern (and flags, when given) are string literals — or a
+ * regular expression literal re-wrapped as `new RegExp(/a/, "g")` — are checked;
+ * a computed argument cannot be judged statically and is skipped. A third
+ * argument is ignored, as in JavaScript. The verdict is the linting Node's:
+ * engines differ in what syntax they accept, and the message says "this engine".
+ * Engines do not report an offset into the pattern, so the warning is positioned
+ * on the regular expression itself.
+ */
+function lintInvalidRegExp(program: ReturnType<typeof parse>): Diagnostic[] {
+  const warnings: Diagnostic[] = [];
+
+  const calleeOf = (node: Record<string, unknown>): unknown => {
+    // `New` carries the callee as an Identifier node; a plain `Call` as a name.
+    const callee = node["callee"] as Record<string, unknown> | string | undefined;
+    return typeof callee === "string" ? callee : callee?.["kind"] === "Identifier" ? callee["name"] : undefined;
+  };
+
+  const isRegExpConstruction = (node: unknown): node is Record<string, unknown> => {
+    if (!node || typeof node !== "object") return false;
+    const rec = node as Record<string, unknown>;
+    return (rec["kind"] === "New" || rec["kind"] === "Call") && calleeOf(rec) === "RegExp";
+  };
+
+  /** The statically known source and flags a RegExp construction receives, if any. */
+  const resolve = (node: Record<string, unknown>): { pattern: string; flags: string | undefined } | undefined => {
+    const args = node["arguments"];
+    if (!Array.isArray(args) || args.length === 0) return undefined;
+    // A spread anywhere makes the argument positions unknowable.
+    if (args.some((a) => (a as Record<string, unknown> | null)?.["kind"] === "Spread")) return undefined;
+    const first = args[0] as Record<string, unknown>;
+    const second = args[1] as Record<string, unknown> | undefined;
+
+    let pattern: string;
+    let inheritedFlags: string | undefined;
+    if (first["kind"] === "Literal" && typeof first["value"] === "string") {
+      pattern = first["value"];
+    } else if (isRegExpConstruction(first)) {
+      // `new RegExp(/a/g, flags)`: the inner source is reused, its flags only
+      // when no flags are passed.
+      const inner = resolve(first);
+      if (!inner) return undefined;
+      // An inner expression that is itself invalid reports on its own; the
+      // wrapper would only repeat it.
+      try {
+        new RegExp(inner.pattern, inner.flags);
+      } catch {
+        return undefined;
+      }
+      pattern = inner.pattern;
+      inheritedFlags = inner.flags;
+    } else {
+      return undefined;
+    }
+
+    if (second === undefined || (second["kind"] === "Identifier" && second["name"] === "undefined")) {
+      return { pattern, flags: inheritedFlags };
+    }
+    if (second["kind"] === "Literal" && typeof second["value"] === "string") {
+      return { pattern, flags: second["value"] };
+    }
+    return undefined;
+  };
+
+  const check = (node: Record<string, unknown>): void => {
+    const resolved = resolve(node);
+    if (!resolved) return;
+    try {
+      new RegExp(resolved.pattern, resolved.flags);
+    } catch (err) {
+      const loc = node["loc"] as Position | undefined;
+      let reason = err instanceof Error ? err.message : String(err);
+      // V8 prefixes `Invalid regular expression: /<pattern>/<flags>: `; the
+      // pattern is already on the line the warning points at, so drop it.
+      const echoed = `Invalid regular expression: /${resolved.pattern}/${resolved.flags ?? ""}: `;
+      if (reason.startsWith(echoed)) reason = reason.slice(echoed.length);
+      if (reason.length > MAX_REGEXP_REASON) reason = `${reason.slice(0, MAX_REGEXP_REASON)}…`;
+      warnings.push({
+        line: loc?.line ?? 0,
+        column: loc?.column ?? 0,
+        severity: "warning",
+        message:
+          `${REGEXP_WARNING_PREFIX}: ${reason}. Aktion evaluates a rejected regular expression to ` +
+          "null instead of throwing, so `.test(…)` quietly reports no match. Which syntax is " +
+          "accepted depends on the JavaScript engine (Node version) running the linter.",
+      });
+    }
+  };
+
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    const rec = node as Record<string, unknown>;
+    if (isRegExpConstruction(rec)) check(rec);
+    for (const key of Object.keys(rec)) {
+      if (key !== "loc") visit(rec[key]);
+    }
+  };
+
+  visit(program.statements);
+  return warnings;
 }
 
 /**

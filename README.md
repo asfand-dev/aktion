@@ -488,8 +488,8 @@ import {
 import { getDiagnostics, getCompletions, formatProgram } from "aktion-runtime/language";
 // DOM-free language service for editor integrations — see Tooling below
 
-import aktionEslint, { aktionProcessor, aktionRecommendedRules } from "aktion-runtime/eslint";
-// ESLint processor + recommended rule overrides — see ESLint integration below
+import aktionEslint, { aktionProcessor, aktionRecommendedRules, aktionGlobals } from "aktion-runtime/eslint";
+// ESLint processor + recommended rule overrides + injected globals — see ESLint integration below
 ```
 
 The four subpath entries (`/test`, `/devtools`, `/language`, `/eslint`) and the
@@ -1783,8 +1783,16 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   is flagged with a `suggestComponent`-derived *"Did you mean …?"* hint. It is a
   warning, not an error — the runtime renders an unknown component as nothing,
   and a stale editor library must never turn a working file red. The other
-  warning is `shadowed-i18n` (a parameter or loop variable shadowing a binding
-  destructured from `$i18n(...)`, typically `t`). `getLintWarnings(source,
+  warnings are `shadowed-i18n` (a parameter or loop variable shadowing a binding
+  destructured from `$i18n(...)`, typically `t`), `awaited-value` (the result of
+  an `await`, which is the promise) and `invalid-regexp`: a `/…/flags` literal,
+  `new RegExp("…", "…")` or plain `RegExp("…", "…")` call whose literal pattern
+  or flags the engine rejects (e.g. `/[(]/v`) — the runtime would otherwise
+  swallow the error and evaluate the expression to `null`. That check uses the
+  RegExp engine of the Node running the linter (CI, the language server,
+  `validate-aktion-app.mjs`), so newer syntax such as duplicate named groups or
+  `(?i:…)` modifiers is reported on Node 20 and 22 but not on Node 24.
+  `getLintWarnings(source,
   library?)` returns only the warnings; pass the library to enable the
   unknown-component pass, omit it to skip it. An opt-in warning,
   `bare-declaration`, flags a top-level assignment that declares a binding
@@ -1897,9 +1905,10 @@ import aktionEslint from "aktion-runtime/eslint";
 import tsParser from "@typescript-eslint/parser";
 
 export default [
-  // The two portable blocks this package documents — processor wiring plus
-  // ten DSL-general rule overrides (grammar incompatibilities and DSL-idiom
-  // false positives — see `aktionRecommendedRules` for the full citations).
+  // The two portable blocks this package documents — processor wiring, plus
+  // the names the runtime injects (`aktionGlobals`) and ten DSL-general rule
+  // overrides (grammar incompatibilities and DSL-idiom false positives — see
+  // `aktionRecommendedRules` for the full citations).
   ...aktionEslint.configs.recommended,
   {
     // Matches the SAME virtual per-block path the processor produces
@@ -1922,10 +1931,44 @@ Prefer to assemble the pieces yourself instead of spreading
 `configs.recommended`? Every piece is exported individually: `aktionProcessor`
 (the `Linter.Processor` object, for `processors: {aktion: aktionProcessor}` +
 `processor: "aktion/aktion"`), `aktionRecommendedRules` (the plain rules
-record to spread into your own `**/*.aktion/*.ts` block), plus the pure
+record to spread into your own `**/*.aktion/*.ts` block), `aktionGlobals` (the
+plain `{ name: "readonly" | "writable" }` record of every name the runtime
+injects — components, `$`-builtins, `route`, `params`, `outlet`, … — for
+`languageOptions.globals`), plus the pure
 `findBareExportInsertions` / `applyInsertions` / `toOriginalOffset` /
 `rangeOverlapsInsertion` position-remap primitives for anyone building their
 own tooling on the same technique.
+
+### The injected globals
+
+A `.aktion` file uses `Container`, `$state`, `route`, `params` and the rest
+without importing them, so core `no-undef` reports every one unless ESLint is
+told they exist. `aktionGlobals` is that list, built from `src/dsl/manifest.json`
+alone (the file the generated types come from, so the ESLint entry does not
+bundle the component library); `configs.recommended` applies it to the
+processor's virtual `**/*.aktion/*.ts` block, and it is also
+`aktionEslint.globals` on the plugin object. `tests/dsl-types.test.ts` checks
+the manifest against what the runtime binds, and `tests/eslint-globals.test.ts`
+compares the record with the catalogues and probes the runtime: it asks which
+names on the test realm's global object the runtime resolves and requires
+`no-undef` to know each one (it cannot notice a new non-global binding such as
+a route-style name, a component or a `$`-builtin; the manifest checks cover
+those).
+
+It lists the components, the `$`-builtins, the injected bindings, and `atob`,
+`btoa`, `console` and `structuredClone`. Of those last four only
+`structuredClone` is provided by the runtime itself (under every global-access
+policy); `atob`, `btoa` and `console` are policy-gated host globals exactly
+like `URL`, and are listed because the generated `globals.d.ts` declares them,
+not because Aktion unconditionally provides them. The context-only names
+`params`, `outlet`, `children`, `slots` and `cleanup` are declared
+program-wide but hold a value only inside the construct that binds them; at top
+level they are `null`. Other host globals a program may reach (`document`,
+`window`, `URL`, `crypto`, …) depend on your environment and the global-access
+policy — add them yourself, for example `globals.browser` from the
+[`globals`](https://www.npmjs.com/package/globals) package. A program's own
+keyword-less bindings (`count = 0`) are not declarations to a JavaScript
+linter either; write `let count = 0` / `const …` to have `no-undef` see them.
 
 ### The ten rule overrides — why each one is needed
 

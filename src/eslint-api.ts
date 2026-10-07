@@ -33,9 +33,10 @@
  * import tsParser from "@typescript-eslint/parser";
  *
  * export default [
- *   // The two portable blocks this package documents — processor wiring
- *   // plus the ten DSL-general rule overrides (see `aktionRecommendedRules`
- *   // for the full citations).
+ *   // The two portable blocks this package documents — processor wiring,
+ *   // plus the names the runtime injects (`aktionGlobals`, so `no-undef` knows
+ *   // `Container`, `$state`, `route`, …) and the ten DSL-general rule
+ *   // overrides (see `aktionRecommendedRules` for the full citations).
  *   ...aktionEslint.configs.recommended,
  *   {
  *     // Matches the SAME virtual per-block path the processor produces
@@ -59,9 +60,11 @@
  * Prefer to assemble the pieces yourself instead of spreading
  * `configs.recommended`? Every piece is exported individually too:
  * `aktionProcessor` (the `Linter.Processor` object), `aktionRecommendedRules`
- * (the plain rules record), plus the pure `scan`/`remap` primitives for
- * anyone building their own tooling on top of the same position-remap
- * machinery.
+ * (the plain rules record), `aktionGlobals` (every name the runtime injects, for
+ * `languageOptions.globals` — so `no-undef` knows `Container`, `$state`,
+ * `route`, … without a hand-kept list), plus the pure `scan`/`remap`
+ * primitives for anyone building their own tooling on top of the same
+ * position-remap machinery.
  *
  * ## `.aktion.ts` / `.aktion.js` modules
  *
@@ -114,6 +117,7 @@
 
 export { aktionProcessor } from "./eslint/processor.js";
 export { aktionRecommendedRules, aktionTypeScriptRules } from "./eslint/rules.js";
+export { aktionGlobals, type AktionGlobalAccess } from "./eslint/globals.js";
 export { aktionPropsLiteralRule } from "./eslint/props-literal.js";
 export { aktionRouterLiteralRule } from "./eslint/router-literal.js";
 export { findBareExportInsertions, type ExportInsertion } from "./eslint/scan.js";
@@ -128,6 +132,7 @@ export {
 } from "./eslint/remap.js";
 
 import type { ESLint, Linter } from "eslint";
+import { aktionGlobals, type AktionGlobalAccess } from "./eslint/globals.js";
 import { aktionProcessor } from "./eslint/processor.js";
 import { aktionPropsLiteralRule } from "./eslint/props-literal.js";
 import { aktionRouterLiteralRule } from "./eslint/router-literal.js";
@@ -140,9 +145,10 @@ import { aktionRecommendedRules, aktionTypeScriptRules } from "./eslint/rules.js
  *
  * `configs.recommended` covers the two DSL-general blocks — routing `.aktion`
  * files through the processor, and the ten rule overrides every consumer
- * needs — but deliberately stops short of wiring a parser for the processor's
- * virtual `.ts` block: `aktion-runtime` has no opinion on, and no dependency
- * on, which JS/TS parser a consumer uses. Add that block yourself (see the
+ * needs plus the names the runtime injects (`aktionGlobals`, so `no-undef` stays
+ * usable) — but deliberately stops short of wiring a parser for the
+ * processor's virtual `.ts` block: `aktion-runtime` has no opinion on, and no
+ * dependency on, which JS/TS parser a consumer uses. Add that block yourself (see the
  * module doc comment above for the exact shape) — flat config merges every
  * config object matching the same `files` glob, so your own
  * `**\/*.aktion/*.ts` block combines with the one `configs.recommended`
@@ -150,9 +156,11 @@ import { aktionRecommendedRules, aktionTypeScriptRules } from "./eslint/rules.js
  *
  * `configs.typescript` (`aktionTypeScriptConfig`) is the counterpart for
  * `.aktion.ts`/`.aktion.js` modules, and `rules` holds the plugin's two rules,
- * addressed as `aktion/props-literal` and `aktion/router-literal`.
+ * addressed as `aktion/props-literal` and `aktion/router-literal`. `globals`
+ * is the same record the entry exports as `aktionGlobals`, for a consumer that reads
+ * it off the plugin instead of importing it.
  */
-const aktionEslintPlugin: ESLint.Plugin = {
+const aktionEslintPlugin: ESLint.Plugin & { globals: Readonly<Record<string, AktionGlobalAccess>> } = {
   meta: {
     name: "aktion-runtime",
     version: "0.1.0",
@@ -164,6 +172,7 @@ const aktionEslintPlugin: ESLint.Plugin = {
     "props-literal": aktionPropsLiteralRule,
     "router-literal": aktionRouterLiteralRule,
   },
+  globals: aktionGlobals,
 };
 
 // Assigned after the object literal above (rather than inline) because this
@@ -186,6 +195,9 @@ const recommendedConfig: Linter.Config[] = [
   {
     name: "aktion/recommended/rules",
     files: ["**/*.aktion/*.ts"],
+    languageOptions: {
+      globals: { ...aktionGlobals },
+    },
     rules: {
       ...aktionRecommendedRules,
     },
