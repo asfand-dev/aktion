@@ -55559,7 +55559,7 @@ $effect(() => $console.log($count), [$count])                     // declarative
 ### Three kinds of name
 - \`name = value\` — plain binding, captured once (not reactive).
 - \`$name = value\` — reactive atom: reading subscribes, writing notifies.
-- \`function name(...)\` — declares a component AND an action of that name. First-letter case does not decide whether it renders (\`Card\`/\`card\`, \`SaveOrder\`/\`saveOrder\`), but only a PascalCase component gets per-instance state and memoized re-rendering; arrow bindings (\`row = item => Row(...)\`) render the same either way.
+- \`function name(...)\` — declares a component AND an action of that name. First-letter case does not decide whether it renders (declare \`SaveOrder\` or \`saveOrder\`), but names are case-sensitive, so call it exactly as declared; only a PascalCase component gets per-instance state and memoized re-rendering; arrow bindings (\`row = item => Row(...)\`) render the same either way.
 
 ### Two rules, broken constantly — always check
 1. **Invoke components with parentheses.** A component is a function; the bare name is just its value. Render it by calling it, even with no args: \`$app(MyApp())\` not \`$app(MyApp)\`; \`Column([Header(), Body()])\` not \`Column([Header, Body])\`. (Exception: passing a component as a callback, e.g. \`render: UserCard\`.)
@@ -55714,7 +55714,7 @@ undoBtn = Button("Undo", { onClick: () => doc.undo(), disabled: !doc.canUndo })
 function fullComponentsAndActions() {
   return `## Components & Actions
 
-A \`function\` declaration is both a **component** (call it in render position → its return value renders) and an **action** (call it from an event handler → its body runs). Name case does not decide whether it renders, but only a PascalCase component gets per-instance state and memoized re-rendering, and a function with no \`return\` renders nothing.
+A \`function\` declaration is both a **component** (call it in render position → its return value renders) and an **action** (call it from an event handler → its body runs). Name case does not decide whether it renders, but names are case-sensitive, so call it exactly as declared; only a PascalCase component gets per-instance state and memoized re-rendering. A function with no \`return\` renders nothing.
 
 ### Components
 \`\`\`
@@ -56515,7 +56515,7 @@ A program is a flat list of \`name = expression\` statements in standard JavaScr
 - Operators \`+ - * / %\`, comparisons, \`&& || !\`, ternary \`cond ? a : b\`, nullish \`a ?? b\`, spread, member \`obj.field\`, optional chaining \`obj?.field\`.
 
 ### Component calls
-- **Case doesn't matter** — \`Card\` and \`card\` are equivalent.
+- **Names are case-sensitive** — write components in PascalCase: \`Card([...])\`, \`Text("x")\`. A lowercase \`card(...)\` is a plain call to a user function, not the built-in \`Card\`, and renders a loading skeleton that never resolves.
 - **Always invoke with parentheses** — \`Column([Header(), Body()])\`, never \`Column([Header, Body])\`; write \`Separator()\` even with no args.
 - **Canonical call: the prop tagged \`(positional)\` goes bare, everything else in a trailing object** — \`Callout("Heads up", { tone: "info", icon: "circle-info" })\`, \`Badge("Live", { tone: "success" })\`. The tagged prop is not always the first one listed: \`Callout\`'s is \`title\`, \`CodeBlock\`'s is \`codeString\`. All-positional (signature order) and all-named (single \`{ }\` object) calls also work.
 
