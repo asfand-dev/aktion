@@ -35,7 +35,7 @@ what it names below.
 | --- | --- |
 | `$name` | A **reactive atom**. Declare with `$name = value`; read or write anywhere. |
 | `name` | A plain binding — evaluated once, not reactive. |
-| `Name(...)` / `name(...)` | A function declaration. Returns a tree → renders. No return → side effects. Case is convention only. |
+| `Name(...)` / `name(...)` | A function declaration. Returns a tree → renders. No return → side effects. Case does not decide whether it renders or can be used as an action; PascalCase also gets per-instance state and memoization. |
 
 Reserved top-level names: `$app(...)`, `$theme({...})`, and the always-in-scope
 `route` handle.

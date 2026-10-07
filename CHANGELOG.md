@@ -26,6 +26,12 @@ Each entry is dated and summarises what was added, changed, or fixed.
   (an exported `let` atom with an exported setter action, and an exported
   `$store` written by property), and that writing an imported `$` atom directly
   works but is flagged by `no-import-assign`.
+- Reworded the notes that said first-letter case "does not decide component
+  versus action". The parser does classify a PascalCase declaration as a
+  component and a lowercase one as an action, but either kind renders in a
+  render position and runs from an event handler, so case does not decide whether
+  a function renders or can be used as an action. It does decide per-instance
+  state and memoization.
 
 ## 2026-10-05
 
