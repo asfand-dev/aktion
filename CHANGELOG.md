@@ -25,9 +25,10 @@ Each entry is dated and summarises what was added, changed, or fixed.
   is told to put the `export` on the declaration and drop it from the assignment, since
   dropping it alone would take the name out of the module's exports. A `const`
   declaration is told to become `let`, an import to be imported under another
-  local name, and a destructured name to be declared on its own, since an import
-  or a destructuring cannot carry `export`. Since the formatter keeps declaration
-  keywords, adding them is a mechanical edit.
+  local name (naming the imported name, so `import { X as B }` becomes
+  `import { X as … }`), and a destructured name to be declared on its own, since
+  an import or a destructuring cannot carry `export`. Since the formatter keeps
+  declaration keywords, adding them is a mechanical edit.
 - It is a warning, so a validator run still exits 0; `--no-bare-declarations`
   leaves it out of the report.
 - `getLintWarnings` and `getDiagnostics` take the same check as an opt-in:

@@ -234,7 +234,9 @@ function declarationStart(
  * `exported` is the subset whose declaration already carries `export`, and `kinds`
  * says what declares each name, because the advice for an `export` of it depends
  * on that: an import cannot be exported or assigned, a destructuring cannot carry
- * `export`, and a `const` cannot be assigned.
+ * `export`, and a `const` cannot be assigned. `importedAs` maps an imported local
+ * name to the name the other module exports it under (`import { X as B }` maps
+ * `B` to `X`), because that is the name an advised `import { … as … }` must keep.
  * A hook is stored without its `$` (`function $useX` is `useX`), so it is
  * recorded under the `$`-prefixed spelling an assignment to it uses.
  */
@@ -244,10 +246,12 @@ function collectDeclaredTopLevelNames(program: ReturnType<typeof parse>): {
   declared: Set<string>;
   exported: Set<string>;
   kinds: Map<string, DeclarationKind>;
+  importedAs: Map<string, string>;
 } {
   const declared = new Set<string>();
   const exported = new Set<string>();
   const kinds = new Map<string, DeclarationKind>();
+  const importedAs = new Map<string, string>();
   const add = (key: string, isExported: boolean | undefined, kind: DeclarationKind = "other"): void => {
     declared.add(key);
     if (isExported === true) exported.add(key);
@@ -256,7 +260,12 @@ function collectDeclaredTopLevelNames(program: ReturnType<typeof parse>): {
   for (const stmt of program.statements) {
     switch (stmt.kind) {
       case "Import":
-        for (const spec of stmt.specifiers) add(bindingKey(spec.local, spec.isState), false, "import");
+        for (const spec of stmt.specifiers) {
+          add(bindingKey(spec.local, spec.isState), false, "import");
+          if (!importedAs.has(bindingKey(spec.local, spec.isState))) {
+            importedAs.set(bindingKey(spec.local, spec.isState), bindingKey(spec.imported, spec.isState));
+          }
+        }
         break;
       case "ComponentDeclaration":
       case "ActionDeclaration":
@@ -277,7 +286,7 @@ function collectDeclaredTopLevelNames(program: ReturnType<typeof parse>): {
         break;
     }
   }
-  return { declared, exported, kinds };
+  return { declared, exported, kinds, importedAs };
 }
 
 /**
@@ -338,12 +347,22 @@ function isWrittenElsewhere(program: ReturnType<typeof parse>, declaration: obje
  *   - a `const` cannot be assigned, so the declaration becomes `let`;
  *   - anything else takes the `export` on its declaration, or has it already.
  */
-function exportMessage(key: string, kind: DeclarationKind, declarationExported: boolean): string {
+function exportMessage(
+  key: string,
+  kind: DeclarationKind,
+  declarationExported: boolean,
+  importedName: string = key,
+): string {
   const head = `\`export ${key}\` writes to \`${key}\`, which`;
   if (kind === "import") {
+    // `key` is the LOCAL name; the specifier to rewrite is spelled with the name the other module exports.
+    const specifier =
+      importedName === key
+        ? `\`import { ${key} as … }\``
+        : `\`import { ${importedName} as … }\`, in place of \`${importedName} as ${key}\``;
     return (
       `${head} this file imports. An import can be neither assigned nor re-exported under its own name — ` +
-      `import it under another local name (\`import { ${key} as … }\`) and write \`export let ${key} = …\` here.`
+      `import it under another local name (${specifier}) and write \`export let ${key} = …\` here.`
     );
   }
   if (kind === "destructuring") {
@@ -355,9 +374,10 @@ function exportMessage(key: string, kind: DeclarationKind, declarationExported: 
   }
   if (kind === "const") {
     return declarationExported
-      ? `${head} its own exported declaration declares with \`const\`, which this assignment writes. ` +
-          `Change that \`const\` to \`let\` and drop the \`export\` here.`
-      : `${head} another statement declares with \`const\`, which this assignment writes. ` +
+      ? `\`export ${key}\` writes to \`${key}\`, but its own exported declaration declares it with \`const\`, ` +
+          `and a \`const\` cannot be assigned. Change that \`const\` to \`let\` and drop the \`export\` here.`
+      : `\`export ${key}\` writes to \`${key}\`, but another statement declares it with \`const\`, ` +
+          `and a \`const\` cannot be assigned. ` +
           `Put \`export\` on the declaration and change its \`const\` to \`let\` (\`export let ${key} = …\`), ` +
           `and drop the \`export\` here. If nothing imports \`${key}\`, changing \`const\` to \`let\` and ` +
           `dropping the \`export\` here is enough.`;
@@ -414,7 +434,7 @@ function exportMessage(key: string, kind: DeclarationKind, declarationExported: 
 function lintBareDeclarations(program: ReturnType<typeof parse>, source: string): Diagnostic[] {
   const warnings: Diagnostic[] = [];
   const lines = source.split(/\r?\n/);
-  const { declared, exported: exportedDeclarations, kinds } = collectDeclaredTopLevelNames(program);
+  const { declared, exported: exportedDeclarations, kinds, importedAs } = collectDeclaredTopLevelNames(program);
   const bound = new Set<string>();
 
   for (const stmt of program.statements) {
@@ -432,7 +452,7 @@ function lintBareDeclarations(program: ReturnType<typeof parse>, source: string)
     const prefix = exported ? "export " : "";
     let message: string;
     if (alreadyBound) {
-      message = exportMessage(key, kinds.get(key) ?? "other", exportedDeclarations.has(key));
+      message = exportMessage(key, kinds.get(key) ?? "other", exportedDeclarations.has(key), importedAs.get(key));
     } else {
       const needsLet = stmt.isState || isWrittenElsewhere(program, stmt, key);
       const reason = stmt.isState

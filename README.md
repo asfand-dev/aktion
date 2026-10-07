@@ -1857,11 +1857,12 @@ export), and `formatProgram` keeps it. An `export` of a name that is already
 declared (`let B = 1⏎export B = 2`) is told to put the `export` on the
 declaration and drop it here, because dropping it alone would take the name out
 of the module's exports; if that declaration is a `const` it is told to become
-`let`, if it is an import to import the name under another local name and write
-`export let B = …`, and if it is a destructuring to declare the name on its own,
-since neither can carry `export`. An assignment to a name a `function`, hook, `import`,
-`var`, `let` or `const` declares, or to the writable legacy roots `aktion` and
-`theme`, is a write, not a declaration, and is not flagged. It is a
+`let`, if it is an import to import it under another local name (the specifier
+keeps the name the other module exports: `import { X as B }` becomes
+`import { X as … }`) and write `export let B = …`, and if it is a destructuring
+to declare the name on its own, since neither can carry `export`. An assignment
+to a name a `function`, hook, `import`, `var`, `let` or `const` declares, or to
+the writable legacy roots `aktion` and `theme`, is a write, not a declaration, and is not flagged. It is a
 warning only, so the exit code does not change; pass `--no-bare-declarations` to
 leave it out of the report. The agent skill and the system prompt still write
 `$x = 0`, so a run over their output is loud until they move to keywords.

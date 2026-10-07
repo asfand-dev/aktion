@@ -31,7 +31,7 @@ export function applyAdvice(source: string, warnings: readonly AdviceWarning[]):
   const exportOn: string[] = [];
   const constToLet: string[] = [];
   const outOfPattern: string[] = [];
-  const renameImport: string[] = [];
+  const renameImport: Array<{ local: string; imported: string }> = [];
 
   // Bottom-up, so an edit never moves a position another warning still needs.
   for (const warning of [...warnings].sort((a, b) => b.line - a.line)) {
@@ -40,7 +40,9 @@ export function applyAdvice(source: string, warnings: readonly AdviceWarning[]):
     const name = /^`export ([^`]+)`/.exec(warning.message)?.[1];
     if (name && /import it under another local name/.test(warning.message)) {
       lines[warning.line - 1] = `${text.slice(0, at)}export let ${text.slice(at).replace(/^export\s+/, "")}`;
-      renameImport.push(name);
+      const imported = /another local name \(`import \{ ([^ `]+) as … \}`/.exec(warning.message)?.[1];
+      if (!imported) throw new Error(`no imported name in: ${warning.message}`);
+      renameImport.push({ local: name, imported });
       continue;
     }
     const advised = /write `((?:export )?(?:let|const))` before the name/.exec(warning.message);
@@ -57,10 +59,15 @@ export function applyAdvice(source: string, warnings: readonly AdviceWarning[]):
     if (/out of the pattern/.test(warning.message)) outOfPattern.push(name!);
   }
 
-  for (const name of renameImport) {
-    const index = lines.findIndex((line) => /^\s*import\b/.test(line) && new RegExp(String.raw`(?<![\w$])${escapeRegExp(name)}(?![\w$])`).test(line));
-    if (index === -1) throw new Error(`no import of ${name}:\n${lines.join("\n")}`);
-    lines[index] = lines[index]!.replace(new RegExp(String.raw`(?<![\w$])${escapeRegExp(name)}(?![\w$])`), `${name} as ${name}_`);
+  // The advice names the imported name, as the specifier is spelled: `import { X as … }` (and
+  // `in place of X as B` when the local name differs). Give the specifier a new local name.
+  for (const { local, imported } of renameImport) {
+    const specifier = new RegExp(
+      String.raw`(?<![\w$])${escapeRegExp(imported)}(?:\s+as\s+${escapeRegExp(local)})?(?![\w$])`,
+    );
+    const index = lines.findIndex((line) => /^\s*import\b/.test(line) && specifier.test(line));
+    if (index === -1) throw new Error(`no import of ${imported}:\n${lines.join("\n")}`);
+    lines[index] = lines[index]!.replace(specifier, `${imported} as ${local}_`);
   }
 
   for (const name of outOfPattern) {

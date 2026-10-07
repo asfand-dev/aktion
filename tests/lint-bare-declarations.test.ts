@@ -165,16 +165,40 @@ describe("bare-declaration — reporting", () => {
       [/put `export` on the declaration/i, /drop the `export` here/],
     ],
     [
+      "a renamed import: the specifier to rewrite is spelled with the imported name",
+      'import { X as B } from "./other.aktion"\nexport B = 2',
+      [
+        /which this file imports/,
+        /\(`import \{ X as … \}`, in place of `X as B`\)/,
+        /`export let B = …` here/,
+      ],
+      [/`import \{ B as/, /put `export` on the declaration/i],
+    ],
+    [
+      "a renamed state import",
+      'import { $a as $b } from "./other.aktion"\nexport $b = 2',
+      [/\(`import \{ \$a as … \}`, in place of `\$a as \$b`\)/, /`export let \$b = …` here/],
+      [/`import \{ \$b as/],
+    ],
+    [
       "a `const` name: the declaration has to become `let`",
       "const B = 1\nexport B = 2",
-      [/another statement declares with `const`/, /change its `const` to `let`/, /`export let B = …`/],
-      [],
+      [
+        /`export B` writes to `B`, but another statement declares it with `const`, and a `const` cannot be assigned/,
+        /change its `const` to `let`/,
+        /`export let B = …`/,
+      ],
+      [/which this assignment writes/],
     ],
     [
       "an exported `const` name: only the `const` is wrong",
       "export const B = 1\nexport B = 2",
-      [/exported declaration declares with `const`/, /Change that `const` to `let`/, /drop the `export` here/],
-      [/put `export`/i],
+      [
+        /`export B` writes to `B`, but its own exported declaration declares it with `const`, and a `const` cannot be assigned/,
+        /Change that `const` to `let`/,
+        /drop the `export` here/,
+      ],
+      [/put `export`/i, /which this assignment writes/],
     ],
   ])("gives accurate advice for %s", (_name, src, present, absent) => {
     const { message } = only(src);
@@ -252,6 +276,8 @@ describe("bare-declaration — advice for an export of an import, destructuring 
     ["a destructured name", "const o = { B: 1 }\nconst { B } = o\nexport B = 2", true],
     ["one name of a larger destructuring", "const o = { A: 1, B: 2 }\nconst { A, B } = o\nexport B = 2", true],
     ["an imported name", 'import { B } from "./other.mjs"\nexport B = 2', false],
+    ["a renamed import", 'import { X as B } from "./other.mjs"\nexport B = 2', false],
+    ["a renamed state import", 'import { $a as $b } from "./other.mjs"\nexport $b = 2', false],
     ["a `const` name", "const B = 1\nexport B = 2", true],
     ["an exported `const` name", "export const B = 1\nexport B = 2", true],
   ])("%s", (_name, src, runnable) => {
