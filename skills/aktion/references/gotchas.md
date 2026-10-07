@@ -273,6 +273,21 @@ newer syntax (duplicate named groups, `(?i:…)` modifiers) is reported on Node 
 and 22 but accepted on Node 24, so a warning on valid modern syntax usually
 means an old Node.
 
+### A top-level binding without `let` / `const` still parses
+
+`$count = 0`, `total = 5` and `export LIMIT = 3` all parse and run, and
+`getDiagnostics` passes them: the keyword is optional, and changes nothing about
+reactivity. Without it the file is not plain JavaScript, and a `.aktion.js` /
+`.aktion.ts` module needs it.
+
+This skill's examples use the keyword-less form, as the system prompt does, so a
+`.aktion` program written from it is consistent. The repo's CLIs (`tools/validate-aktion.mjs`,
+`tools/validate-aktion-app.mjs`) warn about it, and `getLintWarnings(source,
+library, { bareDeclarations: true })` does too; run them with
+`--no-bare-declarations` here. If a program is being moved to keywords, take the
+one the warning names: `let` for a `$` atom (`const $n` makes its later writes a
+TypeError), and `let` for any name assigned again.
+
 ### Equality and comparison match JavaScript
 
 - `==` / `!=` use abstract equality, so `x == null` matches `null` **and**

@@ -1794,7 +1794,14 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   `(?i:…)` modifiers is reported on Node 20 and 22 but not on Node 24.
   `getLintWarnings(source,
   library?)` returns only the warnings; pass the library to enable the
-  unknown-component pass, omit it to skip it.
+  unknown-component pass, omit it to skip it. An opt-in warning,
+  `bare-declaration`, flags a top-level assignment that declares a binding
+  without `let` / `const` (`export B = 1`, `export $s = 4`, or the first `y = 4`
+  of a name; a keyword-less `for (item of items)` head is not covered); enable it
+  with `getLintWarnings(source, library, { bareDeclarations: true })` (the same
+  option works on `getDiagnostics`). It is off by default because the system
+  prompt, the agent skill and the bundled demos all teach the keyword-less
+  `$x = 0`.
 - `getDiagnostics`, `getCompletions`, and `getHoverInfo` are the data
   layer a real LSP server wraps — see [Editor support](#editor-support). The
   [playground](https://asfand-dev.github.io/aktion/playground.html)
@@ -1847,6 +1854,26 @@ node tools/validate-aktion-app.mjs src/app.aktion
 They print `FILE: OK` or `FILE: Lnn: message` per problem and exit non-zero on
 any **error**; warnings (including `unknown-component`) are reported but do not
 fail the run.
+
+Both scripts also report `bare-declaration`, the warning for a top-level
+assignment that declares a binding without a keyword (`export B = 1`,
+`export $s = 4`, a first `y = 4`). The fix is mechanical, and the message says
+which keyword survives the program's own writes: `let` for a `$` atom or a name
+assigned again, `const` for a name nothing else writes (a `+=`, `++` or a keyword-less
+`for (x of …)` head counts as a write; `export let` / `export const` for an
+export), and `formatProgram` keeps it. An `export` of a name that is already
+declared (`let B = 1⏎export B = 2`) is told to put the `export` on the
+declaration and drop it here, because dropping it alone would take the name out
+of the module's exports; if that declaration is a `const` it is told to become
+`let`, if it is an import to import it under another local name (the specifier
+keeps the name the other module exports: `import { X as B }` becomes
+`import { X as … }`) and write `export let B = …`, and if it is a destructuring
+to declare the name on its own, since neither can carry `export`. An assignment
+to a name a `function`, hook, `import`, `var`, `let` or `const` declares, or to
+the writable legacy roots `aktion` and `theme`, is a write, not a declaration, and is not flagged. It is a
+warning only, so the exit code does not change; pass `--no-bare-declarations` to
+leave it out of the report. The agent skill and the system prompt still write
+`$x = 0`, so a run over their output is loud until they move to keywords.
 
 ---
 

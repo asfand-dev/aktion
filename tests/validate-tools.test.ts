@@ -18,6 +18,8 @@ import { existsSync, mkdtempSync, mkdirSync, readdirSync, renameSync, writeFileS
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { getLintWarnings } from "../src/tooling/language-service.js";
+import { applyAdvice } from "./fixtures/bare-advice.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const appTool = join(repoRoot, "tools", "validate-aktion-app.mjs");
@@ -416,6 +418,124 @@ describe("tools/validate-aktion-app.mjs — every module in the graph is linted"
     expect(hits).toHaveLength(1);
     expect(output).toMatch(/0 error\(s\), 1 warning\(s\)/);
     expect(status).toBe(0);
+  });
+});
+
+/**
+ * `bare-declaration` reaches the CLIs, as a WARNING: the exit code stays 0, a
+ * program that declares everything stays `OK`, and `--no-bare-declarations`
+ * leaves it out of the report.
+ */
+describe("tools/validate-aktion*.mjs — bare declarations", () => {
+  let dir: string;
+  const file = (name: string): string => join(dir, name);
+  const tools: Array<[string, string]> = [
+    ["validate-aktion.mjs", fileTool],
+    ["validate-aktion-app.mjs", appTool],
+  ];
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "aktion-validate-bare-"));
+    const put = (name: string, lines: string[]): void => writeFileSync(file(name), `${lines.join("\n")}\n`, "utf8");
+    put("bare.aktion", ["export B = 1", "y = 4", "y = 5", "export $s = 4", '$app(Text("x"))']);
+    put("declared.aktion", [
+      "export const B = 1",
+      "let y = 4",
+      "y = 5",
+      "export let $s = 4",
+      "let a",
+      '$app(Text("x"))',
+    ]);
+    put("bare-lib.aktion", ["export function Tag() {", '  return Text("x")', "}", "export LIMIT = 3"]);
+    put("bare-entry.aktion", [
+      'import { Tag, LIMIT } from "./bare-lib.aktion"',
+      "$app(Column([Tag(), Text(String(LIMIT))]))",
+    ]);
+  });
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it.each(tools)("%s warns on each bare declaration without failing the run", (_name, tool) => {
+    const { status, output } = run(tool, [file("bare.aktion")]);
+    expect(output).toMatch(/L1: warning: `export B` declares a binding without a keyword/);
+    expect(output).toMatch(/L2: warning: `y` declares a binding without a keyword/);
+    expect(output).toMatch(/L4: warning: `export \$s` declares a binding without a keyword/);
+    expect(output).not.toMatch(/L3:/);
+    expect(output).toMatch(/0 error\(s\), 3 warning\(s\)/);
+    expect(status).toBe(0);
+  });
+
+  it.each(tools)("%s leaves them out with --no-bare-declarations", (_name, tool) => {
+    const { status, output } = run(tool, ["--no-bare-declarations", file("bare.aktion")]);
+    expect(output).toMatch(/OK/);
+    expect(output).not.toMatch(/warning/);
+    expect(status).toBe(0);
+  });
+
+  it.each(tools)("%s passes a program that declares everything", (_name, tool) => {
+    const { status, output } = run(tool, [file("declared.aktion")]);
+    expect(output).toMatch(/OK/);
+    expect(status).toBe(0);
+  });
+
+  it("validate-aktion-app lints the imported modules too and names the file", () => {
+    const { status, output } = run(appTool, [file("bare-entry.aktion")]);
+    expect(output).toMatch(/L4: warning: .*bare-lib\.aktion: `export LIMIT` declares a binding without a keyword/);
+    expect(status).toBe(0);
+  });
+});
+
+/**
+ * Advice that touches `export` must not change what a module exports. The first
+ * version of the warning for an `export` of an already declared name said to drop
+ * the `export`, and an importer of that name then failed to link
+ * (`"./mod.aktion" does not export B`). Every program below is linked together
+ * with a module that imports the name: the original must link, and so must the
+ * program the warnings' advice produces.
+ */
+describe("tools/validate-aktion-app.mjs — export advice keeps the module's exports", () => {
+  let dir: string;
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "aktion-validate-export-advice-"));
+    writeFileSync(join(dir, "other.aktion"), "export let B = 0\nexport let X = 0\n", "utf8");
+  });
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it.each([
+    ["an export of a name `let` declares", "let B = 1\nexport B = 2", "B"],
+    ["an export of a name an earlier bare assignment declares", "B = 1\nexport B = 2", "B"],
+    ["an export of a name a function declares", "export go = 2\nfunction go() {}", "go"],
+    ["an export of a name that is already exported", "export let B = 1\nexport B = 2", "B"],
+    ["two bare exports of one name", "export B = 1\nexport B = 2", "B"],
+    ["an exported name written again", "export B = 1\nB = 2", "B"],
+    ["an exported state atom", "export $s = 4", "$s"],
+    ["an export of a name a destructuring declares", "const o = { B: 1 }\nconst { B } = o\nexport B = 2", "B"],
+    ["an export of one name of a larger destructuring", "const o = { A: 1, B: 2 }\nconst { A, B } = o\nexport B = 2", "B"],
+    ["an export of an imported name", 'import { B } from "./other.aktion"\nexport B = 2', "B"],
+    ["an export of a renamed import", 'import { X as B } from "./other.aktion"\nexport B = 2', "B"],
+    ["an export of a name `const` declares", "const B = 1\nexport B = 2", "B"],
+    ["an export of a name an exported `const` declares", "export const B = 1\nexport B = 2", "B"],
+  ])("%s", (name, source, imported) => {
+    const slug = name.replace(/\W+/g, "-");
+    const module = join(dir, `${slug}-mod.aktion`);
+    const entry = join(dir, `${slug}-entry.aktion`);
+    writeFileSync(entry, `import { ${imported} } from "./${slug}-mod.aktion"\n$app(Text(String(${imported})))\n`, "utf8");
+
+    writeFileSync(module, `${source}\n`, "utf8");
+    const before = run(appTool, [entry]);
+    expect(before.output, `original:\n${source}`).not.toMatch(/: error: /);
+    expect(before.status).toBe(0);
+
+    const warnings = getLintWarnings(source, undefined, { bareDeclarations: true });
+    expect(warnings.length).toBeGreaterThan(0);
+    const fixed = applyAdvice(source, warnings);
+    writeFileSync(module, `${fixed}\n`, "utf8");
+    const after = run(appTool, [entry]);
+    expect(after.output, `advised:\n${fixed}`).not.toMatch(/: error: /);
+    expect(after.output).not.toMatch(/: warning: /);
+    expect(after.status).toBe(0);
   });
 });
 
