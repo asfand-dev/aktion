@@ -106,6 +106,8 @@ describe("bare-declaration — reporting", () => {
     ["an `export` binding starts at `export`", "export B = 1", [1, 1]],
     ["an `export` binding with extra spaces", "export   $s=4", [1, 1]],
     ["a state atom", "let a = 1\n$count = 0", [2, 1]],
+    ["an indented state atom, whose `$` a regex would read as an anchor", "  $count = 0", [1, 3]],
+    ["a name that is only `$`", "let a = 1\n  $ = 0", [2, 3]],
   ])("starts the warning at the declaration, not the `=`: %s", (_name, src, [line, column]) => {
     const warning = getLintWarnings(src, undefined, ON)[0];
     expect([warning!.line, warning!.column]).toEqual([line, column]);
@@ -304,6 +306,23 @@ describe("bare-declaration — opt-in", () => {
     expect(getLintWarnings(src, defaultLibrary, ON)).toHaveLength(2);
     const diagnostics = getDiagnostics(src, defaultLibrary, ON);
     expect(diagnostics.map((d) => d.severity)).toEqual(["warning", "warning"]);
+  });
+
+  it("runs together with the invalid-regexp lint, which is always on", () => {
+    const both = 'export B = 1\nconst r = /[(]/v\n$app(Text("x"))';
+    const messages = (diags: { message: string }[]): string[] => diags.map((d) => d.message.slice(0, 40));
+    const regexpOnly = getLintWarnings(both, defaultLibrary);
+    expect(regexpOnly).toHaveLength(1);
+    expect(regexpOnly[0]!.message).toMatch(/^This engine rejects this regular expression/);
+    expect(regexpOnly[0]!.line).toBe(2);
+
+    const warnings = getLintWarnings(both, defaultLibrary, ON);
+    expect(warnings).toHaveLength(2);
+    expect(warnings.map((d) => d.line)).toEqual([2, 1]);
+    expect(warnings[0]!.message).toMatch(/^This engine rejects this regular expression/);
+    expect(warnings[1]!.message).toMatch(/`export B` declares a binding without a keyword/);
+    expect(warnings.every((d) => d.severity === "warning")).toBe(true);
+    expect(messages(getDiagnostics(both, defaultLibrary, ON))).toEqual(messages(warnings));
   });
 
   it("does not change any other lint", () => {
