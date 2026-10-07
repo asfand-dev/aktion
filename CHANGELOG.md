@@ -7,6 +7,26 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-10-06
 
+### ESLint Knows the Names Aktion Injects
+
+- `aktion-runtime/eslint` now exports `aktionGlobals`: every name an Aktion
+  program uses without an import, in the shape ESLint's
+  `languageOptions.globals` expects. It covers all components, the
+  `$`-builtins, `route`, `params`, `outlet`, `children`, `slots`, `cleanup`,
+  the tracked timers, and `atob`, `btoa`, `console` and `structuredClone`.
+- `configs.recommended` applies it to `.aktion` files, so `no-undef` works out
+  of the box and you no longer need to keep your own list in step with the
+  runtime. It is also available as `aktionEslint.globals`.
+- Only `structuredClone` of those last four is provided by the runtime itself;
+  `atob`, `btoa` and `console` are policy-gated host globals like `URL`,
+  listed because the generated `globals.d.ts` declares them. Other host
+  globals such as `document` or `window` are not included; your environment
+  supplies those.
+- The list is built from the DSL manifest alone, so the ESLint entry stays
+  small, and tests check the manifest against what the runtime binds. The
+  manifest gained a `hostGlobals` list so the generated `globals.d.ts` and the
+  ESLint globals declare the same host names.
+
 ### Invalid Regular Expressions Are Now Flagged
 
 - A regular expression the JavaScript engine rejects used to fail silently:

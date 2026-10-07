@@ -65,6 +65,13 @@ export interface DslManifest {
   namespaces: string[];
   builtins: string[];
   injected: string[];
+  /**
+   * `SAFE_HOST_GLOBALS` that `lib.es2022` does not declare and the ambient
+   * flavour therefore declares itself (`atob`, `btoa`, `console`,
+   * `structuredClone`) — the same list `globals.d.ts` writes, so tooling that
+   * reads the manifest (the ESLint `globals`) agrees with it.
+   */
+  hostGlobals: string[];
 }
 
 export interface GenerateResult {
@@ -319,6 +326,7 @@ export function generateDslTypes(input: { ts: typeof TS; repoRoot: string }): Ge
     namespaces: classes.namespaces,
     builtins: classes.builtins,
     injected: Object.keys(INJECTED_NAMES).sort(byCodePoint),
+    hostGlobals: declaredExtras,
   };
   // One component per line keeps the diff of a library change readable.
   const list = (values: readonly string[]): string => JSON.stringify(values);
@@ -332,7 +340,8 @@ export function generateDslTypes(input: { ts: typeof TS; repoRoot: string }): Ge
     `  "factories": ${list(manifest.factories)},`,
     `  "namespaces": ${list(manifest.namespaces)},`,
     `  "builtins": ${list(manifest.builtins)},`,
-    `  "injected": ${list(manifest.injected)}`,
+    `  "injected": ${list(manifest.injected)},`,
+    `  "hostGlobals": ${list(manifest.hostGlobals)}`,
     "}",
     "",
   ].join("\n");
