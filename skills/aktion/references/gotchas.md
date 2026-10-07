@@ -257,6 +257,22 @@ This one **is** linted, as a warning, whenever the awaited value is consumed
 (bound, tested, or passed as an argument). A bare `await f()` statement whose
 result is discarded is not flagged.
 
+### An invalid regular expression becomes `null`, not an error
+
+`new RegExp(...)` and `/…/` literals that the engine rejects do not throw in
+Aktion: the runtime logs to the console and the expression evaluates to `null`,
+so `/[(]/v.test(s)` quietly never matches. The `v` flag is the usual cause — it
+is stricter than `u` and rejects an unescaped `(`, `)`, `{`, `}`, `/` or `|`
+inside a class (write `[\(]`, `[\/]`), reads a `[` there as a nested class, and
+rejects a stray `-` that is not between two characters (write `[\-.a-z]`).
+
+A pattern and flags given as string literals are linted as a warning; a pattern
+held in a variable (`new RegExp(PATTERN, "v")`) is not, so test those at the
+source. The check uses the RegExp engine of the Node that runs the linter, so
+newer syntax (duplicate named groups, `(?i:…)` modifiers) is reported on Node 20
+and 22 but accepted on Node 24, so a warning on valid modern syntax usually
+means an old Node.
+
 ### Equality and comparison match JavaScript
 
 - `==` / `!=` use abstract equality, so `x == null` matches `null` **and**

@@ -1783,8 +1783,16 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   is flagged with a `suggestComponent`-derived *"Did you mean …?"* hint. It is a
   warning, not an error — the runtime renders an unknown component as nothing,
   and a stale editor library must never turn a working file red. The other
-  warning is `shadowed-i18n` (a parameter or loop variable shadowing a binding
-  destructured from `$i18n(...)`, typically `t`). `getLintWarnings(source,
+  warnings are `shadowed-i18n` (a parameter or loop variable shadowing a binding
+  destructured from `$i18n(...)`, typically `t`), `awaited-value` (the result of
+  an `await`, which is the promise) and `invalid-regexp`: a `/…/flags` literal,
+  `new RegExp("…", "…")` or plain `RegExp("…", "…")` call whose literal pattern
+  or flags the engine rejects (e.g. `/[(]/v`) — the runtime would otherwise
+  swallow the error and evaluate the expression to `null`. That check uses the
+  RegExp engine of the Node running the linter (CI, the language server,
+  `validate-aktion-app.mjs`), so newer syntax such as duplicate named groups or
+  `(?i:…)` modifiers is reported on Node 20 and 22 but not on Node 24.
+  `getLintWarnings(source,
   library?)` returns only the warnings; pass the library to enable the
   unknown-component pass, omit it to skip it.
 - `getDiagnostics`, `getCompletions`, and `getHoverInfo` are the data
