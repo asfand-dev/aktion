@@ -57,6 +57,15 @@ export declare function getDiagnostics(source: string, library: ComponentLibrary
  *     bodies run synchronously and nothing unwraps the thenable, so the value is
  *     the PROMISE. `const ok = await $util.copy(v)` is therefore always truthy.
  *     A bare `await f()` whose value is discarded is not flagged — only a use.
+ *   - `invalid-regexp` — a regular expression whose pattern or flags the engine
+ *     rejects: a `/…/flags` literal, `new RegExp("…", "…")` or `RegExp("…", "…")`
+ *     with string-literal arguments. The runtime swallows the `SyntaxError` and
+ *     the expression becomes `null`, so a broken validator reads as "no match".
+ *     The check constructs the RegExp with the RegExp engine of the Node that
+ *     runs the linter, so what it accepts follows that Node's version (newer
+ *     syntax such as duplicate named groups or `(?i:…)` modifiers is rejected
+ *     before Node 23/24). A non-literal argument (`new RegExp(pattern)`) is
+ *     skipped.
  */
 export declare function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[];
 /**

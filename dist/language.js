@@ -37318,8 +37318,87 @@ function lintProgram(program, library) {
   return [
     ...library ? lintUnknownComponents(program, library) : [],
     ...lintShadowedI18n(program),
-    ...lintAwaitedValue(program)
+    ...lintAwaitedValue(program),
+    ...lintInvalidRegExp(program)
   ];
+}
+const REGEXP_WARNING_PREFIX = "This engine rejects this regular expression";
+const MAX_REGEXP_REASON = 160;
+function lintInvalidRegExp(program) {
+  const warnings = [];
+  const calleeOf = (node) => {
+    const callee = node["callee"];
+    return typeof callee === "string" ? callee : callee?.["kind"] === "Identifier" ? callee["name"] : void 0;
+  };
+  const isRegExpConstruction = (node) => {
+    if (!node || typeof node !== "object") return false;
+    const rec = node;
+    return (rec["kind"] === "New" || rec["kind"] === "Call") && calleeOf(rec) === "RegExp";
+  };
+  const resolve = (node) => {
+    const args = node["arguments"];
+    if (!Array.isArray(args) || args.length === 0) return void 0;
+    if (args.some((a) => a?.["kind"] === "Spread")) return void 0;
+    const first = args[0];
+    const second = args[1];
+    let pattern;
+    let inheritedFlags;
+    if (first["kind"] === "Literal" && typeof first["value"] === "string") {
+      pattern = first["value"];
+    } else if (isRegExpConstruction(first)) {
+      const inner = resolve(first);
+      if (!inner) return void 0;
+      try {
+        new RegExp(inner.pattern, inner.flags);
+      } catch {
+        return void 0;
+      }
+      pattern = inner.pattern;
+      inheritedFlags = inner.flags;
+    } else {
+      return void 0;
+    }
+    if (second === void 0 || second["kind"] === "Identifier" && second["name"] === "undefined") {
+      return { pattern, flags: inheritedFlags };
+    }
+    if (second["kind"] === "Literal" && typeof second["value"] === "string") {
+      return { pattern, flags: second["value"] };
+    }
+    return void 0;
+  };
+  const check = (node) => {
+    const resolved = resolve(node);
+    if (!resolved) return;
+    try {
+      new RegExp(resolved.pattern, resolved.flags);
+    } catch (err) {
+      const loc = node["loc"];
+      let reason = err instanceof Error ? err.message : String(err);
+      const echoed = `Invalid regular expression: /${resolved.pattern}/${resolved.flags ?? ""}: `;
+      if (reason.startsWith(echoed)) reason = reason.slice(echoed.length);
+      if (reason.length > MAX_REGEXP_REASON) reason = `${reason.slice(0, MAX_REGEXP_REASON)}…`;
+      warnings.push({
+        line: loc?.line ?? 0,
+        column: loc?.column ?? 0,
+        severity: "warning",
+        message: `${REGEXP_WARNING_PREFIX}: ${reason}. Aktion evaluates a rejected regular expression to null instead of throwing, so \`.test(…)\` quietly reports no match. Which syntax is accepted depends on the JavaScript engine (Node version) running the linter.`
+      });
+    }
+  };
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    const rec = node;
+    if (isRegExpConstruction(rec)) check(rec);
+    for (const key of Object.keys(rec)) {
+      if (key !== "loc") visit(rec[key]);
+    }
+  };
+  visit(program.statements);
+  return warnings;
 }
 function lintAwaitedValue(program) {
   const warnings = [];
