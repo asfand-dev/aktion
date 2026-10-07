@@ -18,6 +18,11 @@ Each entry is dated and summarises what was added, changed, or fixed.
 - The full prompt also no longer says that function name case is not
   significant: case does not decide whether a function renders, but only a
   PascalCase component gets per-instance state and memoized re-rendering.
+- The chat prompt no longer says that `Card` and `card` are equivalent. They are
+  not: `card(...)` is a plain call to a user function and does not resolve the
+  built-in, so the program renders a loading skeleton that never resolves. Both
+  prompts now say that names are case-sensitive, and the chat prompt says to
+  write components in PascalCase.
 
 ## 2026-10-05
 

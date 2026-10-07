@@ -27,9 +27,17 @@ describe("generatePrompt", () => {
       const text = generatePrompt(defaultLibrary, { mode });
       expect(text).not.toContain("First-letter case is NOT significant");
       expect(text).not.toContain("Name case is not significant");
+      expect(text).not.toContain("Case doesn't matter");
+      expect(text).not.toContain("are equivalent");
     }
     const full = generatePrompt(defaultLibrary);
     expect(full).toContain("only a PascalCase component gets per-instance state and memoized re-rendering");
+  });
+
+  it("tells the chat prompt that component names are case-sensitive", () => {
+    const text = generatePrompt(defaultLibrary, { mode: "chat" });
+    expect(text).toContain("Names are case-sensitive");
+    expect(text).toContain("A lowercase `card(...)` is a plain call to a user function, not the built-in `Card`");
   });
 
   it("does not call the chat prompt a strict subset of JavaScript", () => {
