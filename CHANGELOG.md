@@ -5,6 +5,22 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-06
+
+### Invalid Regular Expressions Are Now Flagged
+
+- A regular expression the JavaScript engine rejects used to fail silently:
+  the runtime swallowed the `SyntaxError` and the expression became `null`, so
+  `/[(]/v.test(s)` just read as "no match". The language service now warns
+  about it, with the engine's reason — for a `/…/flags` literal,
+  `new RegExp("…", "…")` and `RegExp("…", "…")` whose pattern and flags are
+  string literals. Bad patterns (including ones that only fail under the `v`
+  flag) and bad flags are both caught.
+- It is a warning, never an error, and computed arguments
+  (`new RegExp(pattern)`) are skipped because they cannot be judged without
+  running the program. The verdict comes from the RegExp engine of the Node
+  that runs the linter, so syntax newer than that Node is reported too.
+
 ## 2026-10-05
 
 ### Precise TypeScript Types for Every Component and Built-in
