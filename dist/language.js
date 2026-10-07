@@ -37286,7 +37286,7 @@ const KEYWORDS = [
   { label: "$emit", detail: "$emit('name', detail) — dispatch a CustomEvent" },
   { label: "cleanup", detail: "Register an effect teardown callback" }
 ];
-function getDiagnostics(source, library) {
+function getDiagnostics(source, library, options = {}) {
   const program = parse(source);
   const schemaErrors = validateProgramSchema(program, library);
   return [
@@ -37308,18 +37308,19 @@ function getDiagnostics(source, library) {
     // worst silent bugs (#1 scope leak, #2 placeholder stripping, #3 Date
     // compares, #5 unicode escapes) are now fixed in the runtime, so linting
     // them would flag correct code.
-    ...lintProgram(program, library)
+    ...lintProgram(program, source, library, options)
   ];
 }
-function getLintWarnings(source, library) {
-  return lintProgram(parse(source), library);
+function getLintWarnings(source, library, options = {}) {
+  return lintProgram(parse(source), source, library, options);
 }
-function lintProgram(program, library) {
+function lintProgram(program, source, library, options = {}) {
   return [
     ...library ? lintUnknownComponents(program, library) : [],
     ...lintShadowedI18n(program),
     ...lintAwaitedValue(program),
-    ...lintInvalidRegExp(program)
+    ...lintInvalidRegExp(program),
+    ...options.bareDeclarations === true ? lintBareDeclarations(program, source) : []
   ];
 }
 const REGEXP_WARNING_PREFIX = "This engine rejects this regular expression";
@@ -37398,6 +37399,128 @@ function lintInvalidRegExp(program) {
     }
   };
   visit(program.statements);
+  return warnings;
+}
+function declarationStart(lines, loc, name, exported) {
+  const line = loc?.line ?? 0;
+  const column = loc?.column ?? 0;
+  const before = (lines[line - 1] ?? "").slice(0, Math.max(column - 1, 0));
+  const escaped = name.replace(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`);
+  const head = `${exported ? String.raw`export\s+` : ""}${escaped}`;
+  const match = new RegExp(String.raw`(^|[^\w$])(${head})\s*$`).exec(before);
+  return match ? { line, column: match.index + match[1].length + 1 } : { line, column };
+}
+function collectDeclaredTopLevelNames(program) {
+  const declared = /* @__PURE__ */ new Set();
+  const exported = /* @__PURE__ */ new Set();
+  const kinds = /* @__PURE__ */ new Map();
+  const importedAs = /* @__PURE__ */ new Map();
+  const add = (key, isExported, kind = "other") => {
+    declared.add(key);
+    if (isExported === true) exported.add(key);
+    if (!kinds.has(key)) kinds.set(key, kind);
+  };
+  for (const stmt of program.statements) {
+    switch (stmt.kind) {
+      case "Import":
+        for (const spec of stmt.specifiers) {
+          add(bindingKey(spec.local, spec.isState), false, "import");
+          if (!importedAs.has(bindingKey(spec.local, spec.isState))) {
+            importedAs.set(bindingKey(spec.local, spec.isState), bindingKey(spec.imported, spec.isState));
+          }
+        }
+        break;
+      case "ComponentDeclaration":
+      case "ActionDeclaration":
+        add(stmt.name, stmt.exported);
+        break;
+      case "HookDeclaration":
+        add(`$${stmt.name}`, stmt.exported);
+        break;
+      case "DestructureStatement":
+        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) {
+          add(name, false, "destructuring");
+        }
+        break;
+      case "Assignment":
+        if (stmt.declaration !== void 0) {
+          add(bindingKey(stmt.identifier, stmt.isState), stmt.exported, stmt.declaration === "const" ? "const" : "other");
+        }
+        break;
+    }
+  }
+  return { declared, exported, kinds, importedAs };
+}
+const WRITABLE_LEGACY_ROOTS = /* @__PURE__ */ new Set(["aktion", "theme"]);
+function bindingKey(name, isState) {
+  return isState === true ? `$${name}` : name;
+}
+function isWrittenElsewhere(program, declaration, key) {
+  const WRITE_BUILTINS = /* @__PURE__ */ new Set(["__rui_assign__", "__rui_postfix__", "__rui_prefix__"]);
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return false;
+    if (Array.isArray(node)) return node.some(visit);
+    if (node === declaration) return false;
+    const rec = node;
+    if (rec["kind"] === "Assignment" && bindingKey(String(rec["identifier"]), rec["isState"]) === key) {
+      return true;
+    }
+    if ((rec["kind"] === "ForOfStatement" || rec["kind"] === "ForInStatement") && rec["declaration"] === void 0) {
+      const pattern = rec["pattern"];
+      const names = pattern ? collectPatternNames(pattern) : [String(rec["item"])];
+      if (names.includes(key)) return true;
+    }
+    if (rec["kind"] === "BuiltinCall" && WRITE_BUILTINS.has(String(rec["name"]))) {
+      const target = rec["arguments"]?.[0];
+      if (target && (target["kind"] === "Identifier" || target["kind"] === "StateRef")) {
+        if (bindingKey(String(target["name"]), target["kind"] === "StateRef") === key) return true;
+      }
+    }
+    return Object.keys(rec).some((k) => k !== "loc" && visit(rec[k]));
+  };
+  return visit(program.statements);
+}
+function exportMessage(key, kind, declarationExported, importedName = key) {
+  const head = `\`export ${key}\` writes to \`${key}\`, which`;
+  if (kind === "import") {
+    const specifier = importedName === key ? `\`import { ${key} as … }\`` : `\`import { ${importedName} as … }\`, in place of \`${importedName} as ${key}\``;
+    return `${head} this file imports. An import can be neither assigned nor re-exported under its own name — import it under another local name (${specifier}) and write \`export let ${key} = …\` here.`;
+  }
+  if (kind === "destructuring") {
+    return `${head} a destructuring declares, and \`export\` is not supported on a destructuring. Take \`${key}\` out of the pattern, declare it on its own with \`export let ${key} = …\` in its place, and drop the \`export\` here.`;
+  }
+  if (kind === "const") {
+    return declarationExported ? `\`export ${key}\` writes to \`${key}\`, but its own exported declaration declares it with \`const\`, and a \`const\` cannot be assigned. Change that \`const\` to \`let\` and drop the \`export\` here.` : `\`export ${key}\` writes to \`${key}\`, but another statement declares it with \`const\`, and a \`const\` cannot be assigned. Put \`export\` on the declaration and change its \`const\` to \`let\` (\`export let ${key} = …\`), and drop the \`export\` here. If nothing imports \`${key}\`, changing \`const\` to \`let\` and dropping the \`export\` here is enough.`;
+  }
+  return declarationExported ? `\`export ${key}\` writes to \`${key}\`, whose own declaration is already exported. JavaScript has no \`export\` on an assignment — drop the \`export\` here.` : `${head} another statement already declares. JavaScript has no \`export\` on an assignment, and \`export let\` here would redeclare it — put \`export\` on the declaration (\`export let ${key} = …\`, \`export function …\`) and drop it here. If nothing imports \`${key}\`, dropping it here is enough.`;
+}
+function lintBareDeclarations(program, source) {
+  const warnings = [];
+  const lines = source.split(/\r?\n/);
+  const { declared, exported: exportedDeclarations, kinds, importedAs } = collectDeclaredTopLevelNames(program);
+  const bound = /* @__PURE__ */ new Set();
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "Assignment") continue;
+    const key = bindingKey(stmt.identifier, stmt.isState);
+    const alreadyBound = declared.has(key) || bound.has(key);
+    bound.add(key);
+    if (stmt.declaration !== void 0) continue;
+    const exported = stmt.exported === true;
+    if (exported && !alreadyBound) exportedDeclarations.add(key);
+    if (alreadyBound && !exported) continue;
+    if (!exported && !stmt.isState && WRITABLE_LEGACY_ROOTS.has(stmt.identifier)) continue;
+    const { line, column } = declarationStart(lines, stmt.loc, key, exported);
+    const prefix = exported ? "export " : "";
+    let message;
+    if (alreadyBound) {
+      message = exportMessage(key, kinds.get(key) ?? "other", exportedDeclarations.has(key), importedAs.get(key));
+    } else {
+      const needsLet = stmt.isState || isWrittenElsewhere(program, stmt, key);
+      const reason = stmt.isState ? "a state atom is written, and `const` would make that a TypeError in JavaScript" : needsLet ? "it is assigned again elsewhere in the file" : "nothing else writes it";
+      message = `\`${prefix}${key}\` declares a binding without a keyword. The runtime accepts it, but it is not plain JavaScript — write \`${prefix}${needsLet ? "let" : "const"}\` before the name (${reason}).`;
+    }
+    warnings.push({ line, column, severity: "warning", message });
+  }
   return warnings;
 }
 function lintAwaitedValue(program) {

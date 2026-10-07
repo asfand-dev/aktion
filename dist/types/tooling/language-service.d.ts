@@ -12,6 +12,20 @@ export interface Diagnostic {
     /** `error` when the program will not render; `warning` is reserved for the future. */
     severity: "error" | "warning";
 }
+/**
+ * Switches for the lint pass (`getLintWarnings`, `getDiagnostics`). Every lint
+ * not named here is always on.
+ */
+export interface LintOptions {
+    /**
+     * Also report `bare-declaration`: a top-level binding written without
+     * `let` / `const`. Default `false` — the system prompt, the agent skill and the
+     * bundled demos all teach the keyword-less `$x = 0`, so reporting it by default
+     * would put a warning on every program an LLM is told to write. The
+     * `tools/validate-aktion*.mjs` CLIs turn it on.
+     */
+    bareDeclarations?: boolean;
+}
 export interface CompletionItem {
     /** Insertion text (the user types this to accept). */
     label: string;
@@ -37,7 +51,7 @@ export interface HoverInfo {
  * (in 0.5 every entry is currently `error` — there are no soft
  * warnings — but the surface stays future-proof).
  */
-export declare function getDiagnostics(source: string, library: ComponentLibrary): Diagnostic[];
+export declare function getDiagnostics(source: string, library: ComponentLibrary, options?: LintOptions): Diagnostic[];
 /**
  * Static lint warnings for patterns the schema validator cannot flag. On by
  * default inside `getDiagnostics`; also exported standalone for hosts that want
@@ -66,8 +80,16 @@ export declare function getDiagnostics(source: string, library: ComponentLibrary
  *     syntax such as duplicate named groups or `(?i:…)` modifiers is rejected
  *     before Node 23/24). A non-literal argument (`new RegExp(pattern)`) is
  *     skipped.
+ *   - `bare-declaration` (opt-in: `{ bareDeclarations: true }`) — a top-level
+ *     binding written without `let` / `const`: `export B = 1`, `export $s = 4`, or the first `y = 4` of a name. The
+ *     keyword is optional to the runtime (it changes nothing about reactivity),
+ *     but without it the source is not plain JavaScript, and the formatter now
+ *     keeps the keyword it finds. Later plain assignments to an existing binding
+ *     (`y = 5`), and assignments to a name a `function`, `import`, `var`, `let` or
+ *     `const` declares, are ordinary writes and are not flagged. Warning only:
+ *     parsing is unchanged, so bare `$x = 0` programs keep running.
  */
-export declare function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[];
+export declare function getLintWarnings(source: string, library?: ComponentLibrary, options?: LintOptions): Diagnostic[];
 /**
  * Completion items for the cursor position `position`. Heuristics are
  * intentionally simple — the prompt + the closed schema (§16) make
