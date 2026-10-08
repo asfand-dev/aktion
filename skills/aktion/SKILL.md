@@ -6,8 +6,8 @@ license: MIT
 
 # Building applications in Aktion
 
-Aktion is a declarative DSL whose surface syntax is a **strict subset of
-TypeScript**. A program is a list of statements that a single web component
+Aktion is a declarative DSL whose surface syntax is **JavaScript's** (TypeScript syntax is accepted only in
+`.aktion.ts` modules). A program is a list of statements that a single web component
 (`<aktion-app>`) streams into a live UI. You write the program; the runtime owns
 rendering, reactivity, and styling.
 
@@ -176,8 +176,9 @@ see this?" — not a generated page.
 4. **Components return trees; actions don't.** `function Name(args) { … return
    Expression }` renders when called in render position. A function with no
    `return` renders nothing and is used for side effects.
-   **Name case is a convention, not a mechanism** — PascalCase for
-   tree-returning, camelCase for side-effecting, purely for readability.
+   **Name case does not decide whether a function renders**, but only a
+   PascalCase component gets per-instance state and memoized re-rendering —
+   PascalCase for tree-returning, camelCase for side-effecting.
 5. **Reach for pattern composites before composing by hand.** `PageHeader`,
    `Stats`, `Toolbar`, `EmptyState`, `Timeline`, `DescriptionList`, `AppShell`,
    `SplitView`, `Hero`, `FeatureGrid`, `PricingTable`, `KanbanBoard` each commit

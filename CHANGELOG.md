@@ -103,6 +103,32 @@ Each entry is dated and summarises what was added, changed, or fixed.
   `tools/validate-aktion*.mjs`; how the text parses is unchanged. A `;` at the
   end of the previous line silences it.
 
+### Documentation: What Is and Is Not Valid JavaScript, Link Order, Set-Once State
+
+- Corrected the claim that every Aktion program is valid JavaScript, and the
+  description of Aktion as a strict subset of JavaScript. A plain `.aktion` file
+  can be written to parse as JavaScript, but nothing enforces it; `.aktion.js`
+  and `.aktion.ts` modules are real JavaScript and TypeScript.
+- Documented link order: modules link depth-first in the order their `import`
+  statements are written, the same order ES modules evaluate in, so a tool that
+  reorders imports changes the order top-level statements run in.
+- Documented that a `$x = …` directly in a `function` declaration's body is
+  set-once while the UI renders and an ordinary write from a handler. Nested in
+  an `if` or loop, or directly in an arrow or function expression, it is always
+  an ordinary write, with a single `console.warn` as the only signal. Only a
+  PascalCase component gets its own copy per instance and is memoized between
+  renders, and an existing top-level atom of that name wins.
+- Documented the two supported ways to write shared state from several modules
+  (an exported `let` atom with an exported setter action, and an exported
+  `$store` written by property), and that writing an imported `$` atom directly
+  works but is flagged by `no-import-assign`.
+- Reworded the notes that said first-letter case "does not decide component
+  versus action". The parser does classify a PascalCase declaration as a
+  component and a lowercase one as an action, but either kind renders in a
+  render position and runs from an event handler, so case does not decide whether
+  a function renders or can be used as an action. It does decide per-instance
+  state and memoization.
+
 ## 2026-10-05
 
 ### Precise TypeScript Types for Every Component and Built-in

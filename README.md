@@ -5,8 +5,8 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](#contributing)
 
 A framework-agnostic web component that renders LLM-generated UI from
-**Aktion** — a reactive language whose surface syntax is a strict subset of
-JavaScript, designed for chat assistants. Drop one `<script>` tag and one
+**Aktion** — a reactive language whose surface syntax is JavaScript's,
+designed for chat assistants. Drop one `<script>` tag and one
 `<aktion-app>` tag into any HTML page and you have a streaming, interactive
 renderer for an LLM's response.
 
@@ -68,12 +68,21 @@ Everything you need at runtime ships in a single bundle:
 
 - **A streaming-first parser.** Line-oriented, error-tolerant. Each
   statement commits to the DOM as soon as it arrives. The surface syntax
-  is a **strict subset of JavaScript** — `function` declarations,
+  is **JavaScript's** — `function` declarations,
   `for...of`, `if/else`, `switch/case`, template literals with
   `${expression}` interpolation, arrow functions, default parameters,
   destructuring, spread, optional chaining (`a?.b`), nullish coalescing
-  (`a ?? b`), and object-literal named arguments. Every Aktion program
-  is valid JavaScript.
+  (`a ?? b`), and object-literal named arguments. A plain `.aktion` file
+  can be written to parse as JavaScript — declare every top-level binding
+  (`export const NAME = …`, `export let $count = 0`) and avoid what Aktion
+  accepts but JavaScript rejects — yet nothing guarantees it does. For
+  example: a duplicate `let` or `const`, a reserved word as a name
+  (`const class = 1`), duplicate parameter names, a legacy octal (`010`),
+  `delete x`, a top-level `return`, `await` inside a non-async function, a
+  stray `break` or `continue`, `a?.b = 1`, and a bare `export NAME = …`.
+  `.aktion.js` / `.aktion.ts` modules are real JavaScript / TypeScript
+  checked against JavaScript semantics (see *TypeScript and JavaScript
+  modules*).
 - **One reactive atom kind.** Declare any reactive state with
   `$name = value` and read or write it with `$name`. The `$` prefix is
   the only thing that makes a binding reactive — `let` / `const` /
@@ -536,7 +545,7 @@ pipelines).
 
 ## Aktion — the language
 
-Aktion's surface syntax is a **strict subset of JavaScript**. Every
+Aktion's surface syntax is **JavaScript's**. Every
 declaration uses standard JS constructs — `function`, `for...of`,
 `if/else`, `switch/case`, arrow functions, object literals — so any
 developer reading the output immediately knows what it does. The renderer
@@ -1883,14 +1892,25 @@ leave it out of the report. The agent skill and the system prompt still write
 
 ## ESLint integration
 
-`.aktion` files are JS/TS-syntax compatible except for exactly ONE construct: a
-bare top-level `export IDENTIFIER = …` (or `export $identifier = …`) with no
-declaration keyword — see
+A plain `.aktion` file can be written to parse as JS/TS — declare every
+top-level binding (`export const NAME = …`, `export let $count = 0`; the
+formatter keeps those declaration keywords) and avoid what Aktion accepts but
+JavaScript rejects — but nothing guarantees it. For example: a duplicate `let`
+or `const`, a reserved word as a name, duplicate parameter names, a legacy
+octal, `delete x`, a top-level `return`, `await` inside a non-async function,
+a stray `break` or `continue`, and `a?.b = 1`. The construct the processor
+below exists for is the legacy bare top-level `export IDENTIFIER = …` (or
+`export $identifier = …`) with no declaration keyword, which is a syntax error
+in JavaScript — see
 [`src/eslint/scan.ts`](./src/eslint/scan.ts)'s header for the full grammar
-cross-check against [`src/parser/parser.ts`](./src/parser/parser.ts). The
+cross-check against [`src/parser/parser.ts`](./src/parser/parser.ts). Declare
+an atom you later write with `let`: the processor turns a bare export into a
+`const`, so `export $open = false` plus `$open = !$open` in the same file is
+reported as `no-const-assign`. The
 `aktion-runtime/eslint` entry ([`src/eslint-api.ts`](./src/eslint-api.ts)) is
 an ESLint **processor** that rewrites every such occurrence into
-`export const IDENTIFIER = …` (genuinely valid JS/TS), hands the result to
+`export const IDENTIFIER = …` (genuinely valid JS/TS; a file that already
+declares its bindings is passed through as it is), hands the result to
 whatever parser and rule set YOU already have installed, and remaps every
 reported position — and any autofix — back to the original file's
 coordinates. This means a real ESLint (your own installation, your own
@@ -2062,6 +2082,25 @@ names canonical (the `aktion` binding + the `$state` names that `serializeState`
 / `applyDelta` target). Specifier lists may span multiple lines and carry a
 trailing comma, and a syntax error in an **imported** module is reported as a
 link diagnostic rather than silently dropping that module's statements.
+
+**Link order is import order.** The linker walks the graph depth-first and
+merges a module after the modules it imports, taking `import` statements in the
+order they are written — the same order ES modules evaluate in. Importing `a`
+then `b` links `a, b, entry`; swapped, `b, a, entry`. The merged program's
+top-level statements run in that order, so a tool that sorts or reorders a
+file's imports changes behaviour exactly as it would for JavaScript modules
+with side effects. As with ES modules, a dependency runs before its importer
+except within an import cycle: entry → `a` → `b` → `a` links `b, a, entry`
+without a diagnostic.
+
+**Writing shared state from another file.** Two shapes are shared by every
+importer: an exported `$` atom with an exported setter action
+(`export let $open = false` plus `export function toggle() { $open = !$open }`),
+and an exported `$store` written by property (`export const ui = $store({ open: false })`,
+then `ui.open = !ui.open`). Writing an imported atom directly
+(`$open = !$open` in a file that only imports `$open`) also works at runtime,
+but it is the shape JavaScript tooling flags as `no-import-assign`, so prefer
+the first two. See [docs/modules.html](./docs/modules.html#shared-state-writes).
 
 ### TypeScript and JavaScript modules
 

@@ -32,7 +32,9 @@ will automatically include any components your host has registered via
 Aktion uses a JS-aligned syntax:
 
 ```
-// Declarations — first-letter case does NOT matter.
+// Declarations — first-letter case does not decide whether a function
+// renders or can be used as an action (PascalCase also gets per-instance
+// state and memoization).
 // A function used as a component renders its return value; a function
 // used as an action runs its body for side effects. A function with no
 // `return` renders nothing when called in a render position.

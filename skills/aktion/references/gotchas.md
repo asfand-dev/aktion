@@ -108,6 +108,37 @@ A `$name = value` declared inside a component body is private to that instance �
 two call sites get two independent atoms. A `$name` at the top level is shared by
 everything that reads it.
 
+### A body-level `$x = …` is set-once only while rendering
+
+A `$name = …` written directly in the body of a `function` declaration (not an
+arrow or function expression) is a set-once declaration while rendering; only a
+PascalCase component gets its own copy per instance, while in a lowercase function
+every call shares one atom, and an existing top-level atom of that name wins. When
+a handler or effect runs the function it is an ordinary write. Nested in an `if` or
+a loop, or directly in an arrow or function-expression body, it is always an
+ordinary write: in render position it overwrites the handler's value on every pass,
+the runtime applies it without a re-render, and one `console.warn` is the only signal.
+
+```js
+function app() {
+  let $n = 5                // set-once during render
+  if (ready) { $m = 5 }     // ✗ re-written on every render
+  return Column([Text(`n=${$n}`), Button("inc", () => { $n = $n + 1 })])
+}
+```
+
+### Sharing state across modules
+
+Export the atom plus a setter action (`export let $open = false` and
+`export function toggle() { $open = !$open }`), or export a `$store` and write it by
+property (`export const ui = $store({…})`, then `ui.open = !ui.open`); every importer
+shares one cell. Declare the atom with `let` — a bare `export $open = false` becomes
+a `const` under the ESLint processor and the setter is flagged `no-const-assign`. Writing an imported atom directly also works but is what JS
+tooling flags as `no-import-assign`. Never export a function that returns
+`$store({…})` — a store is keyed by its call site, so every caller gets the same
+instance. Import order is link order (the order top-level statements run in), so
+do not let a tool re-sort a module's imports.
+
 ---
 
 ## Components
@@ -116,8 +147,10 @@ everything that reads it.
 
 A function declaration is **both** a component and an action; whether it renders
 depends on whether it returns a tree and where it is called. `function myCard(t) {
-return Card([Text(t)]) }` renders fine. PascalCase / camelCase is a readability
-convention only.
+return Card([Text(t)]) }` renders fine. Case does not change whether it renders, but only a PascalCase
+component gets its own state per instance and is memoized (it re-executes only when
+its own inputs change); a lowercase function shares one atom between its calls and
+re-runs with every render of its caller.
 
 ### No `return` renders nothing
 
