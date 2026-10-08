@@ -146,6 +146,9 @@ export function formatFailure(result, { commits = [] } = {}) {
     lines.push("No single line could be blamed; the parser output below is all there is.");
   }
   if (result.errors.length > 0) lines.push("", `Parser error: ${result.errors.join(" | ")}`);
+  if (result.source === "override") {
+    lines.push("", `Hint: release-please treats everything after the first ${OVERRIDE_BEGIN} in the PR description as the commit message, even when the word only appears in prose or a code span. If you did not mean to write an override block, rephrase the mention (for example "commit override block") and the squash message is checked instead.`);
+  }
   if (result.parsed === 0 && result.errors.length === 0) lines.push("", "The message parsed to zero conventional commits.");
   lines.push(
     "",

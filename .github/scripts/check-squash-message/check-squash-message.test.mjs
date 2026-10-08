@@ -158,6 +158,16 @@ test("the failure report names the line, the commit, and all three ways out", ()
   assert.match(report, /3\. Squash the branch/);
 });
 
+test("a PR description that only mentions the markers in prose is an override block too, and the report says so", () => {
+  const prBody = "A `BEGIN_COMMIT_OVERRIDE` / `END_COMMIT_OVERRIDE` block is read by release-please.";
+  const result = checkSquashMessage({ message: "feat(x): fine (#1)", prBody });
+  assert.equal(result.ok, false);
+  assert.equal(result.source, "override");
+  const report = formatFailure(result);
+  assert.match(report, /Hint: release-please treats everything after the first BEGIN_COMMIT_OVERRIDE/);
+  assert.doesNotMatch(formatFailure(checkSquashMessage({ message: squashWith(BAD_LINES[0]) })), /Hint: release-please treats/);
+});
+
 test("the command line exits 1 on a bad message, 0 on a good one and 2 when it cannot run", () => {
   const dir = mkdtempSync(join(tmpdir(), "squash-"));
   const bad = join(dir, "bad.txt");
