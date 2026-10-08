@@ -120,3 +120,32 @@ jobs:
             revert
             deps
           requireScope: false
+
+  check-squash-message:
+    runs-on: ubuntu-latest
+    needs: sync-pr-title-with-commits
+    if: always()
+    permissions:
+      contents: read
+      pull-requests: read
+    name: Squash commit message parses for release-please
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts/check-squash-message
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install release-please (pinned in the script's own package.json)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: .github/scripts/check-squash-message
+      - name: Self-test the check
+        run: npm test
+        working-directory: .github/scripts/check-squash-message
+      - name: Check the squash message GitHub would create for this PR
+        run: node .github/scripts/check-squash-message/check-squash-message.mjs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
