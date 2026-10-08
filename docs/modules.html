@@ -268,6 +268,46 @@ export function increment() {
         <code>hydrateState()</code>, and <code>applyDelta()</code> target.
       </p>
 
+      <h3 id="shared-state-writes">Writing shared state from another file</h3>
+      <p>
+        Two shapes work for state that several files change, and both are shared by
+        every importer (measured with a toggle written from the entry and from an
+        imported component: either button flips the text in both):
+      </p>
+<pre><code>// 1. An exported atom plus an exported action that writes it
+// ui.aktion
+export let $open = false
+export function toggle() { $open = !$open }
+
+// any importer
+import { $open, toggle } from "./ui.aktion"
+Button("Toggle", { onClick: toggle })
+
+// 2. An exported store, written by property
+// ui.aktion
+export const ui = $store({ open: false })
+
+// any importer
+import { ui } from "./ui.aktion"
+Button("Toggle", { onClick: () =&gt; { ui.open = !ui.open } })</code></pre>
+      <p>
+        Declare the atom with <code>let</code> (<code>export let $open = false</code>):
+        a bare <code>export $open = false</code> becomes a <code>const</code> under
+        the ESLint processor, and the setter&rsquo;s write is then reported as
+        <code>no-const-assign</code>.
+      </p>
+      <p>
+        Writing an imported atom directly &mdash;
+        <code>() =&gt; { $open = !$open }</code> in a file that only
+        <code>import</code>s <code>$open</code> &mdash; also works at runtime. It is
+        the one shape JavaScript tooling flags, because in JavaScript an
+        <code>import</code> binding is read-only (ESLint&rsquo;s
+        <code>no-import-assign</code>), so prefer the two above. A shared module may
+        not export a <code>$store(&hellip;)</code> <em>factory</em>: a store is
+        created once per source location, so every caller of a factory would get
+        the same instance &mdash; export the store itself, as above.
+      </p>
+
       <h2 id="languages">Modules in TypeScript and JavaScript</h2>
       <p>
         The file name says which language a module is written in. All three compile
@@ -395,6 +435,30 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
         a thenable, and <code>await import()</code> would call it instead of
         returning the module.) To unit-test a helper, call it from
         a program (<code>compileAktionSource</code>, see <a href="testing.html#multi-file">Testing</a>).
+      </p>
+
+      <h2 id="link-order">Link order</h2>
+      <p>
+        The linker walks the graph depth-first and merges each module
+        <strong>after</strong> the modules it imports (a post-order walk), taking a
+        file&rsquo;s <code>import</code> statements in the order they are written.
+        That is the order ES modules evaluate in, and the merged program&rsquo;s
+        top-level statements run in it: the entry comes last, and a dependency
+        runs before its importer except within an import cycle (entry &rarr;
+        <code>a</code> &rarr; <code>b</code> &rarr; <code>a</code> links
+        <code>b, a, entry</code>, with no diagnostic, as with ES modules). Importing <code>a</code> then
+        <code>b</code> links <code>a, b, entry</code>; importing <code>b</code> then
+        <code>a</code> links <code>b, a, entry</code>; if <code>a</code> itself imports
+        <code>c</code>, the order is <code>c, a, b, entry</code>.
+        <code>LinkResult.dependencies</code> and <code>program.sources</code> (after
+        the entry at index&nbsp;0) report the same order.
+      </p>
+      <p>
+        So <strong>import order is meaningful</strong>. A tool that sorts, groups or
+        otherwise reorders a file&rsquo;s imports &mdash; an import-sorting lint rule
+        with autofix, say &mdash; changes the order the modules&rsquo; top-level
+        statements run in, exactly as it would for JavaScript modules with side
+        effects.
       </p>
 
       <h2 id="diagnostics">When a link fails</h2>

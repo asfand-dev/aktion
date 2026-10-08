@@ -17,6 +17,7 @@ export {
   getHoverInfo,
   type Position,
   type Diagnostic,
+  type LintOptions,
   type CompletionItem,
   type HoverInfo,
 } from "./tooling/language-service.js";

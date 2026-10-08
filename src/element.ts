@@ -2468,12 +2468,16 @@ export class AktionElement extends HTMLElement {
     console.warn(
       "[aktion] A reactive `$state` write happened during render and was applied " +
         "WITHOUT scheduling a re-render, to prevent an infinite render loop. This " +
-        "usually means a `$name = …` assignment is running in render position — e.g. " +
-        "`$user = {…}` at the top of a lowercase `function` that's invoked to build " +
-        "the UI (`$app(page())`), where the function runs as an action and re-writes " +
-        "the atom every render. Seed component-local state with a PascalCase component " +
-        "(so `$name = …` becomes a set-once per-instance declaration) or the `$state` " +
-        "hook, and only write state from event handlers / effects.",
+        "usually means a write that is not a set-once declaration is running in " +
+        "render position — e.g. `$n = 5` nested inside an `if` or a loop, or " +
+        "directly in an arrow or function-expression body, or `$n++` / `$n += 1` " +
+        "— so it re-writes the atom on every render. A `$name = …` written " +
+        "directly in the body of a `function` declaration (not an arrow or " +
+        "function expression) is a set-once declaration while rendering; only a " +
+        "PascalCase component gets its own copy per instance, while in a " +
+        "lowercase function every call shares one atom, and an existing " +
+        "top-level atom of that name wins. Seed state that way or with the " +
+        "`$state` hook, and only write state from event handlers / effects.",
     );
   }
 

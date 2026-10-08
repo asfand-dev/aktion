@@ -25,7 +25,8 @@
  * adapters — never a second parser.
  */
 
-import { parse, collectPatternNames } from "../parser/index.js";
+import { parse, tokenize, collectPatternNames } from "../parser/index.js";
+import type { Token } from "../parser/lexer.js";
 import type { DestructuringPattern } from "../parser/types.js";
 import type { ComponentLibrary, ComponentSpec, PropSpec } from "../library/types.js";
 import { findComponent } from "../library/registry.js";
@@ -60,6 +61,21 @@ export interface Diagnostic {
   message: string;
   /** `error` when the program will not render; `warning` is reserved for the future. */
   severity: "error" | "warning";
+}
+
+/**
+ * Switches for the lint pass (`getLintWarnings`, `getDiagnostics`). Every lint
+ * not named here is always on.
+ */
+export interface LintOptions {
+  /**
+   * Also report `bare-declaration`: a top-level binding written without
+   * `let` / `const`. Default `false` — the system prompt, the agent skill and the
+   * bundled demos all teach the keyword-less `$x = 0`, so reporting it by default
+   * would put a warning on every program an LLM is told to write. The
+   * `tools/validate-aktion*.mjs` CLIs turn it on.
+   */
+  bareDeclarations?: boolean;
 }
 
 export interface CompletionItem {
@@ -111,6 +127,7 @@ const KEYWORDS: ReadonlyArray<{ label: string; detail: string }> = [
 export function getDiagnostics(
   source: string,
   library: ComponentLibrary,
+  options: LintOptions = {},
 ): Diagnostic[] {
   const program = parse(source);
   const schemaErrors = validateProgramSchema(program, library);
@@ -133,7 +150,7 @@ export function getDiagnostics(
     // worst silent bugs (#1 scope leak, #2 placeholder stripping, #3 Date
     // compares, #5 unicode escapes) are now fixed in the runtime, so linting
     // them would flag correct code.
-    ...lintProgram(program, library),
+    ...lintProgram(program, source, library, options),
   ];
 }
 
@@ -156,20 +173,591 @@ export function getDiagnostics(
  *     bodies run synchronously and nothing unwraps the thenable, so the value is
  *     the PROMISE. `const ok = await $util.copy(v)` is therefore always truthy.
  *     A bare `await f()` whose value is discarded is not flagged — only a use.
+ *   - `invalid-regexp` — a regular expression whose pattern or flags the engine
+ *     rejects: a `/…/flags` literal, `new RegExp("…", "…")` or `RegExp("…", "…")`
+ *     with string-literal arguments. The runtime swallows the `SyntaxError` and
+ *     the expression becomes `null`, so a broken validator reads as "no match".
+ *     The check constructs the RegExp with the RegExp engine of the Node that
+ *     runs the linter, so what it accepts follows that Node's version (newer
+ *     syntax such as duplicate named groups or `(?i:…)` modifiers is rejected
+ *     before Node 23/24). A non-literal argument (`new RegExp(pattern)`) is
+ *     skipped.
+ *   - `continuation-line` — a line that starts with `(`, `[` or a template
+ *     literal right after an unterminated statement. JavaScript continues the
+ *     previous expression (`f⏎(1)` is `f(1)`); Aktion ends the statement at the
+ *     line break, so it is two statements.
+ *   - `bare-declaration` (opt-in: `{ bareDeclarations: true }`) — a top-level
+ *     binding written without `let` / `const`: `export B = 1`, `export $s = 4`, or the first `y = 4` of a name. The
+ *     keyword is optional to the runtime (it changes nothing about reactivity),
+ *     but without it the source is not plain JavaScript, and the formatter now
+ *     keeps the keyword it finds. Later plain assignments to an existing binding
+ *     (`y = 5`), and assignments to a name a `function`, `import`, `var`, `let` or
+ *     `const` declares, are ordinary writes and are not flagged. Warning only:
+ *     parsing is unchanged, so bare `$x = 0` programs keep running.
  */
-export function getLintWarnings(source: string, library?: ComponentLibrary): Diagnostic[] {
-  return lintProgram(parse(source), library);
+export function getLintWarnings(
+  source: string,
+  library?: ComponentLibrary,
+  options: LintOptions = {},
+): Diagnostic[] {
+  return lintProgram(parse(source), source, library, options);
 }
 
 function lintProgram(
   program: ReturnType<typeof parse>,
-  library?: ComponentLibrary,
+  source: string,
+  library: ComponentLibrary | undefined,
+  options: LintOptions = {},
 ): Diagnostic[] {
   return [
     ...(library ? lintUnknownComponents(program, library) : []),
     ...lintShadowedI18n(program),
     ...lintAwaitedValue(program),
+    ...lintInvalidRegExp(program),
+    ...lintContinuationLine(program, source),
+    ...(options.bareDeclarations === true ? lintBareDeclarations(program, source) : []),
   ];
+}
+
+/** How an `invalid-regexp` warning begins; tests and hosts can match on it. */
+const REGEXP_WARNING_PREFIX = "This engine rejects this regular expression";
+
+/** Longest engine reason echoed into a warning (a flags error repeats the flags verbatim). */
+const MAX_REGEXP_REASON = 160;
+
+/**
+ * Flag a regular expression the JavaScript engine refuses to construct.
+ *
+ * A `/pattern/flags` literal is desugared by the parser to
+ * `new RegExp("pattern", "flags")`, so one walk covers the literal, the
+ * `new RegExp(…)` form and the plain `RegExp(…)` call. At run time the
+ * evaluator catches the `SyntaxError` the constructor throws, logs it with
+ * `console.error` and evaluates the expression to `null` — so
+ *
+ * ```js
+ * const isCode = (s) => /^[(]+$/v.test(s)   // `[(]` is invalid under the v flag
+ * ```
+ *
+ * quietly never matches (`null.test` is `null`, a falsy "no match"), and other
+ * uses (`s.replace(null, …)`) quietly misbehave. Nothing else in the toolchain
+ * looks at the pattern.
+ *
+ * Only calls whose pattern (and flags, when given) are string literals — or a
+ * regular expression literal re-wrapped as `new RegExp(/a/, "g")` — are checked;
+ * a computed argument cannot be judged statically and is skipped. A third
+ * argument is ignored, as in JavaScript. The verdict is the linting Node's:
+ * engines differ in what syntax they accept, and the message says "this engine".
+ * Engines do not report an offset into the pattern, so the warning is positioned
+ * on the regular expression itself.
+ */
+function lintInvalidRegExp(program: ReturnType<typeof parse>): Diagnostic[] {
+  const warnings: Diagnostic[] = [];
+
+  const calleeOf = (node: Record<string, unknown>): unknown => {
+    // `New` carries the callee as an Identifier node; a plain `Call` as a name.
+    const callee = node["callee"] as Record<string, unknown> | string | undefined;
+    return typeof callee === "string" ? callee : callee?.["kind"] === "Identifier" ? callee["name"] : undefined;
+  };
+
+  const isRegExpConstruction = (node: unknown): node is Record<string, unknown> => {
+    if (!node || typeof node !== "object") return false;
+    const rec = node as Record<string, unknown>;
+    return (rec["kind"] === "New" || rec["kind"] === "Call") && calleeOf(rec) === "RegExp";
+  };
+
+  /** The statically known source and flags a RegExp construction receives, if any. */
+  const resolve = (node: Record<string, unknown>): { pattern: string; flags: string | undefined } | undefined => {
+    const args = node["arguments"];
+    if (!Array.isArray(args) || args.length === 0) return undefined;
+    // A spread anywhere makes the argument positions unknowable.
+    if (args.some((a) => (a as Record<string, unknown> | null)?.["kind"] === "Spread")) return undefined;
+    const first = args[0] as Record<string, unknown>;
+    const second = args[1] as Record<string, unknown> | undefined;
+
+    let pattern: string;
+    let inheritedFlags: string | undefined;
+    if (first["kind"] === "Literal" && typeof first["value"] === "string") {
+      pattern = first["value"];
+    } else if (isRegExpConstruction(first)) {
+      // `new RegExp(/a/g, flags)`: the inner source is reused, its flags only
+      // when no flags are passed.
+      const inner = resolve(first);
+      if (!inner) return undefined;
+      // An inner expression that is itself invalid reports on its own; the
+      // wrapper would only repeat it.
+      try {
+        new RegExp(inner.pattern, inner.flags);
+      } catch {
+        return undefined;
+      }
+      pattern = inner.pattern;
+      inheritedFlags = inner.flags;
+    } else {
+      return undefined;
+    }
+
+    if (second === undefined || (second["kind"] === "Identifier" && second["name"] === "undefined")) {
+      return { pattern, flags: inheritedFlags };
+    }
+    if (second["kind"] === "Literal" && typeof second["value"] === "string") {
+      return { pattern, flags: second["value"] };
+    }
+    return undefined;
+  };
+
+  const check = (node: Record<string, unknown>): void => {
+    const resolved = resolve(node);
+    if (!resolved) return;
+    try {
+      new RegExp(resolved.pattern, resolved.flags);
+    } catch (err) {
+      const loc = node["loc"] as Position | undefined;
+      let reason = err instanceof Error ? err.message : String(err);
+      // V8 prefixes `Invalid regular expression: /<pattern>/<flags>: `; the
+      // pattern is already on the line the warning points at, so drop it.
+      const echoed = `Invalid regular expression: /${resolved.pattern}/${resolved.flags ?? ""}: `;
+      if (reason.startsWith(echoed)) reason = reason.slice(echoed.length);
+      if (reason.length > MAX_REGEXP_REASON) reason = `${reason.slice(0, MAX_REGEXP_REASON)}…`;
+      warnings.push({
+        line: loc?.line ?? 0,
+        column: loc?.column ?? 0,
+        severity: "warning",
+        message:
+          `${REGEXP_WARNING_PREFIX}: ${reason}. Aktion evaluates a rejected regular expression to ` +
+          "null instead of throwing, so `.test(…)` quietly reports no match. Which syntax is " +
+          "accepted depends on the JavaScript engine (Node version) running the linter.",
+      });
+    }
+  };
+
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    const rec = node as Record<string, unknown>;
+    if (isRegExpConstruction(rec)) check(rec);
+    for (const key of Object.keys(rec)) {
+      if (key !== "loc") visit(rec[key]);
+    }
+  };
+
+  visit(program.statements);
+  return warnings;
+}
+
+/**
+ * Where a declaration of `name` starts on its line, given the position of the `=` that
+ * ends it: at `export` for an exported binding, otherwise at the name. The `=` itself is
+ * returned when the line does not confirm it.
+ */
+function declarationStart(
+  lines: readonly string[],
+  loc: Position | undefined,
+  name: string,
+  exported: boolean,
+): Position {
+  const line = loc?.line ?? 0;
+  const column = loc?.column ?? 0;
+  const before = (lines[line - 1] ?? "").slice(0, Math.max(column - 1, 0));
+  const escaped = name.replace(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`);
+  const head = `${exported ? String.raw`export\s+` : ""}${escaped}`;
+  const match = new RegExp(String.raw`(^|[^\w$])(${head})\s*$`).exec(before);
+  return match ? { line, column: match.index + match[1]!.length + 1 } : { line, column };
+}
+
+/**
+ * Every name a top-level statement declares WITH a keyword or a declaration form,
+ * wherever it sits in the file: imports, functions / components / actions / hooks,
+ * destructurings and `let` / `const` / `var` assignments. JavaScript hoists
+ * `function` and `var` (and a `let` below a use is a temporal-dead-zone error),
+ * so a bare assignment to any of these is a write to a binding that exists, never
+ * a declaration — and adding `let` to it would be a redeclaration SyntaxError.
+ *
+ * `exported` is the subset whose declaration already carries `export`, and `kinds`
+ * says what declares each name, because the advice for an `export` of it depends
+ * on that: an import cannot be exported or assigned, a destructuring cannot carry
+ * `export`, and a `const` cannot be assigned. `importedAs` maps an imported local
+ * name to the name the other module exports it under (`import { X as B }` maps
+ * `B` to `X`), because that is the name an advised `import { … as … }` must keep.
+ * A hook is stored without its `$` (`function $useX` is `useX`), so it is
+ * recorded under the `$`-prefixed spelling an assignment to it uses.
+ */
+type DeclarationKind = "import" | "destructuring" | "const" | "other";
+
+function collectDeclaredTopLevelNames(program: ReturnType<typeof parse>): {
+  declared: Set<string>;
+  exported: Set<string>;
+  kinds: Map<string, DeclarationKind>;
+  importedAs: Map<string, string>;
+} {
+  const declared = new Set<string>();
+  const exported = new Set<string>();
+  const kinds = new Map<string, DeclarationKind>();
+  const importedAs = new Map<string, string>();
+  const add = (key: string, isExported: boolean | undefined, kind: DeclarationKind = "other"): void => {
+    declared.add(key);
+    if (isExported === true) exported.add(key);
+    if (!kinds.has(key)) kinds.set(key, kind);
+  };
+  for (const stmt of program.statements) {
+    switch (stmt.kind) {
+      case "Import":
+        for (const spec of stmt.specifiers) {
+          add(bindingKey(spec.local, spec.isState), false, "import");
+          if (!importedAs.has(bindingKey(spec.local, spec.isState))) {
+            importedAs.set(bindingKey(spec.local, spec.isState), bindingKey(spec.imported, spec.isState));
+          }
+        }
+        break;
+      case "ComponentDeclaration":
+      case "ActionDeclaration":
+        add(stmt.name, stmt.exported);
+        break;
+      case "HookDeclaration":
+        add(`$${stmt.name}`, stmt.exported);
+        break;
+      case "DestructureStatement":
+        for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) {
+          add(name, false, "destructuring");
+        }
+        break;
+      case "Assignment":
+        if (stmt.declaration !== undefined) {
+          add(bindingKey(stmt.identifier, stmt.isState), stmt.exported, stmt.declaration === "const" ? "const" : "other");
+        }
+        break;
+    }
+  }
+  return { declared, exported, kinds, importedAs };
+}
+
+/**
+ * The legacy root bindings the runtime still accepts as plain assignments
+ * (`aktion = Column(…)`, `theme = $theme(…)`). The host injects both and treats
+ * them as writable, so an assignment to one is a write, not a new declaration.
+ */
+const WRITABLE_LEGACY_ROOTS: ReadonlySet<string> = new Set(["aktion", "theme"]);
+
+/** `$`-prefixed names are a different binding from their bare spelling (`$count` vs `count`). */
+function bindingKey(name: string, isState: boolean | undefined): string {
+  return isState === true ? `$${name}` : name;
+}
+
+/**
+ * Whether anything in the program writes `key` other than the `declaration`
+ * statement itself: another assignment, a compound assignment (`n += 1`), an
+ * increment / decrement, or a `for (x of …)` / `for (k in …)` head with no
+ * keyword, which assigns to `x` / `k` on every pass. Scope-blind on purpose — a same-named local counts too,
+ * which only ever makes the advice `let`, the keyword that is safe either way.
+ */
+function isWrittenElsewhere(program: ReturnType<typeof parse>, declaration: object, key: string): boolean {
+  const WRITE_BUILTINS = new Set(["__rui_assign__", "__rui_postfix__", "__rui_prefix__"]);
+  const visit = (node: unknown): boolean => {
+    if (!node || typeof node !== "object") return false;
+    if (Array.isArray(node)) return node.some(visit);
+    if (node === declaration) return false;
+    const rec = node as Record<string, unknown>;
+    if (rec["kind"] === "Assignment" && bindingKey(String(rec["identifier"]), rec["isState"] as boolean) === key) {
+      return true;
+    }
+    if ((rec["kind"] === "ForOfStatement" || rec["kind"] === "ForInStatement") && rec["declaration"] === undefined) {
+      const pattern = rec["pattern"] as DestructuringPattern | undefined;
+      const names = pattern ? collectPatternNames(pattern) : [String(rec["item"])];
+      if (names.includes(key)) return true;
+    }
+    if (rec["kind"] === "BuiltinCall" && WRITE_BUILTINS.has(String(rec["name"]))) {
+      const target = (rec["arguments"] as Array<Record<string, unknown>> | undefined)?.[0];
+      if (target && (target["kind"] === "Identifier" || target["kind"] === "StateRef")) {
+        if (bindingKey(String(target["name"]), target["kind"] === "StateRef") === key) return true;
+      }
+    }
+    return Object.keys(rec).some((k) => k !== "loc" && visit(rec[k]));
+  };
+  return visit(program.statements);
+}
+
+/**
+ * The warning for a bare `export key = …` where `key` is already declared.
+ *
+ * JavaScript has no `export` on an assignment, so it has to go; but dropping it
+ * alone takes `key` out of the module's exports and an importer then fails to
+ * link. Where the `export` belongs depends on what declares `key`:
+ *
+ *   - an import can be neither assigned nor re-exported under its own name;
+ *   - a destructured name cannot carry `export` (`export const { B } = o` is not
+ *     supported), so it has to be declared on its own;
+ *   - a `const` cannot be assigned, so the declaration becomes `let`;
+ *   - anything else takes the `export` on its declaration, or has it already.
+ */
+function exportMessage(
+  key: string,
+  kind: DeclarationKind,
+  declarationExported: boolean,
+  importedName: string = key,
+): string {
+  const head = `\`export ${key}\` writes to \`${key}\`, which`;
+  if (kind === "import") {
+    // `key` is the LOCAL name; the specifier to rewrite is spelled with the name the other module exports.
+    const specifier =
+      importedName === key
+        ? `\`import { ${key} as … }\``
+        : `\`import { ${importedName} as … }\`, in place of \`${importedName} as ${key}\``;
+    return (
+      `${head} this file imports. An import can be neither assigned nor re-exported under its own name — ` +
+      `import it under another local name (${specifier}) and write \`export let ${key} = …\` here.`
+    );
+  }
+  if (kind === "destructuring") {
+    return (
+      `${head} a destructuring declares, and \`export\` is not supported on a destructuring. ` +
+      `Take \`${key}\` out of the pattern, declare it on its own with \`export let ${key} = …\` in its place, ` +
+      `and drop the \`export\` here.`
+    );
+  }
+  if (kind === "const") {
+    return declarationExported
+      ? `\`export ${key}\` writes to \`${key}\`, but its own exported declaration declares it with \`const\`, ` +
+          `and a \`const\` cannot be assigned. Change that \`const\` to \`let\` and drop the \`export\` here.`
+      : `\`export ${key}\` writes to \`${key}\`, but another statement declares it with \`const\`, ` +
+          `and a \`const\` cannot be assigned. ` +
+          `Put \`export\` on the declaration and change its \`const\` to \`let\` (\`export let ${key} = …\`), ` +
+          `and drop the \`export\` here. If nothing imports \`${key}\`, changing \`const\` to \`let\` and ` +
+          `dropping the \`export\` here is enough.`;
+  }
+  return declarationExported
+    ? `\`export ${key}\` writes to \`${key}\`, whose own declaration is already exported. ` +
+        `JavaScript has no \`export\` on an assignment — drop the \`export\` here.`
+    : `${head} another statement already declares. ` +
+        `JavaScript has no \`export\` on an assignment, and \`export let\` here would redeclare it — ` +
+        `put \`export\` on the declaration (\`export let ${key} = …\`, \`export function …\`) and drop it here. ` +
+        `If nothing imports \`${key}\`, dropping it here is enough.`;
+}
+
+/**
+ * Flag a top-level `Assignment` that declares a binding without `let` / `const`.
+ *
+ * The parser records the keyword on `Assignment.declaration` and leaves it
+ * undefined for the bare form, so the AST already tells a declaration (`B = 1`,
+ * the name's first appearance) apart from a later write to an existing binding
+ * (`B = 2`). Two shapes are flagged:
+ *
+ *   - a bare `export …`. An export of a name nothing else declares is a
+ *     declaration (`export let` / `export const` fixes it). An export of a name
+ *     that another statement already declares is not: JavaScript has no
+ *     `export` on an assignment, and `export let` would redeclare the name, so
+ *     the message says to put the `export` on the declaration and drop it here
+ *     (just drop it when the declaration is already exported, or nothing
+ *     imports the name) — dropping it alone would change the module's exports;
+ *   - the first bare assignment of a name that no top-level statement declares
+ *     and no earlier assignment has bound.
+ *
+ * A name declared anywhere at top level — before OR after the assignment, since
+ * `function` and `var` hoist — is never a first declaration, so
+ * `go = 2⏎function go() {}` and `y = 1⏎var y` are not flagged. A hook is
+ * stored without its `$`, so `function $useX` declares `$useX`, not `useX`.
+ * The two writable legacy roots, `aktion = …` and `theme = …`, are not flagged
+ * either: the host injects them, so assigning to one is a write.
+ *
+ * The suggested keyword is one that survives the program's own later writes:
+ * `let` for a `$` atom (a state atom exists to be written; `const` makes that a
+ * TypeError in JavaScript) and for any name written again somewhere in the file
+ * (an assignment, `+=`, `++`, or a keyword-less `for (x of …)` head), `const` only
+ * for a name nothing else writes.
+ *
+ * Only top-level statements are examined: inside a function body a bare
+ * `total = total + 1` may be a write to an outer binding or a new local, and the
+ * AST does not say which. A keyword-less `for (item of items)` head is not itself
+ * flagged, since it may legitimately write to an existing variable, but it counts
+ * as a write when choosing between `let` and `const`.
+ *
+ * The statement's `loc` sits on the `=`, so the warning is moved back to where the
+ * declaration starts (`export` or the name) when the line text confirms it.
+ */
+function lintBareDeclarations(program: ReturnType<typeof parse>, source: string): Diagnostic[] {
+  const warnings: Diagnostic[] = [];
+  const lines = source.split(/\r?\n/);
+  const { declared, exported: exportedDeclarations, kinds, importedAs } = collectDeclaredTopLevelNames(program);
+  const bound = new Set<string>();
+
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "Assignment") continue;
+    const key = bindingKey(stmt.identifier, stmt.isState);
+    const alreadyBound = declared.has(key) || bound.has(key);
+    bound.add(key);
+    if (stmt.declaration !== undefined) continue;
+    const exported = stmt.exported === true;
+    if (exported && !alreadyBound) exportedDeclarations.add(key);
+    if (alreadyBound && !exported) continue;
+    if (!exported && !stmt.isState && WRITABLE_LEGACY_ROOTS.has(stmt.identifier)) continue;
+
+    const { line, column } = declarationStart(lines, stmt.loc, key, exported);
+    const prefix = exported ? "export " : "";
+    let message: string;
+    if (alreadyBound) {
+      message = exportMessage(key, kinds.get(key) ?? "other", exportedDeclarations.has(key), importedAs.get(key));
+    } else {
+      const needsLet = stmt.isState || isWrittenElsewhere(program, stmt, key);
+      const reason = stmt.isState
+        ? "a state atom is written, and `const` would make that a TypeError in JavaScript"
+        : needsLet
+          ? "it is assigned again elsewhere in the file"
+          : "nothing else writes it";
+      message =
+        `\`${prefix}${key}\` declares a binding without a keyword. The runtime accepts it, but it is ` +
+        `not plain JavaScript — write \`${prefix}${needsLet ? "let" : "const"}\` before the name (${reason}).`;
+    }
+    warnings.push({ line, column, severity: "warning", message });
+  }
+  return warnings;
+}
+
+/**
+ * Statement kinds that can end in an expression with no terminator of their own,
+ * so that a following `(`, `[` or template literal continues them in JavaScript.
+ * Block-terminated statements (`function`, `switch`, `try`, `import`, …) and
+ * `do … while (c)`, which JavaScript always terminates, are left out.
+ */
+const UNTERMINATED_STATEMENT_KINDS: ReadonlySet<string> = new Set([
+  "ExpressionStatement",
+  "Assignment",
+  "DestructureStatement",
+  "EffectDeclaration",
+  "Return",
+  "ThrowStatement",
+  "Await",
+  "IfStatement",
+  "WhileStatement",
+  "ForOfStatement",
+  "ForInStatement",
+  "ForClassicStatement",
+]);
+
+/**
+ * The kinds above whose body can be a single statement with no braces
+ * (`if (c) x⏎(y)` is `x(y)`). A `}` before the line break closes a block there,
+ * which JavaScript terminates, so only a name, literal or `)` / `]` counts.
+ */
+const BODY_STATEMENT_KINDS: ReadonlySet<string> = new Set([
+  "IfStatement",
+  "WhileStatement",
+  "ForOfStatement",
+  "ForInStatement",
+  "ForClassicStatement",
+]);
+
+/** Token types that can end an expression, so that a `(` or `[` on the next line could continue it. */
+const EXPRESSION_END_TOKENS: ReadonlySet<Token["type"]> = new Set<Token["type"]>([
+  "Identifier",
+  "StateIdentifier",
+  "Number",
+  "String",
+  "TemplateString",
+  "Regex",
+  "Boolean",
+  "Null",
+]);
+
+/**
+ * `continuation-line`: flag a line that starts with `(`, `[` or a template
+ * literal right after a statement that has no terminator. JavaScript continues the previous
+ * expression there, so `f⏎(1)` is the call `f(1)`, `a⏎[1].forEach(g)` indexes
+ * `a` and `` f⏎`x` `` is a tagged template. Aktion ends a statement at the line
+ * break, so the same text is two statements and the call, the index or the tag
+ * is silently not made. Neither parse fails, so only a warning can say so.
+ *
+ * Fires only between two sibling statements, so `if (c)⏎(f)()` (a body on the
+ * next line) is not flagged, and only when the token before the line break can
+ * end an expression. A `;` there ends the statement in both languages. A `}`
+ * counts when it closes an object literal or a `function` expression
+ * (`x = function () {}⏎(g)` is an immediately invoked function in JavaScript),
+ * and not when it closes an arrow function's body (`const f = () => {}⏎(g)` is
+ * two statements in JavaScript as well). One rare miss: a statement that itself
+ * starts with an object literal (`{ a: 1 }⏎(f)()`) is a block in JavaScript, so
+ * the line is not a continuation there, yet it is flagged.
+ *
+ * In a `.aktion.ts` module two erasures leave this shape behind, because this
+ * pass sees the erased text without the frontend's soft newlines: a call whose
+ * multi-line type arguments were erased (`foo<⏎T⏎>(x)` becomes `foo` and `(x)`)
+ * and a function overload signature (`function g(a: number): number⏎(x)`).
+ */
+function lintContinuationLine(program: ReturnType<typeof parse>, source: string): Diagnostic[] {
+  const warnings: Diagnostic[] = [];
+  let tokens: Token[] | undefined;
+  let indexAt: Map<string, number> | undefined;
+
+  /** True when the `}` at `close` ends an arrow function's body. */
+  const closesArrowBody = (close: number): boolean => {
+    let depth = 0;
+    for (let i = close; i >= 0; i -= 1) {
+      const tok = tokens![i]!;
+      if (tok.type !== "Punctuation") continue;
+      if (tok.value === "}") depth += 1;
+      else if (tok.value === "{" && --depth === 0) {
+        const before = tokens![i - 1];
+        return before?.type === "Operator" && before.value === "=>";
+      }
+    }
+    return false;
+  };
+
+  const check = (previous: Record<string, unknown>, node: Record<string, unknown>): void => {
+    if (node["kind"] !== "ExpressionStatement" || !UNTERMINATED_STATEMENT_KINDS.has(String(previous["kind"]))) return;
+    const at = node["loc"] as Position | undefined;
+    if (!at) return;
+    if (!tokens) {
+      tokens = tokenize(source);
+      indexAt = new Map(tokens.map((t, i) => [`${t.line}:${t.column}`, i] as const));
+    }
+    const index = indexAt!.get(`${at.line}:${at.column}`) ?? -1;
+    const head = tokens[index];
+    if (!head) return;
+    const startsTemplate = head.type === "TemplateString" || (head.type === "String" && head.template === true);
+    const startsBracket = head.type === "Punctuation" && (head.value === "(" || head.value === "[");
+    if (!startsTemplate && !startsBracket) return;
+    let before = index - 1;
+    while (before >= 0 && tokens[before]!.type === "Newline") before -= 1;
+    const last = tokens[before];
+    if (!last) return;
+    const closesExpression = last.type === "Punctuation" && (last.value === ")" || last.value === "]");
+    const closesLiteral = last.type === "Punctuation" && last.value === "}" &&
+      !BODY_STATEMENT_KINDS.has(String(previous["kind"])) && !closesArrowBody(before);
+    if (!closesExpression && !closesLiteral && !EXPRESSION_END_TOKENS.has(last.type)) return;
+    const what = startsTemplate
+      ? "a template literal, so JavaScript would read the previous line as its tag (`` f⏎`x` `` is `` f`x` ``)"
+      : `\`${head.value}\`, so JavaScript would continue the previous line (\`${
+        head.value === "(" ? "f⏎(1)` is `f(1)" : "f⏎[1]` is `f[1]"}\`)`;
+    warnings.push({
+      line: at.line,
+      column: at.column,
+      severity: "warning",
+      message:
+        `This line starts with ${what}. Aktion ends a statement at the line break and reads this as a new one, ` +
+        "so the call, index or tag is not made. End the previous statement with `;` to say so, " +
+        "or put both on one line to continue it.",
+    });
+  };
+
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach((child: unknown, i) => {
+        const previous: unknown = node[i - 1];
+        if (previous && typeof previous === "object" && child && typeof child === "object") {
+          check(previous as Record<string, unknown>, child as Record<string, unknown>);
+        }
+        visit(child);
+      });
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (key !== "loc") visit(value);
+    }
+  };
+
+  visit(program.statements);
+  return warnings;
 }
 
 /**

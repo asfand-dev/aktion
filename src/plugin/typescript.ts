@@ -3,7 +3,7 @@
  * TypeScript parser, so it ships in the `aktion-runtime/vite` entry and never
  * enters the browser bundle.
  *
- * Aktion's syntax is a subset of JavaScript, so a TypeScript module becomes
+ * Aktion reads JavaScript syntax, so a TypeScript module becomes
  * Aktion source by blanking every type annotation with spaces: the text keeps
  * its length and its line breaks, and every node the Aktion parser builds sits
  * at the line and column the author wrote. Diagnostics, coverage, effect keys

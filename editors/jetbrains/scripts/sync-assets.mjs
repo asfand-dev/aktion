@@ -14,8 +14,8 @@
  * ------------------------------------------------------------
  * `editors/vscode/scripts/gen-grammar.mjs` produces a *thin overlay* grammar: it
  * `include`s VS Code's built-in `source.ts` and only adds the Aktion-specific
- * scopes on top. That is the right call there — Aktion is a strict subset of
- * TypeScript, and VS Code always has the TypeScript grammar available.
+ * scopes on top. That is the right call there — Aktion's syntax is close to
+ * TypeScript's, and VS Code always has the TypeScript grammar available.
  *
  * IntelliJ's TextMate support ships its own bundle set, and whether `source.ts`
  * resolves depends on the IDE and the user's enabled bundles. A grammar that

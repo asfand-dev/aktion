@@ -6,8 +6,8 @@ license: MIT
 
 # Building applications in Aktion
 
-Aktion is a declarative DSL whose surface syntax is a **strict subset of
-TypeScript**. A program is a list of statements that a single web component
+Aktion is a declarative DSL whose surface syntax is **JavaScript's** (TypeScript syntax is accepted only in
+`.aktion.ts` modules). A program is a list of statements that a single web component
 (`<aktion-app>`) streams into a live UI. You write the program; the runtime owns
 rendering, reactivity, and styling.
 
@@ -108,7 +108,10 @@ Only the hand-off changes with what you can reach.
 
    From a repo checkout the same check is `node tools/validate-aktion.mjs
    app.aktion` (add `-app` to the script name for multi-module apps), run from
-   the repo root.
+   the repo root. Add `--no-bare-declarations`: that checker warns about a
+   top-level binding written without `let` / `const`, and this skill teaches
+   `$x = 0` without one, so every program written from it would carry warnings
+   that are not mistakes. Such a warning does not change the exit code.
 
    With no shell — claude.ai, Claude Desktop — this step cannot run. Re-read
    every component call against its group reference instead, and say in your
@@ -173,8 +176,9 @@ see this?" — not a generated page.
 4. **Components return trees; actions don't.** `function Name(args) { … return
    Expression }` renders when called in render position. A function with no
    `return` renders nothing and is used for side effects.
-   **Name case is a convention, not a mechanism** — PascalCase for
-   tree-returning, camelCase for side-effecting, purely for readability.
+   **Name case does not decide whether a function renders**, but only a
+   PascalCase component gets per-instance state and memoized re-rendering —
+   PascalCase for tree-returning, camelCase for side-effecting.
 5. **Reach for pattern composites before composing by hand.** `PageHeader`,
    `Stats`, `Toolbar`, `EmptyState`, `Timeline`, `DescriptionList`, `AppShell`,
    `SplitView`, `Hero`, `FeatureGrid`, `PricingTable`, `KanbanBoard` each commit

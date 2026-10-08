@@ -1565,7 +1565,7 @@
         id: "keywords",
         title: "Keywords & reserved handles",
         lead:
-          "Control-flow and declaration keywords — a strict subset of JavaScript — plus the reserved top-level handles <code>aktion</code> and <code>route</code>.",
+          "Control-flow and declaration keywords — in JavaScript syntax — plus the reserved top-level handles <code>aktion</code> and <code>route</code>.",
         entries: keywordEntries,
       });
 
@@ -1591,7 +1591,7 @@
         id: "operators",
         title: "Operators & literals",
         lead:
-          "Aktion's surface syntax is a strict subset of JavaScript, so the full operator set is available. Statements (<code>if</code>, <code>for</code>, <code>switch</code>) never produce a value — use the expression forms below to pick values.",
+          "Aktion's surface syntax is JavaScript's, so the full operator set is available. Statements (<code>if</code>, <code>for</code>, <code>switch</code>) never produce a value — use the expression forms below to pick values.",
         entries: OPERATORS.map(([name, sig, desc, example]) => ({
           anchor: `operator-${name.split(" ")[0].toLowerCase()}`,
           name,
