@@ -232,8 +232,10 @@
       <h2 id="components">Components</h2>
       <p>
         Components in Aktion are functions that <code>return</code> a
-        node. The first-letter case of the function name is not significant
-        &mdash; <code>UserCard</code> and <code>userCard</code> are both valid.
+        node. The first-letter case of the function name does not decide
+        whether it renders &mdash; <code>UserCard</code> and <code>userCard</code>
+        are both valid &mdash; but only a PascalCase component gets its own state
+        per instance and is memoized between renders.
         Components are called with positional arguments followed by an optional
         named&#8209;arguments object &mdash; the same convention used everywhere
         in the standard library.

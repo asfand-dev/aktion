@@ -1,7 +1,9 @@
 /**
- * Tokenizer-aware scan for the ONE Aktion construct that is not already valid
- * JS/TS syntax: a bare top-level `export IDENTIFIER = …` (or `export $name =
- * …`) with no declaration keyword.
+ * Tokenizer-aware scan for the one Aktion construct the ESLint processor
+ * rewrites, because it is a syntax error in JS/TS: a bare top-level `export
+ * IDENTIFIER = …` (or `export $name = …`) with no declaration keyword. Other
+ * things Aktion accepts and JavaScript rejects (a duplicate `let`, a top-level
+ * `return`, …) are left for the consumer's own parser to report.
  *
  * Verified two ways:
  *

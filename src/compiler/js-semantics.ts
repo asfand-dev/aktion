@@ -162,6 +162,8 @@ const MESSAGES = {
     "`async` functions are not supported: Aktion runs them synchronously and returns their value, not a Promise. " +
     "Remove `async` and chain Promises with `.then(…)`.",
   E103this: "`this` is always null in Aktion — there are no methods or classes; pass the value as a parameter.",
+  E103super: "`super` is not available in Aktion — there are no classes or inheritance; call the function you need directly.",
+  E103debugger: "`debugger` is not available in Aktion — remove it, or log the value with `$console.log(…)`.",
   E103arguments: "`arguments` is not available in Aktion — use a rest parameter `(...args)`.",
   E104: "`var` is not supported in Aktion modules — use `let` or `const`.",
   E105: (name: string) =>
@@ -1203,6 +1205,14 @@ class Analyzer {
           this.report("E103", loc, MESSAGES.E103this);
           break;
         }
+        if (expr.name === "super") {
+          this.report("E103", loc, MESSAGES.E103super);
+          break;
+        }
+        if (expr.name === "debugger") {
+          this.report("E103", loc, MESSAGES.E103debugger);
+          break;
+        }
         if (expr.name === "arguments") {
           this.report("E103", loc, MESSAGES.E103arguments);
           break;
@@ -1247,6 +1257,11 @@ class Analyzer {
         this.expr(expr.alternate, conditional);
         break;
       case "Call":
+        if (expr.callee === "this" || expr.callee === "super" || expr.callee === "debugger") {
+          this.report("E103", expr.loc, MESSAGES[expr.callee === "this" ? "E103this" : expr.callee === "super" ? "E103super" : "E103debugger"]);
+          for (const arg of expr.arguments) this.expr(arg, neutral);
+          break;
+        }
         this.call(expr, context);
         break;
       case "MethodCall":

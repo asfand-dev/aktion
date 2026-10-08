@@ -6,8 +6,11 @@ spec — that is `dist/system_prompt.txt` (also at
 runtime and always current. Read this to write; read that when you need a detail
 this page omits.
 
-Aktion's surface syntax is a **strict subset of TypeScript**. If a construct is
-valid JS and is not listed as rejected in [`gotchas.md`](gotchas.md), it works.
+Aktion's surface syntax is **JavaScript's**. TypeScript syntax (type annotations,
+`type`, `interface`, `as`) is a parse error in a plain `.aktion` file and is accepted
+only in `.aktion.ts` modules. Not every JavaScript construct works either: `class`,
+`async` arrow functions, tagged templates and `{ … }` block statements are parse
+errors, and [`gotchas.md`](gotchas.md) lists more, so validate what you write.
 
 ## Statements
 
@@ -32,7 +35,7 @@ what it names below.
 | --- | --- |
 | `$name` | A **reactive atom**. Declare with `$name = value`; read or write anywhere. |
 | `name` | A plain binding — evaluated once, not reactive. |
-| `Name(...)` / `name(...)` | A function declaration. Returns a tree → renders. No return → side effects. Case is convention only. |
+| `Name(...)` / `name(...)` | A function declaration. Returns a tree → renders. No return → side effects. Case does not decide whether it renders or can be used as an action; PascalCase also gets per-instance state and memoization. |
 
 Reserved top-level names: `$app(...)`, `$theme({...})`, and the always-in-scope
 `route` handle.

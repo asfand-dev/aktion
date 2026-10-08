@@ -108,6 +108,37 @@ A `$name = value` declared inside a component body is private to that instance �
 two call sites get two independent atoms. A `$name` at the top level is shared by
 everything that reads it.
 
+### A body-level `$x = …` is set-once only while rendering
+
+A `$name = …` written directly in the body of a `function` declaration (not an
+arrow or function expression) is a set-once declaration while rendering; only a
+PascalCase component gets its own copy per instance, while in a lowercase function
+every call shares one atom, and an existing top-level atom of that name wins. When
+a handler or effect runs the function it is an ordinary write. Nested in an `if` or
+a loop, or directly in an arrow or function-expression body, it is always an
+ordinary write: in render position it overwrites the handler's value on every pass,
+the runtime applies it without a re-render, and one `console.warn` is the only signal.
+
+```js
+function app() {
+  let $n = 5                // set-once during render
+  if (ready) { $m = 5 }     // ✗ re-written on every render
+  return Column([Text(`n=${$n}`), Button("inc", () => { $n = $n + 1 })])
+}
+```
+
+### Sharing state across modules
+
+Export the atom plus a setter action (`export let $open = false` and
+`export function toggle() { $open = !$open }`), or export a `$store` and write it by
+property (`export const ui = $store({…})`, then `ui.open = !ui.open`); every importer
+shares one cell. Declare the atom with `let` — a bare `export $open = false` becomes
+a `const` under the ESLint processor and the setter is flagged `no-const-assign`. Writing an imported atom directly also works but is what JS
+tooling flags as `no-import-assign`. Never export a function that returns
+`$store({…})` — a store is keyed by its call site, so every caller gets the same
+instance. Import order is link order (the order top-level statements run in), so
+do not let a tool re-sort a module's imports.
+
 ---
 
 ## Components
@@ -116,8 +147,10 @@ everything that reads it.
 
 A function declaration is **both** a component and an action; whether it renders
 depends on whether it returns a tree and where it is called. `function myCard(t) {
-return Card([Text(t)]) }` renders fine. PascalCase / camelCase is a readability
-convention only.
+return Card([Text(t)]) }` renders fine. Case does not change whether it renders, but only a PascalCase
+component gets its own state per instance and is memoized (it re-executes only when
+its own inputs change); a lowercase function shares one atom between its calls and
+re-runs with every render of its caller.
 
 ### No `return` renders nothing
 
@@ -256,6 +289,37 @@ For a data builtin, use the bag's own callback instead — `$result.onDone = () 
 This one **is** linted, as a warning, whenever the awaited value is consumed
 (bound, tested, or passed as an argument). A bare `await f()` statement whose
 result is discarded is not flagged.
+
+### An invalid regular expression becomes `null`, not an error
+
+`new RegExp(...)` and `/…/` literals that the engine rejects do not throw in
+Aktion: the runtime logs to the console and the expression evaluates to `null`,
+so `/[(]/v.test(s)` quietly never matches. The `v` flag is the usual cause — it
+is stricter than `u` and rejects an unescaped `(`, `)`, `{`, `}`, `/` or `|`
+inside a class (write `[\(]`, `[\/]`), reads a `[` there as a nested class, and
+rejects a stray `-` that is not between two characters (write `[\-.a-z]`).
+
+A pattern and flags given as string literals are linted as a warning; a pattern
+held in a variable (`new RegExp(PATTERN, "v")`) is not, so test those at the
+source. The check uses the RegExp engine of the Node that runs the linter, so
+newer syntax (duplicate named groups, `(?i:…)` modifiers) is reported on Node 20
+and 22 but accepted on Node 24, so a warning on valid modern syntax usually
+means an old Node.
+
+### A top-level binding without `let` / `const` still parses
+
+`$count = 0`, `total = 5` and `export LIMIT = 3` all parse and run, and
+`getDiagnostics` passes them: the keyword is optional, and changes nothing about
+reactivity. Without it the file is not plain JavaScript, and a `.aktion.js` /
+`.aktion.ts` module needs it.
+
+This skill's examples use the keyword-less form, as the system prompt does, so a
+`.aktion` program written from it is consistent. The repo's CLIs (`tools/validate-aktion.mjs`,
+`tools/validate-aktion-app.mjs`) warn about it, and `getLintWarnings(source,
+library, { bareDeclarations: true })` does too; run them with
+`--no-bare-declarations` here. If a program is being moved to keywords, take the
+one the warning names: `let` for a `$` atom (`const $n` makes its later writes a
+TypeError), and `let` for any name assigned again.
 
 ### Equality and comparison match JavaScript
 

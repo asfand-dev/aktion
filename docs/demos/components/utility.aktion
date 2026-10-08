@@ -67,6 +67,6 @@ demos = [
   Demo("StatusDotLabel", "Status pip + label", Row([StatusDotLabel("Operational", { tone: "success", pulse: true }), StatusDotLabel("Degraded", { tone: "warning" }), StatusDotLabel("Down", { tone: "danger" })], { gap: "lg", wrap: true })),
   Demo("FileDrop", "Upload drop zone", FileDrop()),
   Demo("SegmentedProgress", "Segmented step progress", SegmentedProgress({ current: 3, total: 5 })),
-  Demo("ExpandText", "Clamp + read more", ExpandText("Aktion is a declarative language that is a strict subset of JavaScript. Every program is valid JS, and the runtime adds reactivity on top, turning a compact DSL into a rich, interactive UI inside its shadow DOM that works in any framework or none at all.", { maxLines: 2 })),
+  Demo("ExpandText", "Clamp + read more", ExpandText("Aktion is a declarative language with JavaScript syntax, and the runtime adds reactivity on top, turning a compact DSL into a rich, interactive UI inside its shadow DOM that works in any framework or none at all.", { maxLines: 2 })),
   Demo("ColorChips", "Color swatch row", ColorChips({ colors: ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#0ea5e9", "#8b5cf6"] }))
 ]

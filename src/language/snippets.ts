@@ -232,7 +232,7 @@ export const snippetCatalog: readonly SnippetEntry[] = [
   },
   {
     name: "Component",
-    description: "Reusable component declaration — first-letter case is not significant; a function with no `return` simply renders nothing.",
+    description: "Reusable component declaration — first-letter case does not decide whether it renders (PascalCase also gets per-instance state and memoization); a function with no `return` simply renders nothing.",
     template:
       'function ${1:UserCard}(${2:user}) {\n' +
       '  return Card([\n' +

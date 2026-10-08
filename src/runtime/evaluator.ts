@@ -4967,7 +4967,9 @@ function runOptimistic(fnExpr: Expression | undefined, ctx: EvaluationContext): 
  * between an action call and a hook call is *where* the call site dispatches
  * from, not how the body executes.
  *
- * Name case does NOT decide component-vs-action semantics for state seeding:
+ * Name case does NOT decide component-vs-action semantics for state seeding
+ * (it does decide per-instance state and memoization — only a PascalCase
+ * component gets those):
  * when this body runs *during a render* (e.g. a lowercase `function app()`
  * invoked via `$app(page())`), its top-level `$x = expr` assignments are
  * treated as set-once declarations — exactly like a PascalCase component —

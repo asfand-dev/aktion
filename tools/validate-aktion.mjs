@@ -18,6 +18,9 @@
  * tests/aktion-programs-validate.test.ts gates the committed examples.
  * Warnings are reported but do not fail the run — an unknown component renders
  * as nothing rather than breaking the program, so it should not block a commit.
+ * That includes `bare-declaration`, the warning for a top-level binding written
+ * without `let` / `const` (`export B = 1`, a first `y = 4`); pass
+ * `--no-bare-declarations` to leave it out of the report.
  *
  * Reads the built DOM-free surface (`dist/language.js`), which bundles the
  * parser, the schema validator, AND the lint pass in a single `getDiagnostics`
@@ -61,19 +64,22 @@ async function frontendFor(file) {
 }
 
 /** Parse errors, frontend rules, schema errors and lint warnings for a JS/TS module. */
-function diagnoseCompiled(frontend, source, file) {
+function diagnoseCompiled(frontend, source, file, lintOptions) {
   const out = frontend.compile(source, resolve(file));
   return [
     ...out.program.errors.map((e) => ({ ...e, severity: "error" })),
     ...out.diagnostics.map((d) => ({ ...d, message: d.code ? `${d.code} ${d.message}` : d.message })),
     ...validateProgramSchema(out.program, defaultLibrary).map((e) => ({ ...e, severity: "error" })),
-    ...getLintWarnings(out.aktionSource, defaultLibrary).map((w) => ({ ...w, severity: "warning" })),
+    ...getLintWarnings(out.aktionSource, defaultLibrary, lintOptions).map((w) => ({ ...w, severity: "warning" })),
   ].sort((a, b) => a.line - b.line || a.column - b.column);
 }
 
-const args = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const bareDeclarations = !argv.includes("--no-bare-declarations");
+const args = argv.filter((arg) => arg !== "--no-bare-declarations");
+const lintOptions = { bareDeclarations };
 if (args.length === 0) {
-  console.error("usage: node tools/validate-aktion.mjs <file.aktion> [...]  (or - for stdin)");
+  console.error("usage: node tools/validate-aktion.mjs [--no-bare-declarations] <file.aktion> [...]  (or - for stdin)");
   process.exit(2);
 }
 
@@ -90,7 +96,8 @@ for (const file of args) {
     // statement — it records the error, drops the statement, and recovers on the
     // next line — so a validator that only looked at schema errors would report
     // OK for a file whose imports had silently vanished.
-    diagnostics = frontend ? diagnoseCompiled(frontend, source, file) : getDiagnostics(source, defaultLibrary);
+    diagnostics = frontend ? diagnoseCompiled(frontend, source, file, lintOptions)
+      : getDiagnostics(source, defaultLibrary, lintOptions);
   } catch (e) {
     console.log(`${file}: READ/PARSE ERROR: ${e && e.message ? e.message : String(e)}`);
     errorCount += 1;

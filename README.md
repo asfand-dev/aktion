@@ -5,8 +5,8 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-10b981.svg)](#contributing)
 
 A framework-agnostic web component that renders LLM-generated UI from
-**Aktion** — a reactive language whose surface syntax is a strict subset of
-JavaScript, designed for chat assistants. Drop one `<script>` tag and one
+**Aktion** — a reactive language whose surface syntax is JavaScript's,
+designed for chat assistants. Drop one `<script>` tag and one
 `<aktion-app>` tag into any HTML page and you have a streaming, interactive
 renderer for an LLM's response.
 
@@ -68,12 +68,21 @@ Everything you need at runtime ships in a single bundle:
 
 - **A streaming-first parser.** Line-oriented, error-tolerant. Each
   statement commits to the DOM as soon as it arrives. The surface syntax
-  is a **strict subset of JavaScript** — `function` declarations,
+  is **JavaScript's** — `function` declarations,
   `for...of`, `if/else`, `switch/case`, template literals with
   `${expression}` interpolation, arrow functions, default parameters,
   destructuring, spread, optional chaining (`a?.b`), nullish coalescing
-  (`a ?? b`), and object-literal named arguments. Every Aktion program
-  is valid JavaScript.
+  (`a ?? b`), and object-literal named arguments. A plain `.aktion` file
+  can be written to parse as JavaScript — declare every top-level binding
+  (`export const NAME = …`, `export let $count = 0`) and avoid what Aktion
+  accepts but JavaScript rejects — yet nothing guarantees it does. For
+  example: a duplicate `let` or `const`, a reserved word as a name
+  (`const class = 1`), duplicate parameter names, a legacy octal (`010`),
+  `delete x`, a top-level `return`, `await` inside a non-async function, a
+  stray `break` or `continue`, `a?.b = 1`, and a bare `export NAME = …`.
+  `.aktion.js` / `.aktion.ts` modules are real JavaScript / TypeScript
+  checked against JavaScript semantics (see *TypeScript and JavaScript
+  modules*).
 - **One reactive atom kind.** Declare any reactive state with
   `$name = value` and read or write it with `$name`. The `$` prefix is
   the only thing that makes a binding reactive — `let` / `const` /
@@ -488,8 +497,8 @@ import {
 import { getDiagnostics, getCompletions, formatProgram } from "aktion-runtime/language";
 // DOM-free language service for editor integrations — see Tooling below
 
-import aktionEslint, { aktionProcessor, aktionRecommendedRules } from "aktion-runtime/eslint";
-// ESLint processor + recommended rule overrides — see ESLint integration below
+import aktionEslint, { aktionProcessor, aktionRecommendedRules, aktionGlobals } from "aktion-runtime/eslint";
+// ESLint processor + recommended rule overrides + injected globals — see ESLint integration below
 ```
 
 The four subpath entries (`/test`, `/devtools`, `/language`, `/eslint`) and the
@@ -536,7 +545,7 @@ pipelines).
 
 ## Aktion — the language
 
-Aktion's surface syntax is a **strict subset of JavaScript**. Every
+Aktion's surface syntax is **JavaScript's**. Every
 declaration uses standard JS constructs — `function`, `for...of`,
 `if/else`, `switch/case`, arrow functions, object literals — so any
 developer reading the output immediately knows what it does. The renderer
@@ -1783,10 +1792,29 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   is flagged with a `suggestComponent`-derived *"Did you mean …?"* hint. It is a
   warning, not an error — the runtime renders an unknown component as nothing,
   and a stale editor library must never turn a working file red. The other
-  warning is `shadowed-i18n` (a parameter or loop variable shadowing a binding
-  destructured from `$i18n(...)`, typically `t`). `getLintWarnings(source,
+  warnings are `shadowed-i18n` (a parameter or loop variable shadowing a binding
+  destructured from `$i18n(...)`, typically `t`), `awaited-value` (the result of
+  an `await`, which is the promise), `continuation-line` (a line that starts
+  with `(`, `[` or a template literal right after an unterminated statement:
+  JavaScript continues the previous expression there, so `f⏎(1)` is `f(1)`,
+  while Aktion ends the statement at the line break and parses two) and
+  `invalid-regexp`: a `/…/flags` literal,
+  `new RegExp("…", "…")` or plain `RegExp("…", "…")` call whose literal pattern
+  or flags the engine rejects (e.g. `/[(]/v`) — the runtime would otherwise
+  swallow the error and evaluate the expression to `null`. That check uses the
+  RegExp engine of the Node running the linter (CI, the language server,
+  `validate-aktion-app.mjs`), so newer syntax such as duplicate named groups or
+  `(?i:…)` modifiers is reported on Node 20 and 22 but not on Node 24.
+  `getLintWarnings(source,
   library?)` returns only the warnings; pass the library to enable the
-  unknown-component pass, omit it to skip it.
+  unknown-component pass, omit it to skip it. An opt-in warning,
+  `bare-declaration`, flags a top-level assignment that declares a binding
+  without `let` / `const` (`export B = 1`, `export $s = 4`, or the first `y = 4`
+  of a name; a keyword-less `for (item of items)` head is not covered); enable it
+  with `getLintWarnings(source, library, { bareDeclarations: true })` (the same
+  option works on `getDiagnostics`). It is off by default because the system
+  prompt, the agent skill and the bundled demos all teach the keyword-less
+  `$x = 0`.
 - `getDiagnostics`, `getCompletions`, and `getHoverInfo` are the data
   layer a real LSP server wraps — see [Editor support](#editor-support). The
   [playground](https://asfand-dev.github.io/aktion/playground.html)
@@ -1840,18 +1868,49 @@ They print `FILE: OK` or `FILE: Lnn: message` per problem and exit non-zero on
 any **error**; warnings (including `unknown-component`) are reported but do not
 fail the run.
 
+Both scripts also report `bare-declaration`, the warning for a top-level
+assignment that declares a binding without a keyword (`export B = 1`,
+`export $s = 4`, a first `y = 4`). The fix is mechanical, and the message says
+which keyword survives the program's own writes: `let` for a `$` atom or a name
+assigned again, `const` for a name nothing else writes (a `+=`, `++` or a keyword-less
+`for (x of …)` head counts as a write; `export let` / `export const` for an
+export), and `formatProgram` keeps it. An `export` of a name that is already
+declared (`let B = 1⏎export B = 2`) is told to put the `export` on the
+declaration and drop it here, because dropping it alone would take the name out
+of the module's exports; if that declaration is a `const` it is told to become
+`let`, if it is an import to import it under another local name (the specifier
+keeps the name the other module exports: `import { X as B }` becomes
+`import { X as … }`) and write `export let B = …`, and if it is a destructuring
+to declare the name on its own, since neither can carry `export`. An assignment
+to a name a `function`, hook, `import`, `var`, `let` or `const` declares, or to
+the writable legacy roots `aktion` and `theme`, is a write, not a declaration, and is not flagged. It is a
+warning only, so the exit code does not change; pass `--no-bare-declarations` to
+leave it out of the report. The agent skill and the system prompt still write
+`$x = 0`, so a run over their output is loud until they move to keywords.
+
 ---
 
 ## ESLint integration
 
-`.aktion` files are JS/TS-syntax compatible except for exactly ONE construct: a
-bare top-level `export IDENTIFIER = …` (or `export $identifier = …`) with no
-declaration keyword — see
+A plain `.aktion` file can be written to parse as JS/TS — declare every
+top-level binding (`export const NAME = …`, `export let $count = 0`; the
+formatter keeps those declaration keywords) and avoid what Aktion accepts but
+JavaScript rejects — but nothing guarantees it. For example: a duplicate `let`
+or `const`, a reserved word as a name, duplicate parameter names, a legacy
+octal, `delete x`, a top-level `return`, `await` inside a non-async function,
+a stray `break` or `continue`, and `a?.b = 1`. The construct the processor
+below exists for is the legacy bare top-level `export IDENTIFIER = …` (or
+`export $identifier = …`) with no declaration keyword, which is a syntax error
+in JavaScript — see
 [`src/eslint/scan.ts`](./src/eslint/scan.ts)'s header for the full grammar
-cross-check against [`src/parser/parser.ts`](./src/parser/parser.ts). The
+cross-check against [`src/parser/parser.ts`](./src/parser/parser.ts). Declare
+an atom you later write with `let`: the processor turns a bare export into a
+`const`, so `export $open = false` plus `$open = !$open` in the same file is
+reported as `no-const-assign`. The
 `aktion-runtime/eslint` entry ([`src/eslint-api.ts`](./src/eslint-api.ts)) is
 an ESLint **processor** that rewrites every such occurrence into
-`export const IDENTIFIER = …` (genuinely valid JS/TS), hands the result to
+`export const IDENTIFIER = …` (genuinely valid JS/TS; a file that already
+declares its bindings is passed through as it is), hands the result to
 whatever parser and rule set YOU already have installed, and remaps every
 reported position — and any autofix — back to the original file's
 coordinates. This means a real ESLint (your own installation, your own
@@ -1870,9 +1929,10 @@ import aktionEslint from "aktion-runtime/eslint";
 import tsParser from "@typescript-eslint/parser";
 
 export default [
-  // The two portable blocks this package documents — processor wiring plus
-  // ten DSL-general rule overrides (grammar incompatibilities and DSL-idiom
-  // false positives — see `aktionRecommendedRules` for the full citations).
+  // The two portable blocks this package documents — processor wiring, plus
+  // the names the runtime injects (`aktionGlobals`) and ten DSL-general rule
+  // overrides (grammar incompatibilities and DSL-idiom false positives — see
+  // `aktionRecommendedRules` for the full citations).
   ...aktionEslint.configs.recommended,
   {
     // Matches the SAME virtual per-block path the processor produces
@@ -1895,10 +1955,44 @@ Prefer to assemble the pieces yourself instead of spreading
 `configs.recommended`? Every piece is exported individually: `aktionProcessor`
 (the `Linter.Processor` object, for `processors: {aktion: aktionProcessor}` +
 `processor: "aktion/aktion"`), `aktionRecommendedRules` (the plain rules
-record to spread into your own `**/*.aktion/*.ts` block), plus the pure
+record to spread into your own `**/*.aktion/*.ts` block), `aktionGlobals` (the
+plain `{ name: "readonly" | "writable" }` record of every name the runtime
+injects — components, `$`-builtins, `route`, `params`, `outlet`, … — for
+`languageOptions.globals`), plus the pure
 `findBareExportInsertions` / `applyInsertions` / `toOriginalOffset` /
 `rangeOverlapsInsertion` position-remap primitives for anyone building their
 own tooling on the same technique.
+
+### The injected globals
+
+A `.aktion` file uses `Container`, `$state`, `route`, `params` and the rest
+without importing them, so core `no-undef` reports every one unless ESLint is
+told they exist. `aktionGlobals` is that list, built from `src/dsl/manifest.json`
+alone (the file the generated types come from, so the ESLint entry does not
+bundle the component library); `configs.recommended` applies it to the
+processor's virtual `**/*.aktion/*.ts` block, and it is also
+`aktionEslint.globals` on the plugin object. `tests/dsl-types.test.ts` checks
+the manifest against what the runtime binds, and `tests/eslint-globals.test.ts`
+compares the record with the catalogues and probes the runtime: it asks which
+names on the test realm's global object the runtime resolves and requires
+`no-undef` to know each one (it cannot notice a new non-global binding such as
+a route-style name, a component or a `$`-builtin; the manifest checks cover
+those).
+
+It lists the components, the `$`-builtins, the injected bindings, and `atob`,
+`btoa`, `console` and `structuredClone`. Of those last four only
+`structuredClone` is provided by the runtime itself (under every global-access
+policy); `atob`, `btoa` and `console` are policy-gated host globals exactly
+like `URL`, and are listed because the generated `globals.d.ts` declares them,
+not because Aktion unconditionally provides them. The context-only names
+`params`, `outlet`, `children`, `slots` and `cleanup` are declared
+program-wide but hold a value only inside the construct that binds them; at top
+level they are `null`. Other host globals a program may reach (`document`,
+`window`, `URL`, `crypto`, …) depend on your environment and the global-access
+policy — add them yourself, for example `globals.browser` from the
+[`globals`](https://www.npmjs.com/package/globals) package. A program's own
+keyword-less bindings (`count = 0`) are not declarations to a JavaScript
+linter either; write `let count = 0` / `const …` to have `no-undef` see them.
 
 ### The ten rule overrides — why each one is needed
 
@@ -1917,8 +2011,8 @@ it flags is this DSL's normal, unavoidable idiom):
 | `object-shorthand` | FORMERLY GRAMMAR, kept off: its fix rewrites a `key: function (…) {…}` handler into method shorthand (`onClick() {…}`), which used to be a parse error and now parses to the same handler. Kept off so an upgrade does not restyle existing `.aktion` files. |
 | `unicorn/prefer-export-from` | GRAMMAR: `export { … } from …` lists have no production at all — an explicit parse error. |
 | `unicorn/prefer-string-raw` | GRAMMAR: no tagged-template-literal production — `` String.raw`…` `` is a parse error ("Tagged template literals are not supported"; it used to silently truncate the value with *no* reported error — see the citation in [`src/eslint/rules.ts`](./src/eslint/rules.ts)). |
-| `unicorn/switch-case-braces` | GRAMMAR: no generic block-statement production — a bare `{` in statement position parses as an object literal, so wrapping a `case N: return X` body in `{ }` breaks parsing. Found by this package's own corpus sweep, not carried over from any downstream pilot. |
-| `unicorn/prefer-switch` | GRAMMAR, same cause: its fix turns an `if … else if …` chain of three or more comparisons into a `switch` and keeps braced case bodies, so a branch that declares a binding becomes `case "ok": { const label = … }` — an object literal to this parser. |
+| `unicorn/switch-case-braces` | GRAMMAR: no generic block-statement production — a bare `{` in statement position can only be an object literal, so wrapping a `case N: return X` body in `{ }` is a parse error ("Aktion has no block statements or block scoping"). Found by this package's own corpus sweep, not carried over from any downstream pilot. |
+| `unicorn/prefer-switch` | GRAMMAR, same cause: its fix turns an `if … else if …` chain of three or more comparisons into a `switch` and keeps braced case bodies, so a branch that declares a binding becomes `case "ok": { const label = … }` — a block statement, which is a parse error ("Aktion has no block statements or block scoping"). |
 | `new-cap` | IDIOM: component instantiation (`Container(...)`, `Text(...)`, …) is a capitalized function call — the DSL's normal syntax, not a constructor mistake. |
 | `unicorn/max-nested-calls` | IDIOM: the component tree *is* deeply nested calls — that's the normal shape of a UI declaration. |
 | `unicorn/no-optional-chaining-on-undeclared-variable` | IDIOM: `route` is a runtime-injected screen-scope global (`src/runtime/evaluator.ts`), never declared via `let`/`const`/`import`, so `route.params?.id` reads as "undeclared" to a JS/TS linter. |
@@ -1988,6 +2082,25 @@ names canonical (the `aktion` binding + the `$state` names that `serializeState`
 / `applyDelta` target). Specifier lists may span multiple lines and carry a
 trailing comma, and a syntax error in an **imported** module is reported as a
 link diagnostic rather than silently dropping that module's statements.
+
+**Link order is import order.** The linker walks the graph depth-first and
+merges a module after the modules it imports, taking `import` statements in the
+order they are written — the same order ES modules evaluate in. Importing `a`
+then `b` links `a, b, entry`; swapped, `b, a, entry`. The merged program's
+top-level statements run in that order, so a tool that sorts or reorders a
+file's imports changes behaviour exactly as it would for JavaScript modules
+with side effects. As with ES modules, a dependency runs before its importer
+except within an import cycle: entry → `a` → `b` → `a` links `b, a, entry`
+without a diagnostic.
+
+**Writing shared state from another file.** Two shapes are shared by every
+importer: an exported `$` atom with an exported setter action
+(`export let $open = false` plus `export function toggle() { $open = !$open }`),
+and an exported `$store` written by property (`export const ui = $store({ open: false })`,
+then `ui.open = !ui.open`). Writing an imported atom directly
+(`$open = !$open` in a file that only imports `$open`) also works at runtime,
+but it is the shape JavaScript tooling flags as `no-import-assign`, so prefer
+the first two. See [docs/modules.html](./docs/modules.html#shared-state-writes).
 
 ### TypeScript and JavaScript modules
 
