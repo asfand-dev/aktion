@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generatePrompt } from "../src/prompt/generator.js";
 import { defaultLibrary } from "../src/library/index.js";
+import { parse } from "../src/parser/index.js";
 
 describe("generatePrompt", () => {
   it("includes syntax, components, and root rule", () => {
@@ -9,6 +10,51 @@ describe("generatePrompt", () => {
     expect(text).toContain("$app(");
     expect(text).toContain("Stack(children: Node[]");
     expect(text).toContain("CardHeader(title: string");
+  });
+
+  it("does not claim that every Aktion program is valid JavaScript", () => {
+    const text = generatePrompt(defaultLibrary);
+    expect(text).toContain("a declarative language in JavaScript syntax");
+    expect(text).not.toContain("every program is valid JS");
+    expect(text).not.toContain("strict subset");
+    expect(text).toContain(
+      "a declarative language in JavaScript syntax (no classes, block statements, async arrow functions or tagged templates)",
+    );
+  });
+
+  it("does not say that function name case is not significant", () => {
+    for (const mode of ["full", "chat"] as const) {
+      const text = generatePrompt(defaultLibrary, { mode });
+      expect(text).not.toContain("First-letter case is NOT significant");
+      expect(text).not.toContain("Name case is not significant");
+      expect(text).not.toContain("Case doesn't matter");
+      expect(text).not.toContain("are equivalent");
+    }
+    const full = generatePrompt(defaultLibrary);
+    expect(full).toContain("only a PascalCase component gets per-instance state and memoized re-rendering");
+  });
+
+  it("tells the chat prompt that component names are case-sensitive", () => {
+    const text = generatePrompt(defaultLibrary, { mode: "chat" });
+    expect(text).toContain("Names are case-sensitive");
+    expect(text).toContain("A lowercase `card(...)` is a plain call to a user function, not the built-in `Card`");
+  });
+
+  it("does not call the chat prompt a strict subset of JavaScript", () => {
+    const text = generatePrompt(defaultLibrary, { mode: "chat" });
+    expect(text).toContain("a declarative language in JavaScript syntax");
+    expect(text).not.toContain("strict subset");
+  });
+
+  it("only lists as unsupported what the parser rejects", () => {
+    for (const source of [
+      "class A { }",
+      "const f = async () => { return 1 }",
+      "const x = tag`a`",
+      "function f() { { let a = 1 } return 1 }",
+    ]) {
+      expect(parse(source).errors, source).not.toEqual([]);
+    }
   });
 
   it("toggles tool/binding sections by feature flag", () => {

@@ -2,8 +2,8 @@
  * System prompt generator — Aktion.
  *
  * Produces an ordered system prompt that teaches an LLM how to author
- * Aktion — a declarative language whose surface syntax is a strict subset
- * of JavaScript. Two flavours ship side-by-side:
+ * Aktion — a declarative language whose surface syntax is JavaScript's.
+ * Two flavours ship side-by-side:
  *
  *   - `"full"` (default): teaches every language feature — reactive state,
  *     components, actions, effects, `$http({...})`, routing, builtins,
@@ -150,7 +150,7 @@ function buildChatPrompt(library: ComponentLibrary, options: PromptOptions): str
 
 function fullHeader(preamble: string | undefined): string {
   const lead = preamble?.trim() ||
-    "You are a UI engineer building complete, working apps in Aktion — a declarative language that is a strict subset of JavaScript: every program is valid JS, and the runtime adds reactivity on top. Respond ONLY in Aktion — no prose, JSON, markdown, or HTML.";
+    "You are a UI engineer building complete, working apps in Aktion — a declarative language in JavaScript syntax (no classes, block statements, async arrow functions or tagged templates), and the runtime adds reactivity on top. Respond ONLY in Aktion — no prose, JSON, markdown, or HTML.";
   return `${lead}
 
 Register the UI root with \`$app(...)\` on the first line. Pass it one node (\`$app(Component())\`), an array (\`$app([Component1(), Component2()])\`), or variadic nodes (\`$app(Component1(), Component2())\`). Wrap a dashboard/app in \`AppShell\` (left sidebar + topbar); build a website or marketing page from a top \`Navbar\` + stacked sections — never an \`AppShell\`. References resolve across the whole program, so call \`$app(...)\` first and let the rest stream in below it. There should be only one \`$app(...)\` in the program, as the runtime treats it as the UI root.`;
@@ -312,7 +312,7 @@ $effect(() => $console.log($count), [$count])                     // declarative
 ### Three kinds of name
 - \`name = value\` — plain binding, captured once (not reactive).
 - \`$name = value\` — reactive atom: reading subscribes, writing notifies.
-- \`function name(...)\` — declares a component AND an action of that name. First-letter case is NOT significant (\`Card\`/\`card\`, \`SaveOrder\`/\`saveOrder\`); same for arrow bindings (\`row = item => Row(...)\`).
+- \`function name(...)\` — declares a component AND an action of that name. First-letter case does not decide whether it renders (declare \`SaveOrder\` or \`saveOrder\`), but names are case-sensitive, so call it exactly as declared; only a PascalCase component gets per-instance state and memoized re-rendering; arrow bindings (\`row = item => Row(...)\`) render the same either way.
 
 ### Two rules, broken constantly — always check
 1. **Invoke components with parentheses.** A component is a function; the bare name is just its value. Render it by calling it, even with no args: \`$app(MyApp())\` not \`$app(MyApp)\`; \`Column([Header(), Body()])\` not \`Column([Header, Body])\`. (Exception: passing a component as a callback, e.g. \`render: UserCard\`.)
@@ -471,7 +471,7 @@ undoBtn = Button("Undo", { onClick: () => doc.undo(), disabled: !doc.canUndo })
 function fullComponentsAndActions(): string {
   return `## Components & Actions
 
-A \`function\` declaration is both a **component** (call it in render position → its return value renders) and an **action** (call it from an event handler → its body runs). Name case is not significant, and a function with no \`return\` renders nothing.
+A \`function\` declaration is both a **component** (call it in render position → its return value renders) and an **action** (call it from an event handler → its body runs). Name case does not decide whether it renders, but names are case-sensitive, so call it exactly as declared; only a PascalCase component gets per-instance state and memoized re-rendering. A function with no \`return\` renders nothing.
 
 ### Components
 \`\`\`
@@ -1278,7 +1278,7 @@ function isChatComponent(_groupName: string, componentName: string): boolean {
 
 function chatHeader(preamble: string | undefined): string {
   const lead = preamble?.trim() ||
-    "You respond in Aktion — a declarative language that is a strict subset of JavaScript. The host renders your reply as a rich, read-only UI. Output ONLY Aktion: no markdown, prose, or JSON.";
+    "You respond in Aktion — a declarative language in JavaScript syntax. The host renders your reply as a rich, read-only UI. Output ONLY Aktion: no markdown, prose, or JSON.";
   return `${lead}
 
 Register the UI root with \`$app(...)\` on the first line (typically \`$app(Column([...]))\`). Answer the question exactly as you otherwise would — same substance, same length, same care — but emit that answer as components instead of Markdown prose.
@@ -1328,7 +1328,7 @@ A program is a flat list of \`name = expression\` statements in standard JavaScr
 - Operators \`+ - * / %\`, comparisons, \`&& || !\`, ternary \`cond ? a : b\`, nullish \`a ?? b\`, spread, member \`obj.field\`, optional chaining \`obj?.field\`.
 
 ### Component calls
-- **Case doesn't matter** — \`Card\` and \`card\` are equivalent.
+- **Names are case-sensitive** — write components in PascalCase: \`Card([...])\`, \`Text("x")\`. A lowercase \`card(...)\` is a plain call to a user function, not the built-in \`Card\`, and renders a loading skeleton that never resolves.
 - **Always invoke with parentheses** — \`Column([Header(), Body()])\`, never \`Column([Header, Body])\`; write \`Separator()\` even with no args.
 - **Canonical call: the prop tagged \`(positional)\` goes bare, everything else in a trailing object** — \`Callout("Heads up", { tone: "info", icon: "circle-info" })\`, \`Badge("Live", { tone: "success" })\`. The tagged prop is not always the first one listed: \`Callout\`'s is \`title\`, \`CodeBlock\`'s is \`codeString\`. All-positional (signature order) and all-named (single \`{ }\` object) calls also work.
 

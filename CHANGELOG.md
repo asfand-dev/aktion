@@ -140,6 +140,23 @@ Each entry is dated and summarises what was added, changed, or fixed.
   arrow or function expression, or as a compound write such as `$name++`. The
   Troubleshooting, Error handling and Reactivity pages say the same.
 
+### System Prompts No Longer Say Every Program Is Valid JavaScript
+
+- The full and chat system prompts told the model that Aktion is a strict subset
+  of JavaScript, and the full one that every program is valid JavaScript. Aktion
+  accepts programs JavaScript rejects and rejects some JavaScript, so the prompts
+  now say it is a declarative language in JavaScript syntax, and the full prompt
+  lists four constructs that are errors: classes, block statements, async arrow
+  functions and tagged templates.
+- The full prompt also no longer says that function name case is not
+  significant: case does not decide whether a function renders, but only a
+  PascalCase component gets per-instance state and memoized re-rendering.
+- The chat prompt no longer says that `Card` and `card` are equivalent. They are
+  not: `card(...)` is a plain call to a user function and does not resolve the
+  built-in, so the program renders a loading skeleton that never resolves. Both
+  prompts now say that names are case-sensitive, and the chat prompt says to
+  write components in PascalCase.
+
 ## 2026-10-05
 
 ### Precise TypeScript Types for Every Component and Built-in
