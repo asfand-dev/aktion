@@ -696,7 +696,7 @@ function parse(source, options = {}) {
     softNewlines: options.softNewlines
   });
   const openLiteral = tokens[tokens.length - 2]?.open === true;
-  const ctx = new ParserContext(tokens, comments, options.softNewlines, options.statementBlocks === true);
+  const ctx = new ParserContext(tokens, comments, options.softNewlines, options.statementBlocks === true, options.allowUnsupportedWords === true);
   const statements = [];
   const errors = [];
   while (!ctx.isEnd()) {
@@ -908,6 +908,23 @@ function parseStatementImpl(ctx, _topLevel) {
     skipTerminator(ctx);
     return { kind: "ExpressionStatement", expression: block, loc: { line: head.line, column: head.column } };
   }
+  if (head.type === "Punctuation" && head.value === "{") {
+    const start = ctx.snapshot();
+    try {
+      return parseExpressionStatement(ctx);
+    } catch (err) {
+      const failedAt = ctx.snapshot();
+      ctx.takePending();
+      const error = err;
+      const { close, errorDepth } = scanBraces(ctx, start, error);
+      if (error.__definitive || close < 0 || errorDepth !== 1 || !BLOCK_LIKE_ERROR.test(error.message)) {
+        ctx.restore(failedAt);
+        throw err;
+      }
+      ctx.restore(close + 1);
+      throw { message: BLOCK_STATEMENT_MESSAGE, line: head.line, column: head.column };
+    }
+  }
   const saved = ctx.snapshot();
   if (couldStartAssignment(ctx)) {
     try {
@@ -1020,7 +1037,7 @@ function canStartOperand(ctx, token, offset) {
 function parseFunctionDecl(ctx) {
   const start = ctx.expect("Keyword", "function");
   const isHook = ctx.peek().type === "StateIdentifier";
-  const nameTok = isHook ? ctx.consume() : ctx.expect("Identifier");
+  const nameTok = isHook ? ctx.consume() : ctx.expectName();
   const params = parseFunctionParams(ctx);
   const body = parseBlock(ctx);
   skipTerminator(ctx);
@@ -1080,6 +1097,7 @@ function parseFunctionParamList(ctx) {
         if (defaultValue) param.defaultValue = defaultValue;
         params.push(param);
       } else if (tok.type === "Identifier" || tok.type === "Keyword") {
+        rejectUnsupportedWord(ctx, tok);
         const nameTok = ctx.consume();
         let defaultValue;
         if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -1292,6 +1310,7 @@ function parseDeclarator(ctx, keyword, start) {
     identifier = ctx.consume().value;
     isState = true;
   } else if (head.type === "Identifier") {
+    rejectUnsupportedWord(ctx, head);
     identifier = ctx.consume().value;
   } else {
     throw {
@@ -1377,7 +1396,7 @@ function parsePatternBody(ctx, patternKind) {
         }
         break;
       }
-      const nameTok = ctx.expect("Identifier");
+      const nameTok = ctx.expectName();
       let defaultValue;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
         ctx.consume();
@@ -1404,7 +1423,7 @@ function parsePatternBody(ctx, patternKind) {
         ctx.consume();
         isRest = true;
       }
-      const keyTok = isRest ? ctx.expect("Identifier") : parsePatternKey(ctx);
+      const keyTok = isRest ? ctx.expectName() : parsePatternKey(ctx);
       const key = keyTok.type === "Number" ? String(numericLiteralValue(keyTok.value)) : keyTok.value;
       let alias = key;
       let sourceKey;
@@ -1416,12 +1435,14 @@ function parsePatternBody(ctx, patternKind) {
           sourceKey = key;
           nestedPattern = parseDestructuringPattern(ctx);
         } else {
-          const aliasTok = ctx.expect("Identifier");
+          const aliasTok = ctx.expectName();
           sourceKey = key;
           alias = aliasTok.value;
         }
       } else if (keyTok.type !== "Identifier") {
         throw patternKeyNeedsName(keyTok);
+      } else if (!isRest) {
+        rejectUnsupportedWord(ctx, keyTok);
       }
       let defaultValue;
       if (!isRest && ctx.peek().type === "Operator" && ctx.peek().value === "=") {
@@ -1545,11 +1566,12 @@ function parseReturn(ctx) {
 }
 const EOF_TOKEN = { type: "EOF", value: "", line: 0, column: 0 };
 class ParserContext {
-  constructor(tokens, comments = [], softNewlines, statementBlocks = false) {
+  constructor(tokens, comments = [], softNewlines, statementBlocks = false, allowUnsupportedWords = false) {
     this.tokens = tokens;
     this.comments = comments;
     this.softNewlines = softNewlines;
     this.statementBlocks = statementBlocks;
+    this.allowUnsupportedWords = allowUnsupportedWords;
   }
   index = 0;
   /**
@@ -1710,6 +1732,12 @@ class ParserContext {
     }
     return this.consume();
   }
+  /** `expect("Identifier")` for a name being declared or bound, which may not be `this`, `super` or `debugger`. */
+  expectName() {
+    const tok = this.expect("Identifier");
+    rejectUnsupportedWord(this, tok);
+    return tok;
+  }
   recoverToNextLine() {
     while (!this.isEnd() && this.peek().type !== "Newline" && this.peek().type !== "Semicolon") this.consume();
     if (this.peek().type === "Newline" || this.peek().type === "Semicolon") this.consume();
@@ -1726,6 +1754,7 @@ function parseAssignment(ctx) {
   let identifier = "";
   let isState = false;
   if (head.type === "Identifier") {
+    rejectUnsupportedWord(ctx, head);
     identifier = ctx.consume().value;
   } else if (head.type === "StateIdentifier") {
     identifier = ctx.consume().value;
@@ -1774,6 +1803,7 @@ function parseImportStatement(ctx) {
       imported = ctx.consume().value;
       isState = true;
     } else if (importedTok.type === "Identifier") {
+      rejectUnsupportedWord(ctx, importedTok);
       imported = ctx.consume().value;
     } else {
       throw {
@@ -1791,6 +1821,7 @@ function parseImportStatement(ctx) {
         local = ctx.consume().value;
         aliasIsState = true;
       } else if (aliasTok.type === "Identifier") {
+        rejectUnsupportedWord(ctx, aliasTok);
         local = ctx.consume().value;
       } else {
         throw {
@@ -1837,6 +1868,41 @@ function parseImportStatement(ctx) {
 }
 const DYNAMIC_IMPORT_MESSAGE = 'Dynamic `import()` is not supported in Aktion — use a static `import { … } from "…"` at the top of the module.';
 const IMPORT_META_MESSAGE = "`import.meta` is not supported in Aktion — pass the value in from the host page instead.";
+const UNSUPPORTED_WORD_MESSAGES = /* @__PURE__ */ new Map([
+  [
+    "this",
+    "`this` is not supported in Aktion — there are no classes or methods, so nothing is ever bound to it. Pass the value as a parameter instead."
+  ],
+  [
+    "super",
+    "`super` is not supported in Aktion — there are no classes or inheritance. Call the function you need directly."
+  ],
+  ["debugger", "`debugger` is not supported in Aktion — remove it, or log the value with `$console.log(…)`."]
+]);
+function rejectUnsupportedWord(ctx, tok) {
+  if (tok.type !== "Identifier" || ctx.allowUnsupportedWords) return;
+  const message = UNSUPPORTED_WORD_MESSAGES.get(tok.value);
+  if (message) throw { message, line: tok.line, column: tok.column };
+}
+const BLOCK_LIKE_ERROR = /^(Expected |Unexpected token |Labels )/;
+function scanBraces(ctx, open, error) {
+  let depth = 0;
+  let errorDepth = 0;
+  for (let i = open; ; i += 1) {
+    const tok = ctx.tokenAt(i);
+    if (!tok || tok.type === "EOF") return { close: -1, errorDepth };
+    if (errorDepth === 0 && (tok.line > error.line || tok.line === error.line && tok.column >= error.column)) {
+      errorDepth = depth;
+    }
+    if (tok.type !== "Punctuation") continue;
+    if (tok.value === "{" || tok.value === "(" || tok.value === "[") depth += 1;
+    else if (tok.value === "}" || tok.value === ")" || tok.value === "]") {
+      depth -= 1;
+      if (depth === 0) return { close: i, errorDepth };
+    }
+  }
+}
+const BLOCK_STATEMENT_MESSAGE = "Aktion has no block statements or block scoping — a `{` at the start of a statement can only open an object literal, and this is not one. Hoist the body out of the braces (a `case X:` body needs none), or move it into a function.";
 const ASYNC_REASON = "it runs functions synchronously and returns their value, not a Promise. Remove `async` and chain Promises with `.then(…)`.";
 const IMPORT_TYPE_MESSAGE = "`import type` is not supported in a `.aktion` file — Aktion has no static types, so remove it (a `.aktion.ts` module may use it: types are erased before parsing).";
 function unsupportedImportForm(ctx, start) {
@@ -1883,7 +1949,7 @@ function parseExportStatement(ctx) {
   }
   if (next.type === "Punctuation" && next.value === "{") {
     throw {
-      message: "`export { … }` lists are not supported yet — use inline `export <declaration>` (e.g. `export function Foo() {…}`, `export $count = 0`).",
+      message: "`export { … }` lists (and re-export lists) are not supported — declare each binding with `export` where it is defined (e.g. `export function Foo() {…}`, `export let $count = 0`, `export const NAME = …`).",
       line: next.line,
       column: next.column
     };
@@ -2422,7 +2488,7 @@ function parsePrimary(ctx) {
       if (looksLikeFunctionExpr) {
         const start = tok;
         ctx.consume();
-        const selfName = ctx.peek().type === "Identifier" ? ctx.consume().value : void 0;
+        const selfName = ctx.peek().type === "Identifier" ? ctx.expectName().value : void 0;
         const params = parseFunctionParams(ctx);
         const body = parseBlock(ctx);
         return {
@@ -2491,7 +2557,10 @@ function parsePrimary(ctx) {
         flushChunk();
       }
       const softNewlines = part.offset === void 0 ? void 0 : ctx.softNewlinesWithin(part.offset, part.source.length, TEMPLATE_SUB_PREFIX.length);
-      const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`, softNewlines ? { softNewlines } : {});
+      const sub = parse(`${TEMPLATE_SUB_PREFIX}${part.source}`, {
+        ...softNewlines ? { softNewlines } : {},
+        ...ctx.allowUnsupportedWords ? { allowUnsupportedWords: true } : {}
+      });
       if (tok.open !== true) {
         const problem = interpolationError(sub, part.source, part.line, part.column);
         if (problem) throw problem;
@@ -2532,6 +2601,7 @@ function parsePrimary(ctx) {
     return { kind: "StateRef", name: tok.value };
   }
   if (tok.type === "Identifier") {
+    rejectUnsupportedWord(ctx, tok);
     ctx.consume();
     if (ctx.peek().type === "Operator" && ctx.peek().value === "=>") {
       ctx.consume();
@@ -2822,7 +2892,7 @@ function parseForHead(ctx) {
   if (ctx.peek().type === "Punctuation" && (ctx.peek().value === "[" || ctx.peek().value === "{")) {
     pattern = parseDestructuringPattern(ctx);
   } else {
-    item = ctx.expect("Identifier").value;
+    item = ctx.expectName().value;
   }
   if (kind === "for-in") {
     ctx.expect("Keyword", "in");
@@ -2939,7 +3009,7 @@ function parseTryStatement(ctx) {
             column: tok.column
           };
         }
-        const name = tok.type === "Identifier" ? ctx.consume().value : void 0;
+        const name = tok.type === "Identifier" ? ctx.expectName().value : void 0;
         ctx.expect("Punctuation", ")");
         return name;
       });
@@ -3021,6 +3091,7 @@ function parseLambdaParamList(ctx) {
         break;
       }
       if (tok.type !== "Identifier") return null;
+      rejectUnsupportedWord(ctx, tok);
       ctx.consume();
       const param = { name: tok.value };
       if (isRest) param.rest = true;
@@ -3142,6 +3213,7 @@ function parseObjectProps(ctx) {
     let value;
     let method = false;
     if (!computedKey && keyTok.type === "Identifier" && after.type === "Punctuation" && (after.value === "," || after.value === "}")) {
+      rejectUnsupportedWord(ctx, keyTok);
       value = { kind: "Identifier", name: key, loc: { line: keyTok.line, column: keyTok.column } };
     } else if (after.type === "Punctuation" && after.value === "(") {
       const params = parseFunctionParams(ctx);
@@ -8429,6 +8501,8 @@ const MESSAGES = {
   E101: "`await` is not supported in Aktion modules: Aktion bodies run synchronously, so `await x` is the Promise itself and a statement-level `await f()` is skipped. Chain it instead — `f().then((value) => { … })` — or use `$http(…)` and its `.onDone`.",
   E102: "`async` functions are not supported: Aktion runs them synchronously and returns their value, not a Promise. Remove `async` and chain Promises with `.then(…)`.",
   E103this: "`this` is always null in Aktion — there are no methods or classes; pass the value as a parameter.",
+  E103super: "`super` is not available in Aktion — there are no classes or inheritance; call the function you need directly.",
+  E103debugger: "`debugger` is not available in Aktion — remove it, or log the value with `$console.log(…)`.",
   E103arguments: "`arguments` is not available in Aktion — use a rest parameter `(...args)`.",
   E104: "`var` is not supported in Aktion modules — use `let` or `const`.",
   E105: (name) => `\`${name}\` is reassigned after a closure captured it. Aktion closures copy values when they are created, so the closure would not see — or keep — the new value. Use a \`$state\` atom, \`$ref(…)\` inside a component, or an object box (\`const box = { value: … }\`).`,
@@ -9142,6 +9216,14 @@ class Analyzer {
           this.report("E103", loc, MESSAGES.E103this);
           break;
         }
+        if (expr.name === "super") {
+          this.report("E103", loc, MESSAGES.E103super);
+          break;
+        }
+        if (expr.name === "debugger") {
+          this.report("E103", loc, MESSAGES.E103debugger);
+          break;
+        }
         if (expr.name === "arguments") {
           this.report("E103", loc, MESSAGES.E103arguments);
           break;
@@ -9186,6 +9268,11 @@ class Analyzer {
         this.expr(expr.alternate, conditional);
         break;
       case "Call":
+        if (expr.callee === "this" || expr.callee === "super" || expr.callee === "debugger") {
+          this.report("E103", expr.loc, MESSAGES[expr.callee === "this" ? "E103this" : expr.callee === "super" ? "E103super" : "E103debugger"]);
+          for (const arg of expr.arguments) this.expr(arg, neutral);
+          break;
+        }
         this.call(expr, context);
         break;
       case "MethodCall":
@@ -9868,7 +9955,7 @@ const aktionFrontend = {
   }
 };
 function compileJavaScriptModule(code, path, options = {}) {
-  const parseOptions = { statementBlocks: true };
+  const parseOptions = { statementBlocks: true, allowUnsupportedWords: true };
   if (options.softNewlines && options.softNewlines.size > 0) parseOptions.softNewlines = options.softNewlines;
   const parsed = parse(code, parseOptions);
   if (parsed.errors.length > 0) {

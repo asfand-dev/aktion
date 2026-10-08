@@ -23,7 +23,7 @@ export type { DeltaOp, DeltaResult } from './delta.js';
 export { inspectAST, inspectProgram } from './inspector.js';
 export type { InspectorBinding, InspectorView } from './inspector.js';
 export { getDiagnostics, getLintWarnings, getCompletions, getHoverInfo, } from './language-service.js';
-export type { Position, Diagnostic, CompletionItem, HoverInfo, } from './language-service.js';
+export type { Position, Diagnostic, LintOptions, CompletionItem, HoverInfo, } from './language-service.js';
 export { getDefinition, getDefinitionTarget, findDeclaration, getReferences, getDocumentHighlights, getDocumentSymbols, getRenameEdits, } from './navigation.js';
 export type { Range, TextEdit, RenameResult, DocumentSymbol, SymbolKind, DefinitionTarget, } from './navigation.js';
 export { getSemanticTokens, semanticTokenTypes, semanticTokenModifiers, } from './semantic-tokens.js';
