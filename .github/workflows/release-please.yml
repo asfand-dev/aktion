@@ -20,6 +20,9 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      # This is a floating tag. The release-please and @conventional-commits/parser versions pinned in
+      # .github/scripts/check-squash-message/package.json must follow the ones this action bundles (see its
+      # package-lock.json at the tag); otherwise the PR check can disagree with the real release run.
       - uses: googleapis/release-please-action@v5
         id: release
         with:
