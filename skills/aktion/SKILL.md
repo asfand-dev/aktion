@@ -108,7 +108,10 @@ Only the hand-off changes with what you can reach.
 
    From a repo checkout the same check is `node tools/validate-aktion.mjs
    app.aktion` (add `-app` to the script name for multi-module apps), run from
-   the repo root.
+   the repo root. Add `--no-bare-declarations`: that checker warns about a
+   top-level binding written without `let` / `const`, and this skill teaches
+   `$x = 0` without one, so every program written from it would carry warnings
+   that are not mistakes. Such a warning does not change the exit code.
 
    With no shell — claude.ai, Claude Desktop — this step cannot run. Re-read
    every component call against its group reference instead, and say in your

@@ -20,7 +20,10 @@
  * build accepts. `--alias`/`--root` are merged over anything the config declares.
  *
  * Prints `Lnn: message` for each link or schema problem. Exits non-zero on any
- * error; warnings are reported but do not fail the run.
+ * error; warnings are reported but do not fail the run. That includes
+ * `bare-declaration`, the warning for a top-level binding written without
+ * `let` / `const` (`export B = 1`, a first `y = 4`); pass `--no-bare-declarations`
+ * to leave it out of the report.
  *
  * Reads the built DOM-free surface (`dist/language.js`) and the Node plugin entry
  * (`dist/plugin.js`) — run `npm run build` first if either is missing.
@@ -58,6 +61,7 @@ const argv = process.argv.slice(2);
 const cliAlias = {};
 const cliRoots = [];
 let entry = null;
+let bareDeclarations = true;
 
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i];
@@ -71,16 +75,18 @@ for (let i = 0; i < argv.length; i += 1) {
     cliAlias[pair.slice(0, eq)] = resolvePath(pair.slice(eq + 1));
   } else if (arg === "--root") {
     cliRoots.push(resolvePath(argv[++i] ?? ""));
+  } else if (arg === "--no-bare-declarations") {
+    bareDeclarations = false;
   } else if (entry === null) {
     entry = arg;
   } else {
-    console.error("usage: node tools/validate-aktion-app.mjs [--alias p=dir] [--root dir] <entry.aktion>");
+    console.error("usage: node tools/validate-aktion-app.mjs [--alias p=dir] [--root dir] [--no-bare-declarations] <entry.aktion>");
     process.exit(2);
   }
 }
 
 if (entry === null) {
-  console.error("usage: node tools/validate-aktion-app.mjs [--alias p=dir] [--root dir] <entry.aktion>");
+  console.error("usage: node tools/validate-aktion-app.mjs [--alias p=dir] [--root dir] [--no-bare-declarations] <entry.aktion>");
   process.exit(2);
 }
 
@@ -155,7 +161,7 @@ if (result.program) {
   // the file. The linker already read every module, so nothing is re-read.
   for (const module of result.modules ?? []) {
     const where = module.path === entryPath ? "" : `${module.path}: `;
-    for (const w of getLintWarnings(module.aktionSource, defaultLibrary)) {
+    for (const w of getLintWarnings(module.aktionSource, defaultLibrary, { bareDeclarations })) {
       report(w.line, "warning", `${where}${w.message}`);
     }
   }

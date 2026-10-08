@@ -88,7 +88,7 @@ const BATTERY: Row[] = [
   { construct: "templates, spread, trailing commas, numeric separators, hex", source: "t = `a${`b${c}`}`\ns = [...a, { ...o }, f(...xs)]\nn = [1_000, 0xff,]\n", outcome: ok },
   { construct: "for…of / for…in / classic / while / do…while / switch / try", source: "for (const [k, v] of es) {}\nfor (const k in o) {}\nfor (let i = 0; i < 3; i++) {}\nwhile (a) {}\ndo {} while (a)\nswitch (x) { case 1: break\n default: y() }\ntry {} catch {}\n", outcome: ok },
   { construct: "nested destructuring, array holes", source: "const { a: { b } } = o\nconst [, second] = arr\n", outcome: ok },
-  { construct: "`this.x`, `arguments.length` (parse only)", source: "a = this.x\nb = arguments.length\n", outcome: ok },
+  { construct: "`arguments.length` (parse only; E103 in a JS module)", source: "b = arguments.length\n", outcome: ok },
   { construct: "leading-operator continuation", source: "const v = (a\n  + b)\n", outcome: ok },
   { construct: "multi-line call arguments", source: "f(\n  a,\n  b\n)\n", outcome: ok },
 
@@ -180,8 +180,11 @@ const BATTERY: Row[] = [
   { construct: "`a = b = 1`", source: "a = b = 1\n", outcome: err("Chained assignment (`a = b = 1`) is not supported", 1, 7) },
   { construct: "`if ((m = r.exec(s)))`", source: "if ((m = r.exec(s))) {}\n", outcome: err("Assignment inside an expression is not supported", 1, 8) },
 
+  // --- changed: was accepted without an error, or the message changed ---------------
+  { construct: "`this.x`", source: "a = this.x\n", outcome: err("`this` is not supported in Aktion", 1, 5) },
+  { construct: "`export { a, b }`", source: "export { a, b }\n", outcome: err("`export { … }` lists (and re-export lists) are not supported") },
+
   // --- unchanged errors ----------------------------------------------------------
-  { construct: "`export { a, b }`", source: "export { a, b }\n", outcome: err("`export { … }` lists are not supported yet") },
   { construct: "`class A {}`", source: "class A {}\n", outcome: err("`class` is not supported in Aktion") },
   { construct: "`const café = 1`", source: "const café = 1\n", outcome: err("names may only use a-z") },
   { construct: "`o.#x`", source: "x = o.#x\n", outcome: err("private fields") },
