@@ -255,3 +255,103 @@ describe("awaited-value", () => {
     expect(awaits(src)).toEqual([]);
   });
 });
+
+/**
+ * `invalid-regexp` — the runtime catches the engine's SyntaxError and the
+ * expression becomes `null`, so a broken pattern is indistinguishable from "no
+ * match". The stricter `v` flag is the usual way to hit it: a `/` or a stray `-`
+ * inside a class (`[A-Za-z0-9+/]`) is valid under `u` and a SyntaxError under `v`.
+ * The verdict is the linting Node's own RegExp engine, so these tests stick to
+ * syntax every supported Node accepts or rejects alike.
+ */
+describe("invalid-regexp", () => {
+  const PREFIX = "This engine rejects this regular expression";
+  const regexpWarnings = (src: string): string[] =>
+    getLintWarnings(src)
+      .filter((d) => d.message.startsWith(PREFIX))
+      .map((d) => d.message);
+
+  it.each([
+    ["new RegExp, v-flag set operation", 'const r = new RegExp("[a-z&&[", "v")'],
+    ["new RegExp, unterminated group", 'const r = new RegExp("(abc")'],
+    ["new RegExp, invalid flags", 'const r = new RegExp("a", "gg")'],
+    ["new RegExp, unknown flag", 'const r = new RegExp("a", "q")'],
+    ["new RegExp, u and v together", 'const r = new RegExp("a", "uv")'],
+    ["RegExp called without new", 'const r = RegExp("(", "")'],
+    ["literal, unescaped paren in v-mode class", "const r = /[(]/v"],
+    ["literal, range in a v-mode intersection", "const r = /[a-z&&b]/v"],
+    ["literal, bare pipe in a v-mode class", "const r = /[|]/v"],
+    ["literal, invalid flags", "const r = /a/gg"],
+    ["literal, lone quantifier", "const r = /+/"],
+    ["literal, inside a lambda body", "const f = (s) => /[(]/v.test(s)"],
+    ["literal, as a call argument", 'const m = "x".match(/[(]/v)'],
+    ["no-substitution template literal pattern", "const r = new RegExp(`(`)"],
+    ["a third argument, which JavaScript ignores", 'const r = new RegExp("(", "g", x)'],
+    ["an explicit undefined flags argument", 'const r = new RegExp("(", undefined)'],
+    ["a regex literal re-wrapped with invalid flags", 'const r = new RegExp(/a/, "gg")'],
+  ])("flags %s", (_name, src) => {
+    const warnings = regexpWarnings(src);
+    expect(warnings).toHaveLength(1);
+    // The engine's own reason is carried through, so the message is actionable.
+    expect(warnings[0]).toMatch(/^This engine rejects this regular expression: .*(Invalid|Unterminated|Nothing|Unmatched|flags)/i);
+    // The engine's `Invalid regular expression: /pattern/flags:` echo is not repeated.
+    expect(warnings[0]).not.toMatch(/Invalid regular expression/);
+    expect(getLintWarnings(src)[0]!.severity).toBe("warning");
+  });
+
+  it.each([
+    ["a plain literal", "const r = /^[a-z]+$/"],
+    ["a literal with flags", "const r = /a(b)c/gi"],
+    ["a v-flag class with an escaped paren", "const r = /[\\(]/v"],
+    ["a v-flag set intersection", "const r = /[\\w&&[^\\d]]/v"],
+    ["new RegExp with valid pattern and flags", 'const r = new RegExp("^a+$", "gimsuy")'],
+    ["new RegExp with no flags", 'const r = new RegExp("a|b")'],
+    ["RegExp called without new", 'const r = RegExp("a", "g")'],
+    ["an unrelated constructor", 'const d = new Date("not a date")'],
+    ["a different function that takes a pattern", 'const r = makeRegExp("(")'],
+  ])("does not flag %s", (_name, src) => {
+    expect(regexpWarnings(src)).toEqual([]);
+  });
+
+  it.each([
+    ["dynamic pattern", 'const r = new RegExp(pattern, "v")'],
+    ["dynamic flags", 'const r = new RegExp("(", flags)'],
+    ["both dynamic", "const r = new RegExp(pattern, flags)"],
+    ["template with a substitution", "const r = new RegExp(`(${pattern}`)"],
+    ["concatenated pattern", 'const r = new RegExp("(" + tail)'],
+    ["spread arguments", "const r = new RegExp(...parts)"],
+    ["no arguments", "const r = new RegExp()"],
+    ["a spread before literal arguments", 'const r = new RegExp(...parts, "g")'],
+    ["null flags", 'const r = new RegExp("a", null)'],
+    ["a re-wrapped regex literal with valid flags", 'const r = new RegExp(/a/g, "i")'],
+  ])("skips a %s silently", (_name, src) => {
+    expect(regexpWarnings(src)).toEqual([]);
+  });
+
+  it("reports the position of the expression and one warning per bad regex", () => {
+    const src = ["const a = /[(]/v", "const ok = /fine/", 'const b = new RegExp("(")'].join("\n");
+    const warnings = getLintWarnings(src).filter((d) => d.message.startsWith(PREFIX));
+    expect(warnings.map((d) => d.line)).toEqual([1, 3]);
+    expect(warnings[0]!.column).toBe(11);
+  });
+
+  it("reports a bad regex literal once when it is re-wrapped", () => {
+    expect(regexpWarnings("const r = new RegExp(/[(]/v, \"v\")")).toHaveLength(1);
+  });
+
+  it("keeps the message short for a very long pattern", () => {
+    const src = `const r = new RegExp("${"a".repeat(5000)}(")`;
+    const [warning] = regexpWarnings(src);
+    expect(warning).toBeDefined();
+    expect(warning!.length).toBeLessThan(400);
+    expect(warning).not.toContain("aaaaaaaaaa");
+  });
+
+  it("is a warning in getDiagnostics, never an error", () => {
+    const diags = getDiagnostics("const r = /[(]/v", defaultLibrary);
+    const hit = diags.filter((d) => d.message.startsWith(PREFIX));
+    expect(hit).toHaveLength(1);
+    expect(hit[0]!.severity).toBe("warning");
+    expect(diags.filter((d) => d.severity === "error")).toEqual([]);
+  });
+});

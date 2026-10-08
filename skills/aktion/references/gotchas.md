@@ -257,6 +257,37 @@ This one **is** linted, as a warning, whenever the awaited value is consumed
 (bound, tested, or passed as an argument). A bare `await f()` statement whose
 result is discarded is not flagged.
 
+### An invalid regular expression becomes `null`, not an error
+
+`new RegExp(...)` and `/…/` literals that the engine rejects do not throw in
+Aktion: the runtime logs to the console and the expression evaluates to `null`,
+so `/[(]/v.test(s)` quietly never matches. The `v` flag is the usual cause — it
+is stricter than `u` and rejects an unescaped `(`, `)`, `{`, `}`, `/` or `|`
+inside a class (write `[\(]`, `[\/]`), reads a `[` there as a nested class, and
+rejects a stray `-` that is not between two characters (write `[\-.a-z]`).
+
+A pattern and flags given as string literals are linted as a warning; a pattern
+held in a variable (`new RegExp(PATTERN, "v")`) is not, so test those at the
+source. The check uses the RegExp engine of the Node that runs the linter, so
+newer syntax (duplicate named groups, `(?i:…)` modifiers) is reported on Node 20
+and 22 but accepted on Node 24, so a warning on valid modern syntax usually
+means an old Node.
+
+### A top-level binding without `let` / `const` still parses
+
+`$count = 0`, `total = 5` and `export LIMIT = 3` all parse and run, and
+`getDiagnostics` passes them: the keyword is optional, and changes nothing about
+reactivity. Without it the file is not plain JavaScript, and a `.aktion.js` /
+`.aktion.ts` module needs it.
+
+This skill's examples use the keyword-less form, as the system prompt does, so a
+`.aktion` program written from it is consistent. The repo's CLIs (`tools/validate-aktion.mjs`,
+`tools/validate-aktion-app.mjs`) warn about it, and `getLintWarnings(source,
+library, { bareDeclarations: true })` does too; run them with
+`--no-bare-declarations` here. If a program is being moved to keywords, take the
+one the warning names: `let` for a `$` atom (`const $n` makes its later writes a
+TypeError), and `let` for any name assigned again.
+
 ### Equality and comparison match JavaScript
 
 - `==` / `!=` use abstract equality, so `x == null` matches `null` **and**

@@ -288,5 +288,6 @@
   "factories": ["form","http","mutation","query","script","socket","sse","store"],
   "namespaces": ["console","dom","i18n","storage","toast","util"],
   "builtins": ["app","effect","emit","head","optimistic","router","theme"],
-  "injected": ["aktion","children","cleanup","clearInterval","clearTimeout","outlet","params","route","setInterval","setTimeout","slots","theme"]
+  "injected": ["aktion","children","cleanup","clearInterval","clearTimeout","outlet","params","route","setInterval","setTimeout","slots","theme"],
+  "hostGlobals": ["atob","btoa","console","structuredClone"]
 }

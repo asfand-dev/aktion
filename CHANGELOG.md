@@ -7,6 +7,68 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-10-06
 
+### ESLint Knows the Names Aktion Injects
+
+- `aktion-runtime/eslint` now exports `aktionGlobals`: every name an Aktion
+  program uses without an import, in the shape ESLint's
+  `languageOptions.globals` expects. It covers all components, the
+  `$`-builtins, `route`, `params`, `outlet`, `children`, `slots`, `cleanup`,
+  the tracked timers, and `atob`, `btoa`, `console` and `structuredClone`.
+- `configs.recommended` applies it to `.aktion` files, so `no-undef` works out
+  of the box and you no longer need to keep your own list in step with the
+  runtime. It is also available as `aktionEslint.globals`.
+- Only `structuredClone` of those last four is provided by the runtime itself;
+  `atob`, `btoa` and `console` are policy-gated host globals like `URL`,
+  listed because the generated `globals.d.ts` declares them. Other host
+  globals such as `document` or `window` are not included; your environment
+  supplies those.
+- The list is built from the DSL manifest alone, so the ESLint entry stays
+  small, and tests check the manifest against what the runtime binds. The
+  manifest gained a `hostGlobals` list so the generated `globals.d.ts` and the
+  ESLint globals declare the same host names.
+
+### Invalid Regular Expressions Are Now Flagged
+
+- A regular expression the JavaScript engine rejects used to fail silently:
+  the runtime swallowed the `SyntaxError` and the expression became `null`, so
+  `/[(]/v.test(s)` just read as "no match". The language service now warns
+  about it, with the engine's reason — for a `/…/flags` literal,
+  `new RegExp("…", "…")` and `RegExp("…", "…")` whose pattern and flags are
+  string literals. Bad patterns (including ones that only fail under the `v`
+  flag) and bad flags are both caught.
+- It is a warning, never an error, and computed arguments
+  (`new RegExp(pattern)`) are skipped because they cannot be judged without
+  running the program. The verdict comes from the RegExp engine of the Node
+  that runs the linter, so syntax newer than that Node is reported too.
+
+### Validators Warn About Declarations Without `let` or `const`
+
+- The validators (`tools/validate-aktion.mjs` and `tools/validate-aktion-app.mjs`)
+  now warn about a top-level assignment that declares a binding without a
+  keyword: `export B = 1`, `export $s = 4`, or the first `y = 4` of a name. The
+  runtime still accepts all of these and behaves exactly as before, but without
+  the keyword the file is not plain JavaScript. Later plain assignments to a name
+  that already exists (`y = 5`) are ordinary writes and are not flagged, nor are
+  assignments to a name a `function`, hook, `import`, `var`, `let` or `const`
+  declares, the writable legacy roots `aktion` and `theme`, or `let a` with no
+  value. A keyword-less `for (item of items)` head is not covered.
+- The message says what to write, and only suggests a keyword that still works:
+  `let` for a `$` atom or a name written again (including `+=`, `++` and a
+  keyword-less `for (x of …)` head), `const` for a name nothing else writes, with
+  `export` in front for an export. An `export` of a name that is already declared
+  is told to put the `export` on the declaration and drop it from the assignment, since
+  dropping it alone would take the name out of the module's exports. A `const`
+  declaration is told to become `let`, an import to be imported under another
+  local name (naming the imported name, so `import { X as B }` becomes
+  `import { X as … }`), and a destructured name to be declared on its own, since
+  an import or a destructuring cannot carry `export`. Since the formatter keeps
+  declaration keywords, adding them is a mechanical edit.
+- It is a warning, so a validator run still exits 0; `--no-bare-declarations`
+  leaves it out of the report.
+- `getLintWarnings` and `getDiagnostics` take the same check as an opt-in:
+  `{ bareDeclarations: true }`. It is off by default, because the system prompt,
+  the agent skill and the bundled demos all teach the keyword-less `$x = 0`.
+
 ### Clear Errors for Syntax Aktion Does Not Have
 
 - **Breaking:** `this`, `super` and `debugger` are now parse errors at the word,
