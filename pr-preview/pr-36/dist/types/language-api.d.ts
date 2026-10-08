@@ -9,7 +9,7 @@
  * module pulls in NONE of that: everything re-exported here is pure and
  * Node-safe (no DOM access at import time).
  */
-export { getDiagnostics, getLintWarnings, getCompletions, getHoverInfo, type Position, type Diagnostic, type CompletionItem, type HoverInfo, } from './tooling/language-service.js';
+export { getDiagnostics, getLintWarnings, getCompletions, getHoverInfo, type Position, type Diagnostic, type LintOptions, type CompletionItem, type HoverInfo, } from './tooling/language-service.js';
 /**
  * Nearest-name ranking over the component library. `getDiagnostics` already
  * folds the suggestion into the unknown-component warning's prose, but an editor
