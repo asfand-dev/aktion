@@ -5,6 +5,23 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## [0.10.0](https://github.com/asfand-dev/aktion/compare/v0.9.0...v0.10.0) (2026-10-08)
+
+
+### Features
+
+* **eslint:** export the injected runtime globals ([#32](https://github.com/asfand-dev/aktion/issues/32)) ([3ee4aff](https://github.com/asfand-dev/aktion/commit/3ee4aff0a3017f0b8c9f8edecc44b0a25b69c0d2))
+* **parser:** clear errors for this, super, debugger and block statements ([#35](https://github.com/asfand-dev/aktion/issues/35)) ([a3d8fa1](https://github.com/asfand-dev/aktion/commit/a3d8fa12730c765e64459aa010afac2df7cffe45))
+* **types:** precise TypeScript types for the whole DSL surface, plus TS/JS authoring fixes ([#30](https://github.com/asfand-dev/aktion/issues/30)) ([bc98061](https://github.com/asfand-dev/aktion/commit/bc980610e7babd3c26f1f440e212ca2dec26f735))
+* **validator:** warn about regular expressions the engine rejects ([#31](https://github.com/asfand-dev/aktion/issues/31)) ([3c09060](https://github.com/asfand-dev/aktion/commit/3c09060c837fdbe9ea449090438053b20e42b101))
+* **validator:** warn on top-level declarations written without let/const ([#34](https://github.com/asfand-dev/aktion/issues/34)) ([1e072e4](https://github.com/asfand-dev/aktion/commit/1e072e4b95e65d81f0f25c7c5b02a0e7fa4eb4c4))
+
+
+### Bug Fixes
+
+* **prompt:** stop telling the model that every program is valid JavaScript ([#36](https://github.com/asfand-dev/aktion/issues/36)) ([530b095](https://github.com/asfand-dev/aktion/commit/530b0957b35f360d0570d5722ea72dcc49d42dd8))
+* **runtime:** make the state-write-during-render warning describe the real cause ([#37](https://github.com/asfand-dev/aktion/issues/37)) ([74cc08a](https://github.com/asfand-dev/aktion/commit/74cc08a22f0e883f019b33381e49a811fd5e997f))
+
 ## 2026-10-06
 
 ### ESLint Knows the Names Aktion Injects
