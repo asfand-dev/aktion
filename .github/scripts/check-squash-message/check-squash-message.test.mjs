@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { buildSquashMessage, checkSquashMessage, extractOverride, findOffendingLines, formatFailure } from "./check-squash-message.mjs";
+import { api, buildSquashMessage, checkSquashMessage, extractOverride, findOffendingLines, formatFailure } from "./check-squash-message.mjs";
 
 const script = fileURLToPath(new URL("./check-squash-message.mjs", import.meta.url));
 
@@ -166,6 +166,39 @@ test("a PR description that only mentions the markers in prose is an override bl
   const report = formatFailure(result);
   assert.match(report, /Hint: release-please treats everything after the first BEGIN_COMMIT_OVERRIDE/);
   assert.doesNotMatch(formatFailure(checkSquashMessage({ message: squashWith(BAD_LINES[0]) })), /Hint: release-please treats/);
+});
+
+test("a commit message with a very long whitespace run is built in linear time", () => {
+  const message = `feat(x): a\n\nbody${" ".repeat(200_000)}x`;
+  const started = performance.now();
+  const built = buildSquashMessage({ title: "feat(x): t", number: 1, commits: [commit(message)] });
+  assert.ok(performance.now() - started < 1000, "building the message took over a second");
+  assert.ok(built.endsWith("x"));
+});
+
+test("api retries network errors, 429 and 5xx, but not other client errors", async (t) => {
+  const reply = (status, body = {}) => ({ ok: status < 400, status, statusText: String(status), json: async () => body });
+  const run = async (responses) => {
+    const calls = [];
+    t.mock.method(globalThis, "fetch", async () => {
+      calls.push(1);
+      const next = responses.shift();
+      if (next instanceof Error) throw next;
+      return next;
+    });
+    const options = { base: "https://x", delayMs: 0 };
+    const result = await api("/p", options).then((value) => ({ value }), (error) => ({ error }));
+    t.mock.restoreAll();
+    return { ...result, calls: calls.length };
+  };
+  assert.deepEqual(await run([reply(502), new Error("socket hang up"), reply(200, { a: 1 })]), { value: { a: 1 }, calls: 3 });
+  assert.deepEqual(await run([reply(429), reply(200, { a: 2 })]), { value: { a: 2 }, calls: 2 });
+  const failed = await run([reply(500), reply(500), reply(500), reply(200)]);
+  assert.equal(failed.calls, 3);
+  assert.match(failed.error.message, /failed: 500/);
+  const missing = await run([reply(404), reply(200)]);
+  assert.equal(missing.calls, 1);
+  assert.match(missing.error.message, /failed: 404/);
 });
 
 test("the command line exits 1 on a bad message, 0 on a good one and 2 when it cannot run", () => {

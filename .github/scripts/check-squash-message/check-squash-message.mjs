@@ -13,6 +13,9 @@
  * that release-please.yml uses), so the verdict is the real one, including the BEGIN_COMMIT_OVERRIDE block
  * of the PR body, which release-please reads instead of the commit message.
  *
+ * Only the squash-merge path is modelled. A merge commit or a rebase merge lands each commit on its own, and
+ * release-please then parses every commit message separately; this check does not cover those.
+ *
  * Usage (live PR, needs GITHUB_REPOSITORY and PR_NUMBER, GITHUB_TOKEN optional for public repositories):
  *   node check-squash-message.mjs
  * Usage (offline): node check-squash-message.mjs --message-file msg.txt [--body-file pr-body.md]
@@ -40,7 +43,7 @@ export function extractOverride(body) {
 }
 
 function splitMessage(message) {
-  const [subject, ...rest] = message.replace(/\s+$/, "").split(/\r?\n/);
+  const [subject, ...rest] = message.trimEnd().split(/\r?\n/);
   return { subject, body: rest.join("\n").replace(/^\n+/, "") };
 }
 
@@ -162,12 +165,32 @@ export function formatFailure(result, { commits = [] } = {}) {
   return lines.join("\n");
 }
 
-async function api(path, { token, base }) {
-  const response = await fetch(`${base}${path}`, {
-    headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", ...(token ? { authorization: `Bearer ${token}` } : {}) },
-  });
-  if (!response.ok) throw new Error(`GET ${path} failed: ${response.status} ${response.statusText}`);
-  return response.json();
+/**
+ * GETs a GitHub API path as JSON, retrying network errors, 429 and 5xx responses with exponential backoff
+ * so a transient GitHub error does not turn the job red.
+ *
+ * @param {string} path The API path.
+ * @param {{token?: string, base: string, attempts?: number, delayMs?: number}} options Token, API base URL and retry settings.
+ * @returns {Promise<any>} The parsed response.
+ */
+export async function api(path, { token, base, attempts = 3, delayMs = 1000 }) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    let retryable = true;
+    try {
+      const response = await fetch(`${base}${path}`, {
+        headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      });
+      if (response.ok) return await response.json();
+      retryable = response.status >= 500 || response.status === 429;
+      lastError = new Error(`GET ${path} failed: ${response.status} ${response.statusText}`);
+    } catch (error) {
+      lastError = error;
+    }
+    if (!retryable || attempt === attempts) break;
+    await new Promise((resolve) => setTimeout(resolve, delayMs * 2 ** (attempt - 1)));
+  }
+  throw lastError;
 }
 
 export async function loadPullRequest({ repo, number, token, base }) {
