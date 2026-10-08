@@ -1,0 +1,13 @@
+{
+  "name": "check-squash-message",
+  "private": true,
+  "type": "module",
+  "description": "CI helper: fails when the squash commit GitHub would create for a PR cannot be parsed by release-please. Own package so the workflow installs ~150 packages here instead of the whole repo.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@conventional-commits/parser": "0.4.1",
+    "release-please": "17.6.0"
+  }
+}
