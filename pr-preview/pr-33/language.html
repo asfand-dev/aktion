@@ -107,7 +107,15 @@
       <p>
         Newlines terminate statements; semicolons are optional, but two
         statements on one line need a <code>;</code> between them &mdash;
-        <code>a = 1 b = 2</code> is a parse error. Forward
+        <code>a = 1 b = 2</code> is a parse error. A line that starts with
+        <code>(</code>, <code>[</code> or a template literal is a new statement, where JavaScript
+        would continue the line above (<code>f</code> then <code>(1)</code> is
+        <code>f(1)</code> there), so the validator warns about it; end the
+        previous line with <code>;</code> to make the intent explicit.
+        <code>this</code>, <code>super</code> and <code>debugger</code> are parse
+        errors, and so is a block statement (<code>{ &hellip; }</code> that is
+        not an object literal, including <code>case X: { &hellip; }</code>):
+        Aktion has no classes and no block scope. Forward
         references resolve from the whole scope, so you can call
         <code>$app(&hellip;)</code> first and let the pieces it depends on stream in
         below it &mdash; the renderer re-parses each chunk and fills in names as
