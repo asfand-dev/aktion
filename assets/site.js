@@ -299,7 +299,7 @@ function buildTopbar() {
     { class: "topbar-brand", href: "index.html" },
     el("img", { class: "topbar-brand-mark", src: LOGO_URL, alt: "", "aria-hidden": "true", width: "28", height: "28" }),
     el("span", {}, "Aktion"),
-    el("span", { class: "topbar-version" }, "v0.9.0"),
+    el("span", { class: "topbar-version" }, "v0.10.0"),
   );
 
   const topbar = el(

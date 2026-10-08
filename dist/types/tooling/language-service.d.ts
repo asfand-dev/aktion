@@ -80,6 +80,10 @@ export declare function getDiagnostics(source: string, library: ComponentLibrary
  *     syntax such as duplicate named groups or `(?i:…)` modifiers is rejected
  *     before Node 23/24). A non-literal argument (`new RegExp(pattern)`) is
  *     skipped.
+ *   - `continuation-line` — a line that starts with `(`, `[` or a template
+ *     literal right after an unterminated statement. JavaScript continues the
+ *     previous expression (`f⏎(1)` is `f(1)`); Aktion ends the statement at the
+ *     line break, so it is two statements.
  *   - `bare-declaration` (opt-in: `{ bareDeclarations: true }`) — a top-level
  *     binding written without `let` / `const`: `export B = 1`, `export $s = 4`, or the first `y = 4` of a name. The
  *     keyword is optional to the runtime (it changes nothing about reactivity),

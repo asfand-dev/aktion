@@ -4,10 +4,11 @@ import { Linter } from 'eslint';
  * autofix) `.aktion` DSL files using a real JS/TS parser and their own rule
  * set — not a bespoke reimplementation of any rule.
  *
- * `.aktion` files are JS/TS-compatible syntax EXCEPT for one construct: a
- * bare top-level `export IDENTIFIER = …` with no declaration keyword (see
- * `scan.ts`'s header for the full grammar cross-check). `preprocess` rewrites
- * every such occurrence to `export const IDENTIFIER = …` — genuinely valid
+ * A `.aktion` file can be written to parse as JS/TS. The one construct this
+ * processor rewrites is a bare top-level `export IDENTIFIER = …` with no
+ * declaration keyword, a syntax error in JS/TS (see `scan.ts`'s header for the
+ * full grammar cross-check); anything else a JS parser rejects is reported by
+ * the consumer's own parser. `preprocess` rewrites every such occurrence to `export const IDENTIFIER = …` — genuinely valid
  * JS/TS — and hands the transformed text to whatever parser the consumer has
  * configured for the virtual `.ts` block (see this module's own README
  * section / `rules.ts` for the recommended wiring). `postprocess` then remaps

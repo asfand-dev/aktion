@@ -1,7 +1,7 @@
 /**
  * Tokenizer for Aktion.
  *
- * The surface syntax is a strict subset of JavaScript. We tokenize into a
+ * The surface syntax is JavaScript's. We tokenize into a
  * flat stream of tokens including NEWLINE markers so that the parser can
  * recover at line boundaries.
  */

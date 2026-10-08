@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Language · Aktion</title>
-  <meta name="description" content="The Aktion language reference — a strict subset of JavaScript with reactive semantics. Program structure, $state, expressions, control flow, the `$util` runtime helper namespace, and the full JavaScript global surface." />
+  <meta name="description" content="The Aktion language reference — JavaScript syntax with reactive semantics. Program structure, $state, expressions, control flow, the `$util` runtime helper namespace, and the full JavaScript global surface." />
   <script>
     (function () {
       try {
@@ -69,12 +69,29 @@
         <span class="hero-eyebrow">Reference</span>
         <h1>Language.</h1>
         <p class="lead">
-          Aktion is a <strong>strict subset of JavaScript</strong> with reactive
-          semantics layered on top. Every program is valid JS &mdash; functions,
-          arrows, template literals, spread, optional chaining &mdash; and the
-          runtime adds two things: it makes <code>$state</code> reactive and it
-          renders the component tree you pass to <code>$app(&hellip;)</code>. If you
-          know JavaScript, you already know almost all of this page.
+          Aktion is <strong>JavaScript syntax</strong> with reactive
+          semantics layered on top &mdash; functions, arrows, template literals,
+          spread, optional chaining &mdash; and the runtime adds two things: it
+          makes <code>$state</code> reactive and it renders the component tree you
+          pass to <code>$app(&hellip;)</code>. If you know JavaScript, you already
+          know almost all of this page.
+        </p>
+        <p>
+          That is not a guarantee that every <code>.aktion</code> file is valid
+          JavaScript. A plain <code>.aktion</code> file can be written to parse as
+          JavaScript &mdash; declare every top-level binding
+          (<code>export const NAME = &hellip;</code>,
+          <code>export let $count = 0</code>) and avoid what Aktion accepts but a
+          JavaScript parser rejects &mdash; but nothing enforces it. For example: a
+          bare <code>export NAME = &hellip;</code>, a duplicate <code>let</code> or
+          <code>const</code>, a reserved word as a name
+          (<code>const class = 1</code>), duplicate parameter names, a legacy octal
+          (<code>010</code>), <code>delete x</code>, a top-level
+          <code>return</code>, <code>await</code> inside a non-async function, a
+          stray <code>break</code> or <code>continue</code>, or
+          <code>a?.b = 1</code>. A module named <code>.aktion.js</code> or
+          <code>.aktion.ts</code> is real JavaScript or TypeScript and is
+          <a href="typescript.html#aktion-ts">checked against JavaScript semantics</a>.
         </p>
       </header>
 
@@ -90,7 +107,15 @@
       <p>
         Newlines terminate statements; semicolons are optional, but two
         statements on one line need a <code>;</code> between them &mdash;
-        <code>a = 1 b = 2</code> is a parse error. Forward
+        <code>a = 1 b = 2</code> is a parse error. A line that starts with
+        <code>(</code>, <code>[</code> or a template literal is a new statement, where JavaScript
+        would continue the line above (<code>f</code> then <code>(1)</code> is
+        <code>f(1)</code> there), so the validator warns about it; end the
+        previous line with <code>;</code> to make the intent explicit.
+        <code>this</code>, <code>super</code> and <code>debugger</code> are parse
+        errors, and so is a block statement (<code>{ &hellip; }</code> that is
+        not an object literal, including <code>case X: { &hellip; }</code>):
+        Aktion has no classes and no block scope. Forward
         references resolve from the whole scope, so you can call
         <code>$app(&hellip;)</code> first and let the pieces it depends on stream in
         below it &mdash; the renderer re-parses each chunk and fills in names as
@@ -125,7 +150,7 @@ body = Card([
         <tbody>
           <tr><td><code>$name = value</code></td><td><strong>Reactive atom.</strong> A tracked cell &mdash; reading subscribes the surrounding component / effect, writing notifies subscribers and re-renders.</td></tr>
           <tr><td><code>name = value</code></td><td><strong>Plain binding.</strong> A non-reactive alias captured once; reading it never subscribes.</td></tr>
-          <tr><td><code>function name()</code></td><td><strong>Component or action.</strong> A function declaration creates both: invoked in a render position its return value is rendered (a function with no <code>return</code> simply renders nothing); referenced from an event handler its body runs for side effects. First-letter case (<code>Card</code> vs <code>card</code>) is not significant. Reusing a <em>built-in</em> component's name is flagged by the validator &mdash; unless the body calls that same name (the wrapper pattern: inside its own body the name refers to the built-in, so <code>function Badge(l) { return Badge(l, { tone: "success" }) }</code> extends the library Badge instead of recursing).</td></tr>
+          <tr><td><code>function name()</code></td><td><strong>Component or action.</strong> A function declaration creates both: invoked in a render position its return value is rendered (a function with no <code>return</code> simply renders nothing); referenced from an event handler its body runs for side effects. First-letter case (<code>Card</code> vs <code>card</code>) does not decide whether it renders or can be used as an action; it does decide whether each call gets its own <a href="#set-once">per-instance state</a> and whether the call is memoized (see <a href="#state">Reactive state</a>). Reusing a <em>built-in</em> component's name is flagged by the validator &mdash; unless the body calls that same name (the wrapper pattern: inside its own body the name refers to the built-in, so <code>function Badge(l) { return Badge(l, { tone: "success" }) }</code> extends the library Badge instead of recursing).</td></tr>
         </tbody>
       </table>
       <p>
@@ -188,8 +213,82 @@ $app(Column([
         and changing <code>$user.age</code> re-runs only <code>ShowAge</code>. Args
         are compared shallowly, so (as in React) a fresh inline-lambda prop each
         render makes the child re-render &mdash; hoist the handler to a stable
-        binding to skip it. First-letter case does not matter: <code>App</code> and
-        <code>app</code> seed state once and re-render identically.
+        binding to skip it. First-letter case does not decide whether state is seeded
+        once, but it does decide two other things: whether each call gets its own
+        copy of it (see <a href="#set-once">Set-once</a>) and whether the call is
+        memoized. Over re-renders that only change a sibling atom, a lowercase
+        <code>showAge</code> re-runs with every render of its caller, while a
+        PascalCase <code>ShowAge</code> runs once.
+      </p>
+
+      <h3 id="set-once">Set-once: <code>$x = &hellip;</code> in a function body</h3>
+      <p>
+        A <code>$x = &hellip;</code> written <strong>directly</strong> in the body of
+        a <code>function</code> declaration (not an arrow or function expression, and
+        not nested inside an <code>if</code> or a loop) means two things, depending
+        on when the function runs:
+      </p>
+      <ul>
+        <li><strong>While the UI is rendering</strong> it is a <em>declaration</em>:
+        the initializer runs once, and every later render keeps whatever value a
+        handler has written since.</li>
+        <li><strong>From a handler or an effect</strong> it is an ordinary write.</li>
+      </ul>
+<pre><code>$app(app())
+
+function app() {
+  let $n = 5                   // render: declared once, then left alone
+  return Column([
+    Text(`n=${$n}`),
+    Button("inc", () =&gt; { $n = $n + 1 }),   // n=5 → n=6, and 6 survives the re-render
+    Button("reset", reset)
+  ])
+}
+
+function reset() {
+  $n = 0                       // run from a handler: an ordinary write → n=0
+}</code></pre>
+      <p>
+        <code>let $n = 5</code> and the bare <code>$n = 5</code> behave identically
+        at runtime. A JavaScript linter reads the function-body <code>let</code> as a
+        local of <code>app()</code>, so with the <code>aktion-runtime/eslint</code>
+        processor it can report the <code>$n</code> in <code>reset()</code> as
+        <code>no-undef</code>; Aktion itself treats both as the one shared atom.
+        Three things decide what is shared:
+      </p>
+      <ul>
+        <li>Only a PascalCase component gets its own copy per instance. In a
+        lowercase function every call shares <strong>one</strong> atom: with two
+        calls <code>counter("a")</code> and <code>counter("b")</code>, a click that
+        increments through the first reads <code>a=1</code> and <code>b=1</code>,
+        whereas two <code>Counter</code> instances read <code>a=1</code> and
+        <code>b=0</code>.</li>
+        <li>An existing top-level atom of the same name wins: with
+        <code>let $n = 0</code> at the top level, a <code>$n = 5</code> in
+        <code>app()</code> leaves <code>n=0</code>.</li>
+        <li>Only <code>function</code> declarations qualify. The same statement
+        directly in an arrow body or a function expression body
+        (<code>[1].map(function (i) { $n = 5 &hellip; })</code>) is an ordinary write.</li>
+      </ul>
+      <p>
+        An ordinary write in render position re-writes the atom on every pass. The
+        same applies to the statement nested inside an <code>if</code> or a loop:
+      </p>
+<pre><code>function app() {
+  if (true) {
+    $n = 5                     // a write in render position, not a declaration
+  }
+  return Column([Text(`n=${$n}`), Button("inc", () =&gt; { $n = $n + 1 })])
+}
+// "inc" shows n=5 again: the render wrote 5 back over the 6.</code></pre>
+      <p>
+        The runtime applies a write made during render but does not schedule a
+        re-render for it (that would loop), and logs a single
+        <code>console.warn</code> (&ldquo;A reactive <code>$state</code> write happened
+        during render&hellip;&rdquo;). That warning is the only signal: nothing fails
+        and the validator does not flag it. Seed state with a body-level
+        <code>$x = &hellip;</code> in a <code>function</code> declaration or the
+        <code>$state</code> hook, and write it from handlers and effects.
       </p>
 
       <h2 id="hooks">Hooks</h2>
@@ -406,7 +505,7 @@ $app(Column([
 
       <h2 id="globals">Full JavaScript globals</h2>
       <p>
-        Because Aktion is a subset of JavaScript, the entire JS global surface
+        Because Aktion runs JavaScript, the entire JS global surface
         resolves by name inside <code>function</code> / <code>effect</code> /
         lambda bodies &mdash; no import, no escape hatch. That includes the
         standard library (<code>Math</code>, <code>JSON</code>,

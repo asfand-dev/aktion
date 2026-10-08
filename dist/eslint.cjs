@@ -468,8 +468,8 @@ const aktionRecommendedRules = {
   "object-shorthand": "off",
   // GENUINE GRAMMAR INCOMPATIBILITY: `parseExportStatement` in
   // `src/parser/parser.ts` throws an explicit parse error on `export { … }`
-  // ("`export { … }` lists are not supported yet") — there is no production
-  // for a re-export list at all. `unicorn/prefer-export-from`'s autofix
+  // ("`export { … }` lists (and re-export lists) are not supported") — there is
+  // no production for a re-export list at all. `unicorn/prefer-export-from`'s autofix
   // CREATES exactly that construct from a plain same-file `import` plus
   // `export`.
   "unicorn/prefer-export-from": "off",
