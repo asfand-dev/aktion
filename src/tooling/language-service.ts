@@ -25,7 +25,8 @@
  * adapters — never a second parser.
  */
 
-import { parse, collectPatternNames } from "../parser/index.js";
+import { parse, tokenize, collectPatternNames } from "../parser/index.js";
+import type { Token } from "../parser/lexer.js";
 import type { DestructuringPattern } from "../parser/types.js";
 import type { ComponentLibrary, ComponentSpec, PropSpec } from "../library/types.js";
 import { findComponent } from "../library/registry.js";
@@ -181,6 +182,10 @@ export function getDiagnostics(
  *     syntax such as duplicate named groups or `(?i:…)` modifiers is rejected
  *     before Node 23/24). A non-literal argument (`new RegExp(pattern)`) is
  *     skipped.
+ *   - `continuation-line` — a line that starts with `(`, `[` or a template
+ *     literal right after an unterminated statement. JavaScript continues the
+ *     previous expression (`f⏎(1)` is `f(1)`); Aktion ends the statement at the
+ *     line break, so it is two statements.
  *   - `bare-declaration` (opt-in: `{ bareDeclarations: true }`) — a top-level
  *     binding written without `let` / `const`: `export B = 1`, `export $s = 4`, or the first `y = 4` of a name. The
  *     keyword is optional to the runtime (it changes nothing about reactivity),
@@ -209,6 +214,7 @@ function lintProgram(
     ...lintShadowedI18n(program),
     ...lintAwaitedValue(program),
     ...lintInvalidRegExp(program),
+    ...lintContinuationLine(program, source),
     ...(options.bareDeclarations === true ? lintBareDeclarations(program, source) : []),
   ];
 }
@@ -604,6 +610,153 @@ function lintBareDeclarations(program: ReturnType<typeof parse>, source: string)
     }
     warnings.push({ line, column, severity: "warning", message });
   }
+  return warnings;
+}
+
+/**
+ * Statement kinds that can end in an expression with no terminator of their own,
+ * so that a following `(`, `[` or template literal continues them in JavaScript.
+ * Block-terminated statements (`function`, `switch`, `try`, `import`, …) and
+ * `do … while (c)`, which JavaScript always terminates, are left out.
+ */
+const UNTERMINATED_STATEMENT_KINDS: ReadonlySet<string> = new Set([
+  "ExpressionStatement",
+  "Assignment",
+  "DestructureStatement",
+  "EffectDeclaration",
+  "Return",
+  "ThrowStatement",
+  "Await",
+  "IfStatement",
+  "WhileStatement",
+  "ForOfStatement",
+  "ForInStatement",
+  "ForClassicStatement",
+]);
+
+/**
+ * The kinds above whose body can be a single statement with no braces
+ * (`if (c) x⏎(y)` is `x(y)`). A `}` before the line break closes a block there,
+ * which JavaScript terminates, so only a name, literal or `)` / `]` counts.
+ */
+const BODY_STATEMENT_KINDS: ReadonlySet<string> = new Set([
+  "IfStatement",
+  "WhileStatement",
+  "ForOfStatement",
+  "ForInStatement",
+  "ForClassicStatement",
+]);
+
+/** Token types that can end an expression, so that a `(` or `[` on the next line could continue it. */
+const EXPRESSION_END_TOKENS: ReadonlySet<Token["type"]> = new Set<Token["type"]>([
+  "Identifier",
+  "StateIdentifier",
+  "Number",
+  "String",
+  "TemplateString",
+  "Regex",
+  "Boolean",
+  "Null",
+]);
+
+/**
+ * `continuation-line`: flag a line that starts with `(`, `[` or a template
+ * literal right after a statement that has no terminator. JavaScript continues the previous
+ * expression there, so `f⏎(1)` is the call `f(1)`, `a⏎[1].forEach(g)` indexes
+ * `a` and `` f⏎`x` `` is a tagged template. Aktion ends a statement at the line
+ * break, so the same text is two statements and the call, the index or the tag
+ * is silently not made. Neither parse fails, so only a warning can say so.
+ *
+ * Fires only between two sibling statements, so `if (c)⏎(f)()` (a body on the
+ * next line) is not flagged, and only when the token before the line break can
+ * end an expression. A `;` there ends the statement in both languages. A `}`
+ * counts when it closes an object literal or a `function` expression
+ * (`x = function () {}⏎(g)` is an immediately invoked function in JavaScript),
+ * and not when it closes an arrow function's body (`const f = () => {}⏎(g)` is
+ * two statements in JavaScript as well). One rare miss: a statement that itself
+ * starts with an object literal (`{ a: 1 }⏎(f)()`) is a block in JavaScript, so
+ * the line is not a continuation there, yet it is flagged.
+ *
+ * In a `.aktion.ts` module two erasures leave this shape behind, because this
+ * pass sees the erased text without the frontend's soft newlines: a call whose
+ * multi-line type arguments were erased (`foo<⏎T⏎>(x)` becomes `foo` and `(x)`)
+ * and a function overload signature (`function g(a: number): number⏎(x)`).
+ */
+function lintContinuationLine(program: ReturnType<typeof parse>, source: string): Diagnostic[] {
+  const warnings: Diagnostic[] = [];
+  let tokens: Token[] | undefined;
+  let indexAt: Map<string, number> | undefined;
+
+  /** True when the `}` at `close` ends an arrow function's body. */
+  const closesArrowBody = (close: number): boolean => {
+    let depth = 0;
+    for (let i = close; i >= 0; i -= 1) {
+      const tok = tokens![i]!;
+      if (tok.type !== "Punctuation") continue;
+      if (tok.value === "}") depth += 1;
+      else if (tok.value === "{" && --depth === 0) {
+        const before = tokens![i - 1];
+        return before?.type === "Operator" && before.value === "=>";
+      }
+    }
+    return false;
+  };
+
+  const check = (previous: Record<string, unknown>, node: Record<string, unknown>): void => {
+    if (node["kind"] !== "ExpressionStatement" || !UNTERMINATED_STATEMENT_KINDS.has(String(previous["kind"]))) return;
+    const at = node["loc"] as Position | undefined;
+    if (!at) return;
+    if (!tokens) {
+      tokens = tokenize(source);
+      indexAt = new Map(tokens.map((t, i) => [`${t.line}:${t.column}`, i] as const));
+    }
+    const index = indexAt!.get(`${at.line}:${at.column}`) ?? -1;
+    const head = tokens[index];
+    if (!head) return;
+    const startsTemplate = head.type === "TemplateString" || (head.type === "String" && head.template === true);
+    const startsBracket = head.type === "Punctuation" && (head.value === "(" || head.value === "[");
+    if (!startsTemplate && !startsBracket) return;
+    let before = index - 1;
+    while (before >= 0 && tokens[before]!.type === "Newline") before -= 1;
+    const last = tokens[before];
+    if (!last) return;
+    const closesExpression = last.type === "Punctuation" && (last.value === ")" || last.value === "]");
+    const closesLiteral = last.type === "Punctuation" && last.value === "}" &&
+      !BODY_STATEMENT_KINDS.has(String(previous["kind"])) && !closesArrowBody(before);
+    if (!closesExpression && !closesLiteral && !EXPRESSION_END_TOKENS.has(last.type)) return;
+    const what = startsTemplate
+      ? "a template literal, so JavaScript would read the previous line as its tag (`` f⏎`x` `` is `` f`x` ``)"
+      : `\`${head.value}\`, so JavaScript would continue the previous line (\`${
+        head.value === "(" ? "f⏎(1)` is `f(1)" : "f⏎[1]` is `f[1]"}\`)`;
+    warnings.push({
+      line: at.line,
+      column: at.column,
+      severity: "warning",
+      message:
+        `This line starts with ${what}. Aktion ends a statement at the line break and reads this as a new one, ` +
+        "so the call, index or tag is not made. End the previous statement with `;` to say so, " +
+        "or put both on one line to continue it.",
+    });
+  };
+
+  const visit = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach((child: unknown, i) => {
+        const previous: unknown = node[i - 1];
+        if (previous && typeof previous === "object" && child && typeof child === "object") {
+          check(previous as Record<string, unknown>, child as Record<string, unknown>);
+        }
+        visit(child);
+      });
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (key !== "loc") visit(value);
+    }
+  };
+
+  visit(program.statements);
   return warnings;
 }
 
