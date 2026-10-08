@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Testing · Aktion</title>
+  <meta name="description" content="The Aktion Testing Library — render a program, query the shadow DOM the way a user sees it, drive real interactions, and assert on rendered output, reactive $state, emitted events, and mocked $http. React Testing Library ergonomics, Aktion principles." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+</head>
+<body data-page="testing">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Quality</span>
+        <h1>Testing.</h1>
+        <p class="lead">
+          The <strong>Aktion Testing Library</strong> (<code>aktion-runtime/test</code>)
+          brings React-Testing-Library ergonomics to Aktion programs. You
+          <code>render(...)</code> a program into a real
+          <code>&lt;aktion-app&gt;</code>, query the rendered shadow DOM the way
+          a user sees it &mdash; by text, role, or label &mdash; drive real
+          clicks and keystrokes, and assert on three things an Aktion program
+          exposes: the <strong>rendered output</strong>, the reactive
+          <strong><code>$state</code></strong>, and the <strong>events</strong>
+          it emits.
+        </p>
+      </header>
+
+      <h2 id="how-it-works">How it works</h2>
+      <p>
+        The library is a thin, runner-agnostic toolkit over the genuine runtime.
+        It deliberately mirrors how a user &mdash; or an LLM &mdash; actually
+        runs your program, so a passing test means the real pipeline works:
+      </p>
+      <ul>
+        <li>
+          <strong>You test the program string, not internals.</strong> The unit
+          of authorship in Aktion is a <code>$app(...)</code> program, so
+          <code>render(source)</code> mounts a real <code>&lt;aktion-app&gt;</code>
+          and exercises the genuine <em>parse &rarr; plan &rarr; render &rarr;
+          morph</em> pipeline &mdash; real reactivity, real effects, real
+          two-way binding, real router. No mocking of the framework.
+        </li>
+        <li>
+          <strong>You query the rendered shadow DOM, not private state.</strong>
+          Queries (<code>getByRole</code>, <code>getByText</code>, &hellip;)
+          search the element&rsquo;s shadow root for what the user can see.
+          Prefer accessible queries (role / label / text) over implementation
+          details, exactly as in Testing Library.
+        </li>
+        <li>
+          <strong>Assertions target output, <code>$state</code>, and events.</strong>
+          Read reactive atoms with <code>screen.state.get("count")</code>
+          (backed by <code>serializeState()</code>), and capture
+          <code>assistant-message</code>, <code>route-change</code>,
+          <code>error</code>, and custom <code>$emit(...)</code> events with
+          <code>screen.emitted(...)</code>.
+        </li>
+        <li>
+          <strong>Async is first-class.</strong> Aktion renders on the microtask
+          queue, so interactions auto-flush and <code>findBy*</code> /
+          <code>waitFor</code> retry until the next paint settles &mdash; no
+          manual <code>await Promise.resolve()</code> plumbing.
+        </li>
+      </ul>
+
+      <h2 id="setup">Setup</h2>
+      <p>
+        The library works with any runner that provides a DOM (Vitest, Jest,
+        Web Test Runner) &mdash; it has <strong>zero runner dependencies</strong>.
+        The examples here use <a href="https://vitest.dev" target="_blank" rel="noopener">Vitest</a>
+        with <a href="https://github.com/capricorn86/happy-dom" target="_blank" rel="noopener">happy-dom</a>
+        (jsdom works too). A custom-element + shadow-DOM-capable DOM is the only
+        requirement.
+      </p>
+<pre><code>npm i -D vitest happy-dom</code></pre>
+<pre><code>// vitest.config.ts
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: { environment: "happy-dom" },   // or "jsdom"
+});</code></pre>
+      <p>Then import the helpers from <code>aktion-runtime/test</code>:</p>
+<pre><code>import { render, renderComponent, cleanup, flush, json } from "aktion-runtime/test";</code></pre>
+      <p>
+        <code>render</code> returns a <strong>Screen</strong> scoped to that
+        instance&rsquo;s shadow root (there is no single global <code>screen</code>
+        &mdash; each mounted program owns its own, which keeps shadow roots
+        isolated). Wire <code>cleanup</code> into your runner&rsquo;s
+        <code>afterEach</code> so each test starts clean:
+      </p>
+<pre><code>import { afterEach } from "vitest";
+import { cleanup } from "aktion-runtime/test";
+
+afterEach(cleanup);   // unmounts every screen, restores mocked fetch + the route</code></pre>
+
+      <h2 id="first-test">Your first test</h2>
+      <p>
+        A complete test of a reactive counter &mdash; render, assert the initial
+        UI, click, then assert both the reactive <code>$state</code> and the
+        re-rendered DOM.
+      </p>
+<pre><code>import { describe, it, expect, afterEach } from "vitest";
+import { render, cleanup, flush } from "aktion-runtime/test";
+
+afterEach(cleanup);
+
+it("increments the counter", async () =&gt; {
+  const screen = render(`
+    $count = 0
+    $app(Column([
+      Text(\`Count: \${$count}\`),
+      Button("Increment", { onClick: () =&gt; $count = $count + 1 })
+    ]))
+  `);
+  await flush();                                  // settle the first paint
+
+  expect(screen.getByText("Count: 0", { exact: false })).toBeTruthy();
+
+  await screen.click("Increment");                // finds the button by text
+
+  expect(screen.state.get("count")).toBe(1);      // reactive state updated
+  expect(screen.getByText("Count: 1", { exact: false })).toBeTruthy();
+});</code></pre>
+      <p>
+        <code>render(...)</code> is synchronous (like RTL), but the first paint
+        lands on the next microtask &mdash; so <code>await flush()</code> once
+        before synchronous <code>getBy*</code> assertions, or use
+        <code>await screen.findByText(...)</code> which waits for you.
+        Interactions (<code>screen.click</code>, <code>screen.user.*</code>)
+        always auto-flush.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>Escape backticks inside the program string.</strong> You pass the
+          Aktion program to <code>render()</code> as a JavaScript template literal, so
+          an Aktion template literal <em>nested inside it</em> must escape both the
+          backtick and the interpolation: write
+          <code>Text(\`Count: \${$count}\`)</code>, not
+          <code>Text(`Count: ${$count}`)</code>. Unescaped, the inner backtick closes
+          the outer literal (a <code>SyntaxError</code>) and <code>${$count}</code> is
+          interpolated by <em>JavaScript</em> &mdash; where <code>$count</code> does not
+          exist. If the escaping gets noisy, keep the program in its own
+          <code>.aktion</code> file and <code>render(readFileSync(path, "utf8"))</code>.
+        </p>
+      </div>
+
+      <h2 id="multi-file">Testing a real app: <code>renderCompiled</code></h2>
+      <p>
+        <code>render(source)</code> takes a program <em>string</em>, which cannot
+        express a multi-file app: <code>import</code>s are resolved by the linker at
+        build time, so the text of an entry module is not a runnable program on its
+        own. Pass the compiled artefact instead &mdash; what
+        <code>aktion-runtime/vite</code> turns your entry into.
+      </p>
+<pre><code>import { renderCompiled, json } from "aktion-runtime/test";
+import app from "../src/app.aktion";          // a CompiledProgram
+
+it("shows the cluster list", async () =&gt; {
+  const screen = renderCompiled(app, {
+    route: "/clusters",
+    fetch: () =&gt; json({ items: [] }),
+  });
+  await screen.findByText("No clusters yet");
+});</code></pre>
+      <p>
+        Every <code>RenderOptions</code> field applies. Two are worth calling out for
+        a real app: <code>httpInterceptors</code> installs the same
+        <code>registerHttpInterceptors(...)</code> hooks your host page uses (so you can
+        assert the auth header your program never sees), and <code>state</code> seeds
+        <code>$state</code> before the first plan.
+      </p>
+      <div class="callout">
+        <p>
+          <strong><code>$state</code> names in a multi-file program.</strong> The linker
+          gives every non-entry module private scope by renaming its atoms, so
+          <code>$filter</code> declared in <code>lib/store.aktion</code> appears in
+          <code>serializeState()</code> as <code>__a4_filter</code> &mdash; and the number
+          comes from import traversal order, so it changes when an import is added.
+          <code>screen.state.get("filter")</code> resolves that for you and throws a
+          naming-collision error rather than guessing when two modules declare the same
+          atom. Never hard-code the mangled key.
+        </p>
+      </div>
+      <p>
+        Outside a Vite build &mdash; a Node script, an SSR pass, a lint rule &mdash;
+        <code>aktion-runtime/vite</code> exports the compiler directly:
+      </p>
+<pre><code>import { compileAktionFile, compileAktionSource } from "aktion-runtime/vite";
+
+const app = compileAktionFile("src/app.aktion", { root: "src" });
+
+// An inline program whose imports resolve against the real filesystem: the way
+// to unit-test a `.aktion` helper module without a fixture file per case.
+const probe = compileAktionSource(
+  `import { formatBytes } from "./src/lib/format.aktion"\n` +
+  `$app(Text(formatBytes(2048)))`,
+  "tests/probe.aktion",
+  { root: process.cwd() },
+);</code></pre>
+
+      <h2 id="coverage">Coverage</h2>
+      <p>
+        A <code>.aktion</code> file compiles to a module that does nothing but
+        <code>JSON.parse</code> its own AST, so V8 and Istanbul report one executed line
+        however much DSL sits behind it. Real coverage is a property of the
+        <em>interpreter</em>: which AST nodes did the evaluator reach? Turn the recorder
+        on and read it back.
+      </p>
+<pre><code>import { beforeAll, afterAll } from "vitest";
+import { coverage } from "aktion-runtime/test";
+
+beforeAll(() =&gt; { coverage.start(); });
+
+afterAll(() =&gt; {
+  const report = coverage.report();
+  console.log(coverage.formatSummary(report));
+  writeFileSync("coverage/aktion.lcov", coverage.toLcov(report));
+});</code></pre>
+      <p>
+        The report is per <code>.aktion</code> file, in the same terms lcov uses:
+        <strong>lines</strong> (every line carrying a node the evaluator can reach),
+        <strong>functions</strong> (each component / action / hook / effect / lambda,
+        counted when its body actually runs &mdash; so a click handler that never fires
+        shows up), and <strong>branches</strong> (both arms of every
+        <code>if</code> and ternary, each short-circuiting
+        <code>&amp;&amp;</code>/<code>||</code>/<code>??</code>, and each
+        <code>switch</code> case). <code>uncoveredLines</code> per file is the actionable
+        list.
+      </p>
+      <p>
+        Measurement accumulates across every <code>render</code>/<code>renderCompiled</code>
+        in the file, so each test contributes. Because a runner isolates each test file
+        in its own worker, a whole-suite number has to be assembled from shards:
+        write <code>coverage.report()</code> per file, then
+        <code>coverage.merge(shards)</code> in a global teardown.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>Use <code>aktion-runtime/coverage</code> outside the DOM.</strong>
+          <code>aktion-runtime/test</code> bundles the <code>&lt;aktion-app&gt;</code>
+          element, so importing it in a Vitest <code>globalSetup</code> or a plain Node
+          script throws <code>HTMLElement is not defined</code>. The
+          <code>./coverage</code> entry exposes the identical <code>coverage</code> API
+          with no DOM dependency; both share one session.
+        </p>
+      </div>
+      <p>
+        What is <em>not</em> instrumented, stated plainly because a coverage number that
+        hides its gaps is worse than none: blank lines, comments and closing braces are
+        not executable and are absent from the report entirely (as in an instrumented JS
+        file); <code>Literal</code>, <code>Member</code>, <code>Object</code> and
+        <code>Array</code> nodes carry no source position, so a line holding only those is
+        not counted; and a literal <code>$x = 1</code> initialiser is attributed to its
+        declaration rather than folded separately.
+      </p>
+
+      <h2 id="queries">Queries</h2>
+      <p>
+        Queries search the shadow DOM for elements. As in Testing Library,
+        prefer queries that resemble how a user finds things &mdash; by ARIA
+        role and accessible name, then visible text, then label.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Query</th><th>Finds</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>getByRole(role, { name })</code></td><td>An element by ARIA role (explicit or implicit) and optional accessible name.</td><td><code>getByRole("button", { name: "Save" })</code></td></tr>
+          <tr><td><code>getByText(matcher)</code></td><td>The innermost element whose visible text matches.</td><td><code>getByText("Welcome back")</code></td></tr>
+          <tr><td><code>getByLabelText(matcher)</code></td><td>A form field by its associated <code>&lt;label&gt;</code> / <code>aria-label</code>.</td><td><code>getByLabelText("Email")</code></td></tr>
+          <tr><td><code>getByPlaceholderText(matcher)</code></td><td>An input by its placeholder.</td><td><code>getByPlaceholderText("Search…")</code></td></tr>
+          <tr><td><code>getByTestId(id)</code></td><td>An element by <code>data-testid</code>. Still second choice after role / label / text, but backed by a first&#8209;class <code>testId</code> prop &mdash; see <a href="sx.html#universal">the universal props</a> for how to put one on a component.</td><td><code>getByTestId("row-7")</code></td></tr>
+        </tbody>
+      </table>
+      <p>
+        The <strong>matcher</strong> is a string (exact, normalised text by
+        default; pass <code>{ exact: false }</code> for a substring), a
+        <code>RegExp</code>, or a predicate <code>(text, el) =&gt; boolean</code>.
+      </p>
+      <h3 id="test-ids">Test ids: root elements and empty output</h3>
+      <p>
+        <code>getByTestId</code> only finds something once a component actually carries a
+        matching <code>data-testid</code> &mdash; give it one with the <code>testId</code> prop
+        (see <a href="sx.html#universal">the universal props</a>). Two things to know before you
+        rely on it:
+      </p>
+      <ul>
+        <li>
+          <strong>A test id marks the component&rsquo;s root.</strong> On a labelled form field
+          the root is the field wrapper, not the control inside it, so scope a second query to
+          reach the control: <code>within(getByTestId("email")).getByRole("textbox")</code>.
+        </li>
+        <li>
+          <strong>No element, no attribute.</strong> A component that renders nothing &mdash;
+          <code>Show(false, [...])</code> with no <code>fallback</code>, for example &mdash; has
+          no node to carry <code>data-testid</code>, so <code>queryByTestId</code> correctly
+          returns <code>null</code> rather than finding a hidden placeholder.
+        </li>
+      </ul>
+      <h3 id="query-variants">Query variants</h3>
+      <p>Every query comes in the familiar six flavours:</p>
+      <table class="signature-table">
+        <thead><tr><th>Variant</th><th>No match</th><th>1 match</th><th>&gt;1 match</th><th>Async</th></tr></thead>
+        <tbody>
+          <tr><td><code>getBy*</code></td><td>throws</td><td>returns it</td><td>throws</td><td>no</td></tr>
+          <tr><td><code>queryBy*</code></td><td>returns <code>null</code></td><td>returns it</td><td>throws</td><td>no</td></tr>
+          <tr><td><code>getAllBy*</code></td><td>throws</td><td>returns <code>[el]</code></td><td>returns all</td><td>no</td></tr>
+          <tr><td><code>queryAllBy*</code></td><td>returns <code>[]</code></td><td>returns <code>[el]</code></td><td>returns all</td><td>no</td></tr>
+          <tr><td><code>findBy*</code></td><td>retries, then throws</td><td>resolves to it</td><td>throws</td><td><strong>yes</strong></td></tr>
+          <tr><td><code>findAllBy*</code></td><td>retries, then throws</td><td>resolves to <code>[el]</code></td><td>resolves to all</td><td><strong>yes</strong></td></tr>
+        </tbody>
+      </table>
+      <p>
+        Use <code>queryBy*</code> to assert <em>absence</em>
+        (<code>expect(screen.queryByText("Error")).toBeNull()</code>) and
+        <code>findBy*</code> to assert something that appears <em>after</em> an
+        effect, timer, or network request resolves.
+      </p>
+      <h3 id="scoped-queries-with-within">Scoped queries with <code>within</code></h3>
+      <p>
+        When a page has several similar regions (cards, rows, list items), scope a
+        query to one subtree with <code>within(node)</code>. It returns the same query
+        suite, but rooted at <code>node</code> instead of the whole shadow tree.
+      </p>
+<pre><code>import { render, within } from "aktion-runtime/test"
+
+const { getByTestId } = render(program)
+const row = getByTestId("row-7")
+expect(within(row).getByRole("button", { name: "Delete" })).toBeTruthy()</code></pre>
+
+      <h2 id="interactions">Interactions</h2>
+      <p>
+        Interactions dispatch real DOM events &mdash; the same ones a browser
+        fires &mdash; and then flush the reactive queue. Two-way binding,
+        <code>onClick</code> handlers, and effects all run exactly as in
+        production.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Method</th><th>Does</th></tr></thead>
+        <tbody>
+          <tr><td><code>screen.click(targetOrText)</code></td><td>Clicks an element, or finds a button/link by text and clicks it.</td></tr>
+          <tr><td><code>screen.type(targetOrLabel, text)</code></td><td>Types into an element, or into a field found by label/placeholder.</td></tr>
+          <tr><td><code>screen.user.click(el)</code></td><td>Click an element.</td></tr>
+          <tr><td><code>screen.user.type(el, text)</code></td><td>Type character-by-character (fires an <code>input</code> event per key, like real typing).</td></tr>
+          <tr><td><code>screen.user.clear(el)</code></td><td>Clear an input&rsquo;s value.</td></tr>
+          <tr><td><code>screen.user.selectOption(select, value)</code></td><td>Choose a <code>&lt;select&gt;</code> option.</td></tr>
+          <tr><td><code>screen.user.check(el)</code> / <code>uncheck</code></td><td>Toggle a checkbox / radio.</td></tr>
+          <tr><td><code>screen.user.keyboard(el, key)</code></td><td>Fire <code>keydown</code> + <code>keyup</code> for a key.</td></tr>
+          <tr><td><code>screen.user.hover(el)</code> / <code>unhover</code></td><td>Fire pointer enter/leave (for tooltips, hover cards).</td></tr>
+          <tr><td><code>screen.user.submit(form)</code></td><td>Submit a form.</td></tr>
+          <tr><td><code>screen.fireEvent(el, type, init?)</code></td><td>Low-level escape hatch: dispatch any event and flush.</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="two-way-binding">Two-way binding</h3>
+      <p>
+        Typing into a bound input writes straight through to the reactive atom
+        &mdash; the genuine binding path, not a simulation.
+      </p>
+<pre><code>it("binds an input to $state", async () =&gt; {
+  const screen = render(`
+    $name = ""
+    $app(Column([
+      Input("Name", { value: $name }),
+      Text(\`Hi \${$name}\`)
+    ]))
+  `);
+  await flush();
+
+  await screen.type(screen.getByRole("textbox"), "Ada");
+
+  expect(screen.state.get("name")).toBe("Ada");
+  expect(screen.getByText("Hi Ada", { exact: false })).toBeTruthy();
+});</code></pre>
+
+      <h2 id="state">Asserting on reactive state</h2>
+      <p>
+        <code>screen.state</code> reads the live reactive snapshot. It is the
+        cleanest way to assert behaviour that isn&rsquo;t (or isn&rsquo;t only)
+        visible in the DOM.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Member</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr><td><code>screen.state.get(name)</code></td><td>One atom&rsquo;s current value.</td></tr>
+          <tr><td><code>screen.state.has(name)</code></td><td>Whether the atom exists yet.</td></tr>
+          <tr><td><code>screen.state.snapshot()</code></td><td>The whole state object &mdash; great for <code>toMatchSnapshot()</code>.</td></tr>
+          <tr><td><code>screen.state.set(name, value)</code></td><td>Simulate a host-side write (<code>hydrateState</code>) and re-render.</td></tr>
+          <tr><td><code>screen.state.key(name)</code></td><td>The runtime key backing <code>name</code> &mdash; the mangled symbol for a module-local atom.</td></tr>
+          <tr><td><code>screen.state.planned</code></td><td>Whether the program has planned yet, so its atoms exist.</td></tr>
+          <tr><td><code>screen.waitForState(name, predicate?)</code></td><td>Await an atom until <code>predicate(value)</code> holds (or it becomes non-null).</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Names are the ones the <strong>author</strong> wrote. In a multi-file
+        program the linker gives every non-entry module private scope by renaming
+        its atoms &mdash; <code>$count</code> declared in
+        <code>lib/store.aktion</code> is <code>__a1_count</code> in
+        <code>snapshot()</code>, and the numeric part changes when an unrelated
+        import is added. Every member above resolves that for you; hard-coding the
+        mangled key is what breaks.
+      </p>
+      <div class="callout" data-variant="warning">
+        <p>
+          <strong>Flush before you read or write state.</strong>
+          <code>render</code> / <code>renderCompiled</code> only <em>schedule</em>
+          the first render &mdash; Aktion plans on the microtask queue &mdash; so
+          until one <code>await flush()</code> (or any <code>findBy*</code>) has
+          happened the store is still empty and <code>state.planned</code> is
+          <code>false</code>. <code>state.set</code> called that early throws, rather
+          than declaring an unrelated top-level atom the program never reads. To seed
+          a value <em>before</em> the first plan, use
+          <code>render(&hellip;, { state })</code> or
+          <code>screen.state.hydrate(&hellip;)</code>, which are built for it.
+        </p>
+      </div>
+<pre><code>// Seed initial state, then assert a derived/computed atom.
+const screen = render(`
+  $price = 0
+  $qty   = 0
+  $total = $price * $qty
+  $app(Text(\`Total: \${$total}\`))
+`, { state: { price: 10, qty: 3 } });
+
+await flush();
+expect(screen.state.get("total")).toBe(30);</code></pre>
+
+      <h2 id="async">Async, effects &amp; timers</h2>
+      <p>
+        Aktion schedules renders on the microtask queue. The library exposes
+        three escalating tools:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Tool</th><th>Use for</th></tr></thead>
+        <tbody>
+          <tr><td><code>await flush()</code></td><td>Settle a synchronous chain (a click that writes state that re-derives a computed atom). Drains the microtask queue.</td></tr>
+          <tr><td><code>await screen.findByText(...)</code></td><td>Wait for something to appear after a promise / timer / request. Retries with a timeout.</td></tr>
+          <tr><td><code>await waitFor(fn)</code> / <code>screen.waitForState(...)</code></td><td>Wait for an arbitrary condition / a state atom to satisfy a predicate.</td></tr>
+          <tr><td><code>await act(fn)</code></td><td>Run a block that triggers reactive writes, then flush &mdash; the Aktion analogue of React&rsquo;s <code>act()</code>.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        For <code>setInterval</code> / <code>"every(N)"</code> / debounced
+        effects, use your runner&rsquo;s fake timers. <code>flush()</code> still
+        works because microtasks are not faked.
+      </p>
+<pre><code>import { vi } from "vitest";
+
+it("ticks every second", async () =&gt; {
+  vi.useFakeTimers();
+  const screen = render(`
+    $now = 0
+    $effect(() =&gt; {
+      let id = setInterval(() =&gt; { $now = $now + 1 }, 1000)
+      cleanup(() =&gt; clearInterval(id))
+    }, ["mount"])
+    $app(Text(\`Ticks: \${$now}\`))
+  `);
+  await flush();
+
+  await vi.advanceTimersByTimeAsync(3000);        // fire three intervals
+  await flush();
+
+  expect(screen.state.get("now")).toBe(3);
+  vi.useRealTimers();
+});</code></pre>
+
+      <h2 id="components">Testing a single component</h2>
+      <p>
+        <code>renderComponent(expression, options)</code> renders one component
+        call in isolation &mdash; it wraps the expression in <code>$app(...)</code>
+        and lets you prepend a <code>setup</code> block of helper DSL (component
+        definitions, seed state).
+      </p>
+<pre><code>import { renderComponent, flush } from "aktion-runtime/test";
+
+it("colours a PriceTag by amount", async () =&gt; {
+  const screen = renderComponent(`PriceTag(42)`, {
+    setup: `
+      function PriceTag(amount) {
+        return Badge(\`$\${amount}\`, { tone: amount &gt; 100 ? "danger" : "success" })
+      }
+    `,
+  });
+  await flush();
+  expect(screen.getByText("$42", { exact: false })).toBeTruthy();
+});</code></pre>
+      <p>
+        To assert that a callback prop fired, capture it the idiomatic Aktion
+        way &mdash; write a <code>$state</code> flag (or <code>$emit</code>) from
+        an inline handler, then read it back. This keeps the test in the
+        language rather than reaching for host-side spies.
+      </p>
+<pre><code>it("fires onClick", async () =&gt; {
+  const screen = renderComponent(`Button("Save", { onClick: () =&gt; $saved = true })`);
+  await flush();
+
+  await screen.click("Save");
+
+  expect(screen.state.get("saved")).toBe(true);
+});</code></pre>
+
+      <h2 id="events">Testing events</h2>
+      <p>
+        An Aktion program talks to its host by dispatching DOM events. The
+        Screen captures them so you can assert on the payloads. The three
+        built-ins &mdash; <code>assistant-message</code>,
+        <code>route-change</code>, and <code>error</code> &mdash; are always
+        captured. For a custom <code>$emit("name", ...)</code> event, list its
+        name in <code>captureEvents</code> (or call <code>screen.listen("name")</code>)
+        <strong>before</strong> the trigger, since custom names aren&rsquo;t
+        known in advance.
+      </p>
+<pre><code>it("emits a saved event with the new id", async () =&gt; {
+  const screen = render(`
+    function save() { $emit("saved", { id: 7 }) }
+    $app(Button("Save", { onClick: save }))
+  `, { captureEvents: ["saved"] });
+  await flush();
+
+  await screen.click("Save");
+
+  expect(screen.emitted("saved")).toEqual([{ id: 7 }]);
+  expect(screen.lastEvent("saved")).toEqual({ id: 7 });
+});</code></pre>
+      <table class="signature-table">
+        <thead><tr><th>Member</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr><td><code>screen.emitted(type?)</code></td><td>Array of <code>detail</code> payloads for that event type (or all events).</td></tr>
+          <tr><td><code>screen.lastEvent(type)</code></td><td>The most recent <code>detail</code> for that type.</td></tr>
+          <tr><td><code>screen.events</code></td><td>Every captured <code>{ type, detail, event }</code>.</td></tr>
+          <tr><td><code>screen.listen(type)</code></td><td>Start capturing a custom event type (call before the trigger).</td></tr>
+          <tr><td><code>await screen.waitForEvent(type)</code></td><td>Resolve to the next <code>detail</code> of that type (async work).</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="http">Testing <code>$http</code></h2>
+      <p>
+        Pass a <code>fetch</code> mock to <code>render</code> and it replaces the
+        global <code>fetch</code> for the lifetime of the test (restored on
+        <code>cleanup</code>). The handler receives the resolved URL and the
+        request init; return a <code>Response</code>, a string, or a plain
+        object &mdash; the <code>json(data, status?)</code> helper builds a JSON
+        response for you.
+      </p>
+<pre><code>import { render, json, flush } from "aktion-runtime/test";
+
+it("loads and renders the user list", async () =&gt; {
+  const screen = render(`
+    $users = $http({ url: "https://api.example.com/users" })
+    $app(Async($users, {
+      loading: Text("Loading…"),
+      data:    Text(\`\${$users.data.length} users\`)
+    }))
+  `, {
+    fetch: (url, init) =&gt; json([{ id: 1 }, { id: 2 }]),
+  });
+
+  // findBy* waits for the request to resolve and the data slot to render.
+  expect(await screen.findByText("2 users", { exact: false })).toBeTruthy();
+
+  // Assert what was requested.
+  expect(screen.requests[0].url).toContain("/users");
+  expect(screen.requests[0].method).toBe("GET");
+});</code></pre>
+      <p>Branch on method / URL to drive writes, errors, and refetches:</p>
+<pre><code>const screen = render(programSource, {
+  fetch: (url, init) =&gt; {
+    if (init.method === "POST") return json({ id: 99 }, 201);
+    if (url.includes("/fail")) return { status: 500, json: { message: "boom" } };
+    return json([]);
+  },
+});
+
+// later — assert the POST body the program sent
+await screen.click("Create");
+const post = screen.requests.find((r) =&gt; r.method === "POST");
+expect(post.body).toEqual({ name: "New order" });</code></pre>
+
+      <h2 id="routing">Testing routing</h2>
+      <p>
+        Set the initial hash route with the <code>route</code> option, then
+        drive navigation with <code>screen.navigate(...)</code>. The matching
+        <code>$router</code> arm renders just like in the browser.
+      </p>
+<pre><code>it("renders the matched route and follows navigation", async () =&gt; {
+  const screen = render(`
+    $app($router({
+      "/":      Text("Home page"),
+      "/about": Text("About page"),
+      default:  Text("Not found")
+    }))
+  `, { route: "/about" });
+  await flush();
+
+  expect(screen.getByText("About page", { exact: false })).toBeTruthy();
+  expect(screen.route).toBe("/about");
+
+  await screen.navigate("/");
+  expect(screen.getByText("Home page", { exact: false })).toBeTruthy();
+});</code></pre>
+
+      <h2 id="streaming">Testing streaming</h2>
+      <p>
+        Aktion is streaming-first &mdash; an LLM emits the program token by
+        token. <code>screen.stream(chunks)</code> appends each chunk (with
+        <code>streaming</code> on, so transient mid-token parse errors are
+        suppressed) and flushes, letting you assert the UI converges once the
+        program completes. <code>screen.appendChunk</code> appends a single
+        chunk for finer control.
+      </p>
+<pre><code>it("renders progressively as chunks arrive", async () =&gt; {
+  const screen = render("");                       // start empty
+
+  await screen.stream([
+    `$app(Column([`,
+    `  Text("First"),`,
+    `  Text("Second")`,
+    `]))`,
+  ]);
+
+  expect(screen.getByText("First", { exact: false })).toBeTruthy();
+  expect(screen.getByText("Second", { exact: false })).toBeTruthy();
+});</code></pre>
+
+      <h2 id="snapshots">Snapshots</h2>
+      <p>Two snapshot surfaces &mdash; the rendered markup and the reactive state:</p>
+<pre><code>const screen = render(programSource);
+await flush();
+
+expect(screen.html()).toMatchSnapshot();              // rendered shadow DOM
+expect(screen.state.snapshot()).toMatchSnapshot();    // every reactive atom</code></pre>
+      <p>
+        <code>screen.debug()</code> prints the current shadow-DOM markup to the
+        console while you iterate &mdash; the equivalent of RTL&rsquo;s
+        <code>screen.debug()</code>.
+      </p>
+
+      <h2 id="custom-components">Custom (host-registered) components</h2>
+      <p>
+        If your app registers TypeScript <code>ComponentSpec</code>s via
+        <code>registerComponents(...)</code>, pass them to <code>render</code>
+        through the <code>components</code> option so your program can call them.
+      </p>
+<pre><code>import { render } from "aktion-runtime/test";
+import { ProductCard } from "../src/components/product-card";
+
+const screen = render(`$app(ProductCard("Widget", { price: 9.99 }))`, {
+  components: [ProductCard],
+});
+await flush();
+expect(screen.getByText("Widget", { exact: false })).toBeTruthy();</code></pre>
+
+      <h2 id="a11y">Accessibility audits with <code>axe</code></h2>
+      <p>
+        Run a lightweight a11y audit on any rendered subtree with
+        <code>axe(node)</code>. It returns an array of violations &mdash; missing
+        image <code>alt</code> text, buttons without an accessible name, inputs
+        without a label, duplicate ids, and invalid <code>tabindex</code> &mdash; so
+        you can fail a test the moment a regression slips in.
+      </p>
+<pre><code>import { render, axe } from "aktion-runtime/test"
+
+test("dashboard has no obvious a11y violations", () =&gt; {
+  const { container } = render(program)
+  expect(axe(container)).toHaveLength(0)
+})</code></pre>
+
+      <h2 id="ssr">Testing SSR output</h2>
+      <p>
+        Assert on server&#8209;rendered markup with <code>renderToString</code> from the
+        runtime entry. It returns <code>{ html, state }</code>; check that critical
+        content is present in the string (no client mount required) and that the
+        hydration <code>state</code> carries what the page needs.
+      </p>
+<pre><code>import { renderToString } from "aktion-runtime"
+
+test("renders the headline on the server", () =&gt; {
+  const { html, state } = renderToString(program, { path: "/" })
+  expect(html).toContain("Welcome back")
+  expect(state.user).toBeDefined()
+})</code></pre>
+      <p>
+        In Node, register a DOM shim (<code>happy-dom</code> / <code>jsdom</code>) on
+        <code>globalThis</code> first &mdash; the same setup described in
+        <a href="#setup">Setup</a>.
+      </p>
+
+      <h2 id="api">API reference</h2>
+      <h3 id="renderprogram-options-and-rendercomponentexpression-options"><code>render(program, options?)</code> &amp; <code>renderComponent(expression, options?)</code></h3>
+      <table class="signature-table">
+        <thead><tr><th>Option</th><th>Type</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>state</code></td><td><code>object</code></td><td>Seed reactive <code>$state</code> before the first plan (inject props / fixtures).</td></tr>
+          <tr><td><code>theme</code></td><td><code>string | object</code></td><td>Theme name or token map applied before the first render.</td></tr>
+          <tr><td><code>route</code></td><td><code>string</code></td><td>Initial hash route, e.g. <code>"/orders/42"</code>.</td></tr>
+          <tr><td><code>fetch</code></td><td><code>(url, init) =&gt; result</code></td><td>Mock the global <code>fetch</code> used by <code>$http(...)</code>.</td></tr>
+          <tr><td><code>components</code></td><td><code>ComponentSpec[]</code></td><td>Host-registered custom components.</td></tr>
+          <tr><td><code>captureEvents</code></td><td><code>string[]</code></td><td>Custom <code>$emit</code> event names to capture from the first render.</td></tr>
+          <tr><td><code>showErrors</code></td><td><code>boolean</code></td><td>Render the in-shadow parse-error banner (off by default).</td></tr>
+          <tr><td><code>container</code></td><td><code>HTMLElement</code></td><td>Mount target (defaults to <code>document.body</code>).</td></tr>
+          <tr><td><code>setup</code> <span class="demo-cheats"><code>(renderComponent only)</code></span></td><td><code>string</code></td><td>DSL statements injected above the <code>$app(expression)</code> line.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="the-screen">The Screen</h3>
+      <table class="signature-table">
+        <thead><tr><th>Group</th><th>Members</th></tr></thead>
+        <tbody>
+          <tr><td>Queries</td><td><code>getByText</code>, <code>getByRole</code>, <code>getByLabelText</code>, <code>getByPlaceholderText</code>, <code>getByTestId</code> &mdash; each with <code>query/getAll/queryAll/find/findAll</code> variants.</td></tr>
+          <tr><td>Interaction</td><td><code>click</code>, <code>type</code>, <code>fireEvent</code>, and the <code>user.*</code> suite.</td></tr>
+          <tr><td>State</td><td><code>state.get</code>, <code>state.has</code>, <code>state.snapshot</code>, <code>state.set</code>, <code>waitForState</code>.</td></tr>
+          <tr><td>Events</td><td><code>events</code>, <code>emitted</code>, <code>lastEvent</code>, <code>listen</code>, <code>waitForEvent</code>.</td></tr>
+          <tr><td>Routing</td><td><code>navigate</code>, <code>route</code>.</td></tr>
+          <tr><td>Lifecycle</td><td><code>rerender</code>, <code>appendChunk</code>, <code>stream</code>, <code>setStreaming</code>, <code>setTheme</code>, <code>flush</code>, <code>unmount</code>.</td></tr>
+          <tr><td>Inspect</td><td><code>html</code>, <code>debug</code>, <code>container</code>, <code>shadowRoot</code>, <code>requests</code>.</td></tr>
+        </tbody>
+      </table>
+      <h3 id="module-functions">Module functions</h3>
+      <table class="signature-table">
+        <thead><tr><th>Export</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>render(program, options?)</code></td><td>Mount a full program from source; returns a <code>Screen</code>.</td></tr>
+          <tr><td><code>renderCompiled(compiled, options?)</code></td><td>Mount a linked multi-file program (a <code>CompiledProgram</code> from the Vite plugin).</td></tr>
+          <tr><td><code>renderComponent(expr, options?)</code></td><td>Mount one component expression in isolation.</td></tr>
+          <tr><td><code>coverage</code></td><td>DSL coverage: <code>start</code>, <code>stop</code>, <code>reset</code>, <code>report</code>, <code>merge</code>, <code>toLcov</code>, <code>formatSummary</code>.</td></tr>
+          <tr><td><code>within(node)</code></td><td>Return the query suite scoped to a subtree.</td></tr>
+          <tr><td><code>axe(node)</code></td><td>Audit a subtree and return an array of a11y violations.</td></tr>
+          <tr><td><code>cleanup()</code></td><td>Unmount every screen, restore mocked <code>fetch</code> and put <code>location.hash</code> back (wire into <code>afterEach</code>).</td></tr>
+          <tr><td><code>flush(times?)</code></td><td>Drain the microtask queue so the render cascade settles.</td></tr>
+          <tr><td><code>act(fn)</code></td><td>Run a reactive-write block, then flush.</td></tr>
+          <tr><td><code>waitFor(fn, opts?)</code></td><td>Poll until <code>fn</code> settles or times out. <code>null</code>, <code>false</code> and <code>[]</code> retry; pass <code>until</code> to decide yourself.</td></tr>
+          <tr><td><code>json(data, status?)</code></td><td>Build a JSON <code>MockResult</code> for a <code>fetch</code> handler.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="react">Coming from React Testing Library</h2>
+      <p>The mental model transfers almost one-to-one:</p>
+      <table class="signature-table">
+        <thead><tr><th>React Testing Library</th><th>Aktion Testing Library</th></tr></thead>
+        <tbody>
+          <tr><td><code>render(&lt;App /&gt;)</code></td><td><code>render(`$app(...)`)</code> &mdash; you pass a program string, not JSX.</td></tr>
+          <tr><td><code>screen.getByRole / getByText</code></td><td>Same names, same semantics &mdash; but on the returned <code>screen</code>, scoped to the shadow root.</td></tr>
+          <tr><td><code>userEvent.click(el)</code></td><td><code>screen.user.click(el)</code> or <code>screen.click("text")</code>.</td></tr>
+          <tr><td><code>userEvent.type(el, "x")</code></td><td><code>screen.user.type(el, "x")</code> or <code>screen.type("Label", "x")</code>.</td></tr>
+          <tr><td><code>await screen.findByText / waitFor</code></td><td>Identical.</td></tr>
+          <tr><td><code>act(() =&gt; …)</code></td><td><code>act(...)</code> / <code>await flush()</code>.</td></tr>
+          <tr><td><code>jest.fn()</code> spy passed as a prop</td><td>Capture with an inline <code>$state</code> flag or <code>$emit(...)</code>, assert via <code>screen.state</code> / <code>screen.emitted</code>.</td></tr>
+          <tr><td>MSW / <code>fetch</code> mock</td><td><code>{ fetch }</code> option + <code>json()</code> helper; inspect <code>screen.requests</code>.</td></tr>
+          <tr><td>Redux store probing</td><td><code>screen.state.get(...)</code> / <code>state.snapshot()</code> (the reactive store).</td></tr>
+          <tr><td><code>rerender(&lt;App /&gt;)</code></td><td><code>screen.rerender(`…`)</code>.</td></tr>
+          <tr><td><em>(no equivalent)</em></td><td><code>screen.stream([...])</code> &mdash; test streaming / partial rendering.</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="best-practices">Best practices</h2>
+      <ul>
+        <li><strong>Query by role / text, not by class.</strong> Tests that find a button by its label survive refactors; tests that query <code>.rui-button</code> break when internals change.</li>
+        <li><strong>Assert on what the user sees first.</strong> Reach for <code>screen.state</code> when the behaviour is genuinely invisible (a computed total, a flag), not as a shortcut around the DOM.</li>
+        <li><strong>Use <code>findBy*</code> for anything async.</strong> Never <code>setTimeout</code> in a test &mdash; <code>findBy*</code> / <code>waitFor</code> retry deterministically.</li>
+        <li><strong>One behaviour per test.</strong> Render, do one thing, assert the consequence &mdash; the counter test above is the shape to copy.</li>
+        <li><strong>Wire <code>afterEach(cleanup)</code> once</strong> per file so a leaked element, a mocked <code>fetch</code> or the route a test navigated to can&rsquo;t bleed into the next one. <code>location.hash</code> is document state, not element state &mdash; without the restore, a later <code>render()</code> with no <code>route</code> starts wherever the previous test finished, and the suite&rsquo;s result depends on its own ordering.</li>
+        <li><strong>Prefer real interactions to direct state writes.</strong> <code>screen.click("Save")</code> exercises the handler, the action, and the re-render; <code>state.set(...)</code> only seeds a value.</li>
+      </ul>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="hooks.html">
+          <span class="demo-tag">Core</span>
+          <h3 id="hooks-and-state">Hooks &amp; state</h3>
+          <p>The reactive model your tests assert against &mdash; <code>$state</code>, <code>$memo</code>, and per-instance state.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="side-effects.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3 id="side-effects">Side effects</h3>
+          <p>Effects, timers, and cleanup &mdash; what fake timers and <code>findBy*</code> let you test.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="http.html">
+          <span class="demo-tag">Data</span>
+          <h3 id="http-and-resources">HTTP &amp; resources</h3>
+          <p>The <code>$http({…})</code> resource bag you mock with the <code>fetch</code> option.</p>
+          <span class="demo-arrow">View the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+</body>
+</html>
