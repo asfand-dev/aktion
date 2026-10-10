@@ -110,3 +110,100 @@ describe("a $store factory", () => {
     expect(screen.queryByText("b=1")).not.toBeNull();
   });
 });
+
+/**
+ * What the setter-action shape does that a direct write does not, measured on
+ * the runtime. These pin the claims in `docs/modules.html#shared-state-writes`.
+ */
+describe("a setter action, measured", () => {
+  const ui = "export let $open = false\nexport const setOpen = v => { $open = v }";
+  const text = (screen: ReturnType<typeof mount>) => (screen.shadowRoot?.textContent ?? "").replace(/<style[\s\S]*?<\/style>/g, "");
+
+  it("re-runs an effect in the owner, the importer and a third module, whichever module calls it", async () => {
+    const log: string[] = [];
+    (globalThis as { __log?: string[] }).__log = log;
+    const effect = (who: string) => `$effect(() => { globalThis.__log.push("${who}:" + $open) }, [$open])`;
+    const screen = mount({
+      "/ui.aktion": `${ui}\n${effect("owner")}`,
+      "/b.aktion": [
+        'import { $open, setOpen } from "./ui.aktion"',
+        effect("b"),
+        'export function B() { return Button("tog-b", () => setOpen(!$open)) }',
+      ].join("\n"),
+      "/app.aktion": [
+        'import { $open, setOpen } from "./ui.aktion"',
+        'import { B } from "./b.aktion"',
+        effect("app"),
+        '$app(Column([Button("tog-app", () => setOpen(!$open)), B()]))',
+      ].join("\n"),
+    });
+    await screen.flush(12);
+    expect(log).toEqual(["owner:false", "b:false", "app:false"]);
+    log.length = 0;
+    await screen.click("tog-app");
+    expect(log).toEqual(["owner:true", "b:true", "app:true"]);
+    log.length = 0;
+    await screen.click("tog-b");
+    expect(log).toEqual(["owner:false", "b:false", "app:false"]);
+  });
+
+  it("is what lets an importer set the atom at the top level, where a direct write does nothing", async () => {
+    const direct = mount({
+      "/ui.aktion": "export let $open = false",
+      "/app.aktion": 'import { $open } from "./ui.aktion"\n$open = true\n$app(Text(`open=${$open}`))',
+    });
+    await direct.flush(12);
+    expect(text(direct)).toContain("open=false");
+    cleanup();
+    const viaSetter = mount({
+      "/ui.aktion": ui,
+      "/app.aktion": 'import { $open, setOpen } from "./ui.aktion"\nsetOpen(true)\n$app(Text(`open=${$open}`))',
+    });
+    await viaSetter.flush(12);
+    expect(text(viaSetter)).toContain("open=true");
+  });
+
+  it("is not a way to write while rendering: a function-declaration setter does nothing there", async () => {
+    const screen = mount({
+      "/ui.aktion": "export let $open = false\nexport function setOpen(v) { $open = v }",
+      "/app.aktion": [
+        'import { $open, setOpen } from "./ui.aktion"',
+        "function C() { setOpen(true)\n return Text(`open=${$open}`) }",
+        "$app(C())",
+      ].join("\n"),
+    });
+    await screen.flush(12);
+    expect(text(screen)).toContain("open=false");
+  });
+
+  it("is a direct write in a rendered component that gets a private copy, not the shared atom", async () => {
+    const screen = mount({
+      "/ui.aktion": "export let $open = false",
+      "/c.aktion": 'import { $open } from "./ui.aktion"\nexport function C() { $open = true\n return Text(`c=${$open}`) }',
+      "/app.aktion": [
+        'import { $open } from "./ui.aktion"',
+        'import { C } from "./c.aktion"',
+        "$app(Column([C(), Text(`app=${$open}`)]))",
+      ].join("\n"),
+    });
+    await screen.flush(12);
+    expect(text(screen)).toContain("c=true");
+    expect(text(screen)).toContain("app=false");
+  });
+
+  it("an exported $store property cannot be an effect dependency, an atom can", () => {
+    const result = (dep: string, decl: string, read: string) => {
+      const files: Record<string, string> = {
+        "/ui.aktion": decl,
+        "/app.aktion": `import { ${read} } from "./ui.aktion"\n$effect(() => { globalThis.console.log(1) }, [${dep}])\n$app(Text("x"))`,
+      };
+      const resolver: ModuleResolver = {
+        resolve: (spec) => (spec.startsWith("./") ? `/${spec.slice(2)}` : null),
+        load: (path) => files[path]!,
+      };
+      return linkProgram(files["/app.aktion"]!, "/app.aktion", resolver).diagnostics.length;
+    };
+    expect(result("ui.open", "export const ui = $store({ open: false })", "ui")).toBeGreaterThan(0);
+    expect(result("$open", "export let $open = false", "$open")).toBe(0);
+  });
+});
