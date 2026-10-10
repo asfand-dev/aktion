@@ -149,7 +149,7 @@ describe("a local list", () => {
       "/lib.aktion": `${lib}\nexport let z = 0`,
     }).diagnostics;
     expect(diagnostics.map((d) => d.message)).toEqual([`/lib.aktion: ${message}`]);
-    expect(diagnostics[0]).toMatchObject({ code: "AKT-LINK-EXPORT", path: "/lib.aktion", line: lib.split("\n").length, column: 1 });
+    expect(diagnostics[0]).toMatchObject({ code: "AKT-LINK-EXPORT", path: "/lib.aktion", line: lib.split("\n").length });
   });
 
   it("says an import must be re-exported with `from`", () => {
@@ -328,6 +328,102 @@ describe("formatting and declarations", () => {
     );
     expect(dts).toContain('export { x as y } from "./m.aktion";');
     expect(dts).toContain('export * from "./k.aktion";');
+  });
+});
+
+describe("E108 through export chains", () => {
+  const importer = (spec: string, name = "$todos") =>
+    `import { ${spec} } from "./barrel.aktion"\nexport function add(t) {\n  ${name}.push(t)\n}`;
+  const run = async (barrel: string, imp: string, store = "export let $todos = []") => {
+    const res = await linkProject({
+      entry: "app.aktion",
+      files: {
+        "app.aktion": 'import { add } from "./ops.aktion.js"\n$app(Button("Go", { onClick: () => add(1) }))',
+        "ops.aktion.js": imp,
+        "barrel.aktion": barrel,
+        "store.aktion": store,
+      },
+    });
+    return res.diagnostics.map((d) => `${d.code}@${d.path}:${d.line}:${d.column}`);
+  };
+
+  it.each([
+    ["an inline export", 'export { $todos } from "./store.aktion"', importer("$todos"), "export let $todos = []"],
+    ["a local list in the exporter", "export { $todos } from \"./store.aktion\"", importer("$todos"), "let $todos = []\nexport { $todos }"],
+    ["an alias in a list", 'export { $todos as $items } from "./store.aktion"', importer("$items", "$items"), "export let $todos = []"],
+    ["a local alias list", "let $todos = []\nexport { $todos as $items }", importer("$items", "$items"), ""],
+    ["a star barrel", 'export * from "./store.aktion"', importer("$todos"), "export let $todos = []"],
+    ["a chain of barrels", 'export * from "./store.aktion"', importer("$todos"), "export let $todos = []"],
+  ])("flags a data atom behind %s", async (_name, barrel, imp, store) => {
+    expect(await run(barrel, imp, store)).toEqual(["E108@ops.aktion.js:3:10"]);
+  });
+
+  it("stays quiet for a handle behind the same barrels", async () => {
+    expect(await run('export { $todos as $items } from "./store.aktion"', importer("$items", "$items"), "export let $todos = $store({ items: [] })")).toEqual([]);
+    expect(await run('export * from "./store.aktion"', importer("$todos"), "export let $todos = $store({ items: [] })")).toEqual([]);
+  });
+});
+
+describe("export diagnostics", () => {
+  it("names an explicit re-export cycle", () => {
+    expect(messages({
+      "/app.aktion": 'import { x } from "./a.aktion"\n$app(Text("x"))',
+      "/a.aktion": 'export { x } from "./b.aktion"',
+      "/b.aktion": 'export { x } from "./a.aktion"',
+    })).toContain('"./a.aktion" re-exports `x` in a cycle of re-exports that never reaches a declaration.');
+  });
+
+  it("points at the offending specifier", () => {
+    const d = link({
+      "/app.aktion": 'import { ok } from "./barrel.aktion"\n$app(Text(ok))',
+      "/barrel.aktion": 'export {\n  ok,\n  missing,\n} from "./m.aktion"\nexport { nope }',
+      "/m.aktion": "export const ok = 1",
+    }).diagnostics;
+    expect(d.map((x) => `${x.line}:${x.column}`).sort()).toEqual(["3:3", "5:10"]);
+  });
+
+  it("keeps a name a failed re-export source supplies quiet, but not one it never named", () => {
+    expect(messages({
+      "/app.aktion": 'import { a } from "./barrel.aktion"\n$app(Text("x"))',
+      "/barrel.aktion": 'export { a } from "nowhere"',
+    })).toEqual(['/barrel.aktion: Cannot resolve import "nowhere".']);
+    expect(messages({
+      "/app.aktion": 'import { b } from "./barrel.aktion"\n$app(Text("x"))',
+      "/barrel.aktion": 'export { a } from "nowhere"',
+    })).toEqual(['/barrel.aktion: Cannot resolve import "nowhere".', '"./barrel.aktion" does not export `b`.']);
+  });
+
+  it("is silent about a name a failed `export *` source might hold, also through another star", () => {
+    const files: Files = {
+      "/app.aktion": 'import { a } from "./top.aktion"\n$app(Text("x"))',
+      "/top.aktion": 'export * from "./barrel.aktion"',
+      "/barrel.aktion": 'export * from "nowhere"',
+    };
+    expect(messages(files)).toEqual(['/barrel.aktion: Cannot resolve import "nowhere".']);
+  });
+
+  it("a failed plain import does not silence a missing re-export", () => {
+    expect(messages({
+      "/app.aktion": 'import { missing } from "./barrel.aktion"\n$app(Text("x"))',
+      "/barrel.aktion": 'import { q } from "nowhere"\nexport { missing } from "./m.aktion"',
+      "/m.aktion": "export const ok = 1",
+    })).toContain('/barrel.aktion: "./m.aktion" does not export `missing`.');
+  });
+
+  it("keeps `a` and `$a` apart: one list can export both", () => {
+    const files: Files = {
+      "/app.aktion": 'import { a, $a } from "./lib.aktion"\n$app(Text(`${a}${$a}`))',
+      "/lib.aktion": "const a = 1\nlet $a = 2\nexport { a, $a }",
+    };
+    expect(messages(files)).toEqual([]);
+    expect(parse("export { a, $a }").errors).toEqual([]);
+  });
+
+  it("resolves a long chain of stars without exploding", () => {
+    const files: Files = { "/app.aktion": 'import { v } from "./s0.aktion"\n$app(Text(v))', "/end.aktion": 'export const v = "ok"' };
+    for (let i = 0; i < 30; i += 1) files[`/s${i}.aktion`] = `export * from "./s${i + 1}.aktion"\nexport * from "./s${i + 1}.aktion"`;
+    files["/s30.aktion"] = 'export * from "./end.aktion"';
+    expect(messages(files)).toEqual([]);
   });
 });
 

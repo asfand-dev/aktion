@@ -1876,7 +1876,12 @@ function parseExportList(ctx: ParserContext, start: Token): Statement {
       } satisfies ParseError;
     }
     seen.add(key);
-    specifiers.push(isState ? { local, exported, isState: true } : { local, exported });
+    specifiers.push({
+      local,
+      exported,
+      ...(isState ? { isState: true } : {}),
+      loc: { line: localTok.line, column: localTok.column },
+    });
     skipWhitespace(ctx);
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
       ctx.consume();

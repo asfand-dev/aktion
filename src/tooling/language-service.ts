@@ -508,8 +508,9 @@ function exportMessage(
         ? `\`import { ${key} as … }\``
         : `\`import { ${importedName} as … }\`, in place of \`${importedName} as ${key}\``;
     return (
-      `${head} this file imports. An import can be neither assigned nor re-exported under its own name — ` +
-      `import it under another local name (${specifier}) and write \`export let ${key} = …\` here.`
+      `${head} this file imports. An import cannot be assigned, and \`export\` does not go on an assignment — ` +
+      `to forward it, write \`export { ${importedName === key ? key : `${importedName} as ${key}`} } from "…"\`; ` +
+      `to change it, import it under another local name (${specifier}) and write \`export let ${key} = …\` here.`
     );
   }
   if (kind === "destructuring") {

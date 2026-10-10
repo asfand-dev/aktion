@@ -517,8 +517,28 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
           </tr>
           <tr>
             <td><code>"./store.aktion" does not export `increment`</code></td>
-            <td>The name exists in that file but is not prefixed with <code>export</code>. State imports report the sigil: <code>does not export `$count`</code>.</td>
+            <td>The name exists in that file but is not exported, or an <code>export { x } from</code> re-exports a name its source lacks (reported at the specifier). State imports report the sigil: <code>does not export `$count`</code>.</td>
             <td>Add <code>export</code> to the declaration.</td>
+          </tr>
+          <tr>
+            <td><code>Cannot export `x`: this module declares no top-level `x`.</code></td>
+            <td>An <code>export { x }</code> list names something the file does not declare (check the <code>$</code> too: <code>a</code> and <code>$a</code> are different names). An imported name gets its own message pointing at <code>export { x } from "&hellip;"</code>.</td>
+            <td>Declare it, or fix the spelling.</td>
+          </tr>
+          <tr>
+            <td><code>`x` is exported more than once.</code></td>
+            <td>Two exports &mdash; declarations, lists or re-exports &mdash; give the same name.</td>
+            <td>Export it once, or rename one with <code>as</code>.</td>
+          </tr>
+          <tr>
+            <td><code>"./barrel.aktion" exports `x` from more than one module through `export *`</code></td>
+            <td>Two <code>export *</code> statements reach different declarations of <code>x</code>.</td>
+            <td>Export it by name (<code>export { x } from "&hellip;"</code>) to choose one.</td>
+          </tr>
+          <tr>
+            <td><code>"./a.aktion" re-exports `x` in a cycle of re-exports that never reaches a declaration</code></td>
+            <td>Re-exports of <code>x</code> point at each other and no file declares it.</td>
+            <td>Declare it in one of the files.</td>
           </tr>
           <tr>
             <td><code>Greeting.aktion: Unexpected token &hellip;</code></td>
