@@ -1814,7 +1814,10 @@ reachable as `el.applyDelta(ops)`, and the inspector by importing from source.
   with `getLintWarnings(source, library, { bareDeclarations: true })` (the same
   option works on `getDiagnostics`). It is off by default because the system
   prompt, the agent skill and the bundled demos all teach the keyword-less
-  `$x = 0`.
+  `$x = 0`. A second opt-in warning, `imported-state-write`, flags a write to a
+  `$` atom the module imports (`$open = true`, `$n += 1`, `$o.k = 1`) and
+  suggests an exported setter action in the owning module; enable it with
+  `{ importedStateWrites: true }`.
 - `getDiagnostics`, `getCompletions`, and `getHoverInfo` are the data
   layer a real LSP server wraps — see [Editor support](#editor-support). The
   [playground](https://asfand-dev.github.io/aktion/playground.html)
@@ -1887,6 +1890,12 @@ the writable legacy roots `aktion` and `theme`, is a write, not a declaration, a
 warning only, so the exit code does not change; pass `--no-bare-declarations` to
 leave it out of the report. The agent skill and the system prompt still write
 `$x = 0`, so a run over their output is loud until they move to keywords.
+
+Pass `--imported-state-writes` to either script to also report
+`imported-state-write`: a write to a `$` atom the file imports, which JavaScript
+forbids (`no-import-assign`) although the runtime allows it. The warning names
+the atom, the module it comes from and the setter action to export from there.
+It is off by default and never changes the exit code.
 
 ---
 
@@ -2100,7 +2109,11 @@ and an exported `$store` written by property (`export const ui = $store({ open: 
 then `ui.open = !ui.open`). Writing an imported atom directly
 (`$open = !$open` in a file that only imports `$open`) also works at runtime,
 but it is the shape JavaScript tooling flags as `no-import-assign`, so prefer
-the first two. See [docs/modules.html](./docs/modules.html#shared-state-writes).
+the first two, and the exported setter in particular. The opt-in
+`imported-state-write` lint (`{ importedStateWrites: true }`, or
+`--imported-state-writes` on the validate scripts) finds those writes and
+suggests the setter. See [docs/modules.html](./docs/modules.html#shared-state-writes)
+for how the shapes compare.
 
 ### TypeScript and JavaScript modules
 

@@ -5,6 +5,14 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## 2026-10-10
+
+### Finding Writes to Imported State
+
+- Added an opt-in `imported-state-write` lint warning. It flags a write to a `$` atom that a module imports and suggests an exported setter action in the owning module, which is valid JavaScript where the direct write is not.
+- `getLintWarnings` and `getDiagnostics` take it as `{ importedStateWrites: true }`, and `validate-aktion.mjs` and `validate-aktion-app.mjs` as `--imported-state-writes`. It is off by default and the direct write keeps running.
+- The modules page now compares the setter action, the store property and the direct write on the real runtime, including effects, top-level calls and calls while rendering.
+
 ## [0.10.0](https://github.com/asfand-dev/aktion/compare/v0.9.0...v0.10.0) (2026-10-08)
 
 
