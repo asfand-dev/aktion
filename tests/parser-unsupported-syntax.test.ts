@@ -2,7 +2,7 @@
  * Input that is not Aktion must either parse or fail with a message that names
  * the replacement. These tables pin the cases that used to be accepted in
  * silence (`this`, `super`, `debugger`) or to fail with a misleading message
- * (block statements, `export { … }`). See issue #23.
+ * (block statements). See issue #23.
  */
 
 import { describe, expect, it } from "vitest";
@@ -188,26 +188,5 @@ describe("a block statement is rejected for what it is", () => {
   it("`statementBlocks` still reads the block, for the JS frontends' E113", () => {
     const program = parse(lines("function g() {", "  {", "    const y = 2", "  }", "}"), { statementBlocks: true });
     expect(program.errors).toEqual([]);
-  });
-});
-
-describe("`export { … }` names the declared form", () => {
-  const rows: Array<[string, string]> = [
-    ["a list", "export { a, b }\n"],
-    ["a list with a source", 'export { a } from "./x"\n'],
-    ["an aliased list", "export { a as b }\n"],
-  ];
-
-  it.each(rows)("%s", (_name, source) => {
-    const [first] = parse(source).errors;
-    expect(first).toMatchObject({ line: 1, column: 8 });
-    expect(first!.message).toContain("re-export lists");
-    expect(first!.message).toContain("export let $count = 0");
-    expect(first!.message).toContain("export const NAME = …");
-    expect(first!.message).not.toContain("export $count = 0");
-  });
-
-  it("`export * from` keeps its own message", () => {
-    expect(parse('export * from "./x"\n').errors[0]!.message).toContain("`export * from …` is not supported");
   });
 });

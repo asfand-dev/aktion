@@ -80,8 +80,7 @@ describe("parser: export", () => {
     });
   });
 
-  it("rejects `export { … }` lists and `export <destructure>` with clear errors", () => {
-    expect(parse(`export { a, b }`).errors[0]?.message).toMatch(/not supported/i);
+  it("rejects `export <destructure>` with a clear error", () => {
     expect(parse(`export let { a, b } = obj`).errors[0]?.message).toMatch(/destructuring/i);
   });
 

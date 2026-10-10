@@ -39,6 +39,7 @@ import type {
   DeclParam,
   LambdaParam,
   DestructuringPattern,
+  ExportListStatement,
   ImportStatement,
 } from "../parser/types.js";
 import {
@@ -141,21 +142,46 @@ interface ModuleRecord {
   aktionSource: string;
   program: Program;
   /** Resolved import edges (after path resolution). */
-  edges: { stmt: ImportStatement; resolvedPath: string | null }[];
+  edges: { stmt: ImportStatement | ExportListStatement; resolvedPath: string | null }[];
   /** `import { … } from "aktion-runtime/dsl"` statements — built-ins, never loaded. */
   builtinImports: ImportStatement[];
   /** Top-level declared names, by keyspace. */
   declaredPlain: Set<string>;
   declaredState: Set<string>;
-  /** Exported subset, by keyspace. */
-  exportedPlain: Set<string>;
-  exportedState: Set<string>;
+  /**
+   * Every name this module exports, by binding key (`name`, or `$name` for an
+   * atom or hook): an `export` declaration, a local `export { … }` entry, or a
+   * re-export entry. Where the export comes from is in the {@link ExportRef}.
+   */
+  exportRefs: Map<string, ExportRef>;
+  /** Resolved sources of `export * from` statements, in statement order. */
+  stars: string[];
+  /** An `export *` source failed to load or resolve (already diagnosed): a name this module lacks may be theirs. */
+  starFailed: boolean;
   /** Rename maps (own locals + imported aliases), by keyspace. */
   renamePlain: Map<string, string>;
   renameState: Map<string, string>;
   /** In-place changes of imported `$` atoms, judged once the exporters are loaded (E108). */
   importedStateMutations: ImportedStateMutation[];
 }
+
+/** Where an export comes from: a top-level binding of the module itself, or a name another module exports. */
+interface ExportRef {
+  /** The name in the keyspace of the key it was filed under (bare, no `$`) — local, or as the source exports it. */
+  name: string;
+  /** Resolved path of the re-exported module; `null` for a local binding; {@link UNLOADED} when that module failed to resolve. */
+  from: string | null;
+}
+
+/** An `ExportRef.from` for a re-export whose source failed to resolve — the failure is already diagnosed. */
+const UNLOADED = "\0unloaded";
+
+/** The binding key of a name: `$` marks the state keyspace. */
+function exportKey(name: string, isState: boolean | undefined): string {
+  return isState === true ? `$${name}` : name;
+}
+
+type LinkFail = (path: string, line: number, column: number, message: string, code?: string) => void;
 
 /** How a language is named in diagnostics. */
 const LANGUAGE_LABEL: Record<ModuleLanguage, string> = {
@@ -339,8 +365,9 @@ export function linkProgram(
       builtinImports: [],
       declaredPlain: new Set(),
       declaredState: new Set(),
-      exportedPlain: new Set(),
-      exportedState: new Set(),
+      exportRefs: new Map(),
+      stars: [],
+      starFailed: false,
       renamePlain: new Map(),
       renameState: new Map(),
       importedStateMutations: compiled.importedStateMutations ?? [],
@@ -348,20 +375,30 @@ export function linkProgram(
     modules.set(path, rec);
     buildSymbolTable(rec);
 
+    // `import` and `export … from` link their module right here, in statement
+    // order — link order is import order, and a re-export is an import that
+    // also forwards names.
     for (const stmt of program.statements) {
-      if (stmt.kind !== "Import") continue;
+      if (stmt.kind !== "Import" && !(stmt.kind === "ExportList" && stmt.source !== undefined)) continue;
+      const source = stmt.source!;
       const line = stmt.loc?.line ?? 0;
       const column = stmt.loc?.column ?? 0;
-      if (stmt.source === DSL_MODULE_ID) {
+      if (source === DSL_MODULE_ID) {
+        if (stmt.kind === "ExportList") {
+          if (stmt.all) rec.starFailed = true;
+          fail(path, line, column, "Built-ins from aktion-runtime/dsl cannot be re-exported — import them where you use them.", "AKT-LINK-EXPORT");
+          continue;
+        }
         checkBuiltinImport(rec, stmt, fail);
         rec.builtinImports.push(stmt);
         continue;
       }
-      const resolved = resolver.resolve(stmt.source, path);
+      const resolved = resolver.resolve(source, path);
       if (resolved === null) {
+        if (stmt.kind === "ExportList" && stmt.all) rec.starFailed = true;
         rec.edges.push({ stmt, resolvedPath: null });
-        const why = resolver.explain?.(stmt.source, path);
-        fail(path, line, column, `Cannot resolve import "${stmt.source}".${why ? ` ${why}` : ""}`, "AKT-LINK-RESOLVE");
+        const why = resolver.explain?.(source, path);
+        fail(path, line, column, `Cannot resolve import "${source}".${why ? ` ${why}` : ""}`, "AKT-LINK-RESOLVE");
         continue;
       }
       // Classify BEFORE loading: a native module is never read, let alone
@@ -370,30 +407,33 @@ export function linkProgram(
       // to fit the subset).
       const language = moduleLanguage(resolved);
       if (language === null) {
+        if (stmt.kind === "ExportList" && stmt.all) rec.starFailed = true;
         rec.edges.push({ stmt, resolvedPath: null });
         if (isReservedAktionPath(resolved)) {
           fail(
             path,
             line,
             column,
-            `"${stmt.source}": JSX Aktion modules (.aktion.tsx / .aktion.jsx) are not supported yet — use .aktion.ts or .aktion.js.`,
+            `"${source}": JSX Aktion modules (.aktion.tsx / .aktion.jsx) are not supported yet — use .aktion.ts or .aktion.js.`,
             "AKT-LINK-JSX",
           );
         } else {
           const typeNames =
-            rec.language === "typescript" && stmt.specifiers.length === 0 ? inlineTypeOnlyNames(src, line, column) : null;
+            rec.language === "typescript" && stmt.kind === "Import" && stmt.specifiers.length === 0 ? inlineTypeOnlyNames(src, line, column) : null;
           fail(
             path,
             line,
             column,
-            typeNames ? typeOnlyNativeImportMessage(stmt.source, typeNames) : nativeImportMessage(stmt.source, resolved),
+            typeNames ? typeOnlyNativeImportMessage(source, typeNames) : nativeImportMessage(source, resolved),
             "AKT-LINK-NATIVE",
           );
         }
         continue;
       }
       rec.edges.push({ stmt, resolvedPath: resolved });
-      load(resolved, null, language);
+      if (!load(resolved, null, language) && !modules.has(resolved) && stmt.kind === "ExportList" && stmt.all) {
+        rec.starFailed = true;
+      }
     }
 
     visiting.delete(path);
@@ -440,6 +480,101 @@ export function linkProgram(
     for (const name of rec.declaredPlain) rec.renamePlain.set(name, moduleLocalSymbol(rec.id, name));
     for (const name of rec.declaredState) rec.renameState.set(name, moduleLocalSymbol(rec.id, name));
   }
+  // Collect every module's export table, then resolve imports through it.
+  const edgeSource = (rec: ModuleRecord) => (stmt: ExportListStatement): string | null =>
+    rec.edges.find((e) => e.stmt === stmt)?.resolvedPath ?? null;
+  for (const rec of modules.values()) collectExports(rec, fail, edgeSource(rec));
+
+  // Follow `name` through re-exports to the module that declares it. A name a
+  // module exports twice through `export *` from different origins is ambiguous,
+  // as in ES modules; an explicit export always wins over a star.
+  type Origin = { rec: ModuleRecord; name: string };
+  type Resolution = Origin | "missing" | "ambiguous" | "cycle" | "opaque";
+  // `opaque`: a failed source (already diagnosed) may hold the name, so stay
+  // silent. `cycle`: an explicit re-export chain that loops back on itself.
+  // Memoised per (module, key) — except a result reached while a cycle was cut,
+  // which depends on where the walk entered.
+  const memo = new Map<string, Resolution>();
+  const path = new Set<string>();
+  let cutCycles = 0;
+  const resolveExport = (rec: ModuleRecord, key: string): Resolution => {
+    const visit = `${rec.path}\0${key}`;
+    const known = memo.get(visit);
+    if (known !== undefined) return known;
+    if (path.has(visit)) {
+      cutCycles += 1;
+      return "cycle";
+    }
+    path.add(visit);
+    const before = cutCycles;
+    const result = resolveExportUncached(rec, key);
+    path.delete(visit);
+    if (cutCycles === before) memo.set(visit, result);
+    return result;
+  };
+  const resolveExportUncached = (rec: ModuleRecord, key: string): Resolution => {
+    const ref = rec.exportRefs.get(key);
+    if (ref) {
+      if (ref.from === null) return { rec, name: ref.name };
+      const target = modules.get(ref.from);
+      return target ? resolveExport(target, exportKey(ref.name, key.startsWith("$"))) : "opaque";
+    }
+    // A name two stars reach through different declarations is ambiguous, as in
+    // ES modules; an explicit export (above) always wins over a star.
+    const origins = new Map<string, Origin>();
+    let opaque = rec.starFailed;
+    for (const star of rec.stars) {
+      const target = modules.get(star);
+      if (!target) {
+        opaque = true;
+        continue;
+      }
+      const found = resolveExport(target, key);
+      if (found === "ambiguous") return found;
+      if (found === "opaque") opaque = true;
+      else if (found !== "missing" && found !== "cycle") origins.set(`${found.rec.path}\0${found.name}`, found);
+    }
+    if (origins.size > 1) return "ambiguous";
+    return origins.values().next().value ?? (opaque ? "opaque" : "missing");
+  };
+  const exportProblem = (
+    rec: ModuleRecord,
+    found: "missing" | "ambiguous" | "cycle" | "opaque",
+    key: string,
+    source: string,
+    line: number,
+    column: number,
+  ): void => {
+    if (found === "opaque") return; // the failed source has already been diagnosed
+    fail(
+      rec.path,
+      line,
+      column,
+      found === "ambiguous"
+        ? `"${source}" exports \`${key}\` from more than one module through \`export *\` — export it by name to choose one.`
+        : found === "cycle"
+          ? `"${source}" re-exports \`${key}\` in a cycle of re-exports that never reaches a declaration.`
+          : `"${source}" does not export \`${key}\`.`,
+      "AKT-LINK-EXPORT",
+    );
+  };
+  // A re-export of a name that source does not export is an error even when
+  // nobody imports it.
+  for (const rec of modules.values()) {
+    for (const { stmt, resolvedPath } of rec.edges) {
+      if (stmt.kind !== "ExportList" || resolvedPath === null) continue;
+      const src = modules.get(resolvedPath);
+      if (!src) continue;
+      for (const spec of stmt.specifiers) {
+        const key = exportKey(spec.local, spec.isState);
+        const found = resolveExport(src, key);
+        if (typeof found === "string") {
+          const at = spec.loc ?? stmt.loc;
+          exportProblem(rec, found, key, stmt.source!, at?.line ?? 0, at?.column ?? 0);
+        }
+      }
+    }
+  }
   // Resolve imported aliases to the source module's renamed export. An import
   // of the ENTRY (a cycle back to it) targets the entry's canonical name: the
   // entry's rename maps are empty by design, and falling back to
@@ -449,24 +584,22 @@ export function linkProgram(
     renames.get(name) ?? (src.path === entryPath ? name : moduleLocalSymbol(src.id, name));
   for (const rec of modules.values()) {
     for (const { stmt, resolvedPath } of rec.edges) {
-      if (resolvedPath === null) continue;
+      if (resolvedPath === null || stmt.kind !== "Import") continue;
       const src = modules.get(resolvedPath);
       if (!src) continue; // load failed (already diagnosed)
       for (const spec of stmt.specifiers) {
         const line = stmt.loc?.line ?? 0;
         const column = stmt.loc?.column ?? 0;
+        const key = exportKey(spec.imported, spec.isState);
+        const found = resolveExport(src, key);
+        if (typeof found === "string") {
+          exportProblem(rec, found, key, stmt.source, line, column);
+          continue;
+        }
         if (spec.isState) {
-          if (!src.exportedState.has(spec.imported)) {
-            fail(rec.path, line, column, `"${stmt.source}" does not export \`$${spec.imported}\`.`, "AKT-LINK-EXPORT");
-            continue;
-          }
-          rec.renameState.set(spec.local, exportSymbol(src, spec.imported, src.renameState));
+          rec.renameState.set(spec.local, exportSymbol(found.rec, found.name, found.rec.renameState));
         } else {
-          if (!src.exportedPlain.has(spec.imported)) {
-            fail(rec.path, line, column, `"${stmt.source}" does not export \`${spec.imported}\`.`, "AKT-LINK-EXPORT");
-            continue;
-          }
-          rec.renamePlain.set(spec.local, exportSymbol(src, spec.imported, src.renamePlain));
+          rec.renamePlain.set(spec.local, exportSymbol(found.rec, found.name, found.rec.renamePlain));
         }
       }
     }
@@ -480,7 +613,10 @@ export function linkProgram(
     for (const mutation of rec.importedStateMutations) {
       const edge = rec.edges.find((e) => e.stmt.source === mutation.source && e.resolvedPath !== null);
       const exporter = edge ? modules.get(edge.resolvedPath!) : undefined;
-      if (exporter && importedStateMutationApplies(mutation, exporter.program)) {
+      // The atom is declared where the export chain ends — through an alias, a
+      // list or a barrel — and under the name it was declared with there.
+      const found = exporter ? resolveExport(exporter, `$${mutation.imported}`) : undefined;
+      if (found && typeof found !== "string" && importedStateMutationApplies({ ...mutation, imported: found.name }, found.rec.program)) {
         fail(rec.path, mutation.line, mutation.column, mutation.message, "E108");
       }
     }
@@ -514,7 +650,7 @@ export function linkProgram(
     const renamer = makeRenamer(rec);
     const index = sourceIndex.get(path)!;
     for (const stmt of rec.program.statements) {
-      if (stmt.kind === "Import") continue; // dropped
+      if (stmt.kind === "Import" || stmt.kind === "ExportList") continue; // dropped
       renamer.renameTopLevel(stmt);
       stripExported(stmt);
       if (multiModule) stampSourceIndex(stmt, index);
@@ -611,21 +747,21 @@ function buildSymbolTable(rec: ModuleRecord): void {
       case "Assignment":
         if (stmt.isState) {
           rec.declaredState.add(stmt.identifier);
-          if (stmt.exported) rec.exportedState.add(stmt.identifier);
+          if (stmt.exported) rec.exportRefs.set(`$${stmt.identifier}`, { name: stmt.identifier, from: null });
         } else {
           rec.declaredPlain.add(stmt.identifier);
-          if (stmt.exported) rec.exportedPlain.add(stmt.identifier);
+          if (stmt.exported) rec.exportRefs.set(stmt.identifier, { name: stmt.identifier, from: null });
         }
         break;
       case "ComponentDeclaration":
       case "ActionDeclaration":
         rec.declaredPlain.add(stmt.name);
-        if (stmt.exported) rec.exportedPlain.add(stmt.name);
+        if (stmt.exported) rec.exportRefs.set(stmt.name, { name: stmt.name, from: null });
         break;
       case "HookDeclaration":
         // Hooks are referenced as `$useX()` → the state keyspace.
         rec.declaredState.add(stmt.name);
-        if (stmt.exported) rec.exportedState.add(stmt.name);
+        if (stmt.exported) rec.exportRefs.set(`$${stmt.name}`, { name: stmt.name, from: null });
         break;
       case "DestructureStatement":
         // Top-level destructuring declares module-local (plain) bindings.
@@ -635,6 +771,59 @@ function buildSymbolTable(rec: ModuleRecord): void {
         break;
       default:
         break; // Import / Effect / control-flow declare nothing importable
+    }
+  }
+}
+
+/**
+ * Add the `export { … }` lists and re-exports to a module's export table, after
+ * the `export` declarations {@link buildSymbolTable} filed. A local entry marks
+ * an existing top-level binding as exported, which is all `export` in front of
+ * its declaration does — so an atom exported this way is the same atom, with the
+ * same set-once and cross-module behaviour. Each exported name may appear once.
+ */
+function collectExports(rec: ModuleRecord, fail: LinkFail, resolved: (stmt: ExportListStatement) => string | null): void {
+  const imported = new Set<string>();
+  for (const { stmt } of rec.edges) {
+    if (stmt.kind === "Import") for (const spec of stmt.specifiers) imported.add(exportKey(spec.local, spec.isState));
+  }
+  for (const stmt of rec.program.statements) {
+    if (stmt.kind !== "ExportList") continue;
+    const line = stmt.loc?.line ?? 0;
+    const column = stmt.loc?.column ?? 0;
+    if (stmt.all) {
+      const from = resolved(stmt);
+      if (from !== null) rec.stars.push(from);
+      continue;
+    }
+    // An unresolved source is already diagnosed; its names are still listed, so
+    // an import of one is not reported as missing.
+    const from = stmt.source === undefined ? null : (resolved(stmt) ?? UNLOADED);
+    for (const spec of stmt.specifiers) {
+      const specLine = spec.loc?.line ?? line;
+      const specColumn = spec.loc?.column ?? column;
+      const key = exportKey(spec.exported, spec.isState);
+      if (from === null) {
+        const localKey = exportKey(spec.local, spec.isState);
+        const declared = spec.isState ? rec.declaredState : rec.declaredPlain;
+        if (!declared.has(spec.local)) {
+          fail(
+            rec.path,
+            specLine,
+            specColumn,
+            imported.has(localKey)
+              ? `\`${localKey}\` is imported, not declared in this module — re-export it with \`export { ${localKey} } from "…"\`.`
+              : `Cannot export \`${localKey}\`: this module declares no top-level \`${localKey}\`.`,
+            "AKT-LINK-EXPORT",
+          );
+          continue;
+        }
+      }
+      if (rec.exportRefs.has(key)) {
+        fail(rec.path, specLine, specColumn, `\`${key}\` is exported more than once.`, "AKT-LINK-EXPORT");
+        continue;
+      }
+      rec.exportRefs.set(key, { name: spec.local, from });
     }
   }
 }
@@ -811,6 +1000,7 @@ function makeRenamer(rec: ModuleRecord) {
   function renameStatement(stmt: Statement, topLevel: boolean): void {
     switch (stmt.kind) {
       case "Import":
+      case "ExportList":
         return;
       case "Assignment":
         stmt.identifier = stmt.isState ? rState(stmt.identifier) : rPlain(stmt.identifier);

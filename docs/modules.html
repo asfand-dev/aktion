@@ -153,10 +153,37 @@ export function $useToggle() {            // a hook ($-prefixed)
 export $count = 0                         // a reactive atom
 export accent = "var(--rui-primary)"      // a plain binding</code></pre>
       <p>
-        <code>export { a, b }</code> lists, re-exports, and
-        <code>export</code> of a destructuring declaration are not supported &mdash;
-        export each binding inline, where it is declared.
+        <code>export</code> of a destructuring declaration is not supported &mdash;
+        export each binding inline, or list the names it declares (below).
       </p>
+
+      <h3 id="export-lists">Export lists and re-exports</h3>
+      <p>
+        An <code>export { &hellip; }</code> list exports bindings the module already
+        declares, with <code>as</code> to rename them, and a <code>$</code> atom keeps
+        its <code>$</code> on both sides. It does exactly what writing
+        <code>export</code> before the declaration does &mdash; the same atom, shared
+        by every importer &mdash; and the declaration may come before or after the list.
+        A name can be exported once.
+      </p>
+<pre><code>let $count = 0
+function increment() { $count += 1 }
+export { $count, increment as bump }</code></pre>
+      <p>
+        <code>export { &hellip; } from "&hellip;"</code> and
+        <code>export * from "&hellip;"</code> forward another module's exports
+        without binding them in this file, so a <strong>barrel</strong> file can gather
+        a library behind one import. The source is linked where the statement stands
+        (see <a href="#link-order">link order</a>). Naming something the source does not
+        export is a link error, as is a name two <code>export *</code> statements supply
+        from different modules; an explicit export always wins over a star. A name that was
+        imported cannot be listed &mdash; re-export it with <code>from</code>. Aktion has no
+        namespace objects, so <code>export * as ns from "&hellip;"</code> is rejected.
+      </p>
+<pre><code>// barrel.aktion
+export { $count, bump } from "./counter.aktion"
+export { Card2 } from "./components.aktion"
+export * from "./format.aktion"</code></pre>
 
       <h2 id="importing">Importing</h2>
       <p>
@@ -490,8 +517,28 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
           </tr>
           <tr>
             <td><code>"./store.aktion" does not export `increment`</code></td>
-            <td>The name exists in that file but is not prefixed with <code>export</code>. State imports report the sigil: <code>does not export `$count`</code>.</td>
+            <td>The name exists in that file but is not exported, or an <code>export { x } from</code> re-exports a name its source lacks (reported at the specifier). State imports report the sigil: <code>does not export `$count`</code>.</td>
             <td>Add <code>export</code> to the declaration.</td>
+          </tr>
+          <tr>
+            <td><code>Cannot export `x`: this module declares no top-level `x`.</code></td>
+            <td>An <code>export { x }</code> list names something the file does not declare (check the <code>$</code> too: <code>a</code> and <code>$a</code> are different names). An imported name gets its own message pointing at <code>export { x } from "&hellip;"</code>.</td>
+            <td>Declare it, or fix the spelling.</td>
+          </tr>
+          <tr>
+            <td><code>`x` is exported more than once.</code></td>
+            <td>Two exports &mdash; declarations, lists or re-exports &mdash; give the same name.</td>
+            <td>Export it once, or rename one with <code>as</code>.</td>
+          </tr>
+          <tr>
+            <td><code>"./barrel.aktion" exports `x` from more than one module through `export *`</code></td>
+            <td>Two <code>export *</code> statements reach different declarations of <code>x</code>.</td>
+            <td>Export it by name (<code>export { x } from "&hellip;"</code>) to choose one.</td>
+          </tr>
+          <tr>
+            <td><code>"./a.aktion" re-exports `x` in a cycle of re-exports that never reaches a declaration</code></td>
+            <td>Re-exports of <code>x</code> point at each other and no file declares it.</td>
+            <td>Declare it in one of the files.</td>
           </tr>
           <tr>
             <td><code>Greeting.aktion: Unexpected token &hellip;</code></td>

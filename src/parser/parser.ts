@@ -48,6 +48,7 @@ import type {
   SwitchCase,
   DestructuringPattern,
   LambdaParam,
+  ExportSpecifier,
   ImportSpecifier,
   SourceLocation,
 } from "./types.js";
@@ -1744,32 +1745,16 @@ function unsupportedImportForm(ctx: ParserContext, start: Token): ParseError | n
 
 /**
  * `export <declaration | assignment>` — marks the following top-level binding
- * importable from another module. `export { … }` lists / re-exports and
- * `export <destructure>` are intentionally not supported yet (clear errors).
+ * importable from another module, or an `export { … }` list / re-export. An
+ * `export <destructure>` is intentionally not supported (clear error).
  */
 function parseExportStatement(ctx: ParserContext): Statement {
   const start = ctx.expect("Keyword", "export");
   const next = ctx.peek();
 
   if (next.type === "Keyword" && next.value === "default") return parseExportDefault(ctx, next);
-  if (next.type === "Operator" && next.value === "*") {
-    throw {
-      message:
-        "`export * from …` is not supported — Aktion modules cannot re-export; import what you need " +
-        "from that module directly.",
-      line: next.line,
-      column: next.column,
-    } satisfies ParseError;
-  }
-  if (next.type === "Punctuation" && next.value === "{") {
-    throw {
-      message:
-        "`export { … }` lists (and re-export lists) are not supported — declare each binding with `export` " +
-        "where it is defined (e.g. `export function Foo() {…}`, `export let $count = 0`, `export const NAME = …`).",
-      line: next.line,
-      column: next.column,
-    } satisfies ParseError;
-  }
+  if (next.type === "Operator" && next.value === "*") return parseExportAll(ctx, start);
+  if (next.type === "Punctuation" && next.value === "{") return parseExportList(ctx, start);
 
   let stmt: Statement | null;
   if (next.type === "Keyword" && next.value === "function") {
@@ -1822,6 +1807,130 @@ function parseExportStatement(ctx: ParserContext): Statement {
     line: start.line,
     column: start.column,
   } satisfies ParseError;
+}
+
+/** The export forms that cannot name `default` — Aktion modules only have named exports. */
+const EXPORT_DEFAULT_MESSAGE =
+  "Aktion modules only have named exports — `default` cannot be an export name; " +
+  "`export default` is reserved for the entry's `$app(…)` call.";
+
+/**
+ * `export { a, $b, c as d } [from "./m.aktion"]`. Without `from` the names are
+ * top-level bindings of this module; with it they are re-exported from that
+ * module. A `$state` name keeps its `$` across `as`, like an import. Names
+ * exported twice in one list are an error here; clashes with the module's other
+ * exports are the linker's to find, as it sees the whole module.
+ */
+function parseExportList(ctx: ParserContext, start: Token): Statement {
+  ctx.expect("Punctuation", "{");
+  const specifiers: ExportSpecifier[] = [];
+  const seen = new Set<string>();
+  skipWhitespace(ctx);
+  while (!ctx.isEnd() && !(ctx.peek().type === "Punctuation" && ctx.peek().value === "}")) {
+    const localTok = ctx.peek();
+    if (localTok.type === "Keyword" && localTok.value === "default") {
+      throw { message: EXPORT_DEFAULT_MESSAGE, line: localTok.line, column: localTok.column } satisfies ParseError;
+    }
+    if (localTok.type !== "StateIdentifier" && localTok.type !== "Identifier") {
+      throw {
+        message: unexpected(localTok, `Expected an export name, got ${localTok.type} "${localTok.value}"`),
+        line: localTok.line,
+        column: localTok.column,
+      } satisfies ParseError;
+    }
+    if (localTok.type === "Identifier") rejectUnsupportedWord(ctx, localTok);
+    const isState = localTok.type === "StateIdentifier";
+    const local = ctx.consume().value;
+    let exported = local;
+    if (ctx.peek().type === "Identifier" && ctx.peek().value === "as") {
+      ctx.consume();
+      const aliasTok = ctx.peek();
+      if (aliasTok.type === "Keyword" && aliasTok.value === "default") {
+        throw { message: EXPORT_DEFAULT_MESSAGE, line: aliasTok.line, column: aliasTok.column } satisfies ParseError;
+      }
+      if (aliasTok.type !== "StateIdentifier" && aliasTok.type !== "Identifier") {
+        throw {
+          message: unexpected(aliasTok, `Expected an alias after \`as\`, got ${aliasTok.type} "${aliasTok.value}"`),
+          line: aliasTok.line,
+          column: aliasTok.column,
+        } satisfies ParseError;
+      }
+      if (aliasTok.type === "Identifier") rejectUnsupportedWord(ctx, aliasTok);
+      if ((aliasTok.type === "StateIdentifier") !== isState) {
+        throw {
+          message:
+            "A `$state` export must keep its `$` across `as` (e.g. `{ $x as $y }`); " +
+            "a non-state export must not gain one.",
+          line: aliasTok.line,
+          column: aliasTok.column,
+        } satisfies ParseError;
+      }
+      exported = ctx.consume().value;
+    }
+    const key = isState ? `$${exported}` : exported;
+    if (seen.has(key)) {
+      throw {
+        message: `\`${key}\` is exported twice in this list.`,
+        line: localTok.line,
+        column: localTok.column,
+      } satisfies ParseError;
+    }
+    seen.add(key);
+    specifiers.push({
+      local,
+      exported,
+      ...(isState ? { isState: true } : {}),
+      loc: { line: localTok.line, column: localTok.column },
+    });
+    skipWhitespace(ctx);
+    if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
+      ctx.consume();
+      skipWhitespace(ctx);
+      continue;
+    }
+    break;
+  }
+  ctx.expect("Punctuation", "}");
+
+  let source: string | undefined;
+  const fromTok = ctx.peek();
+  if (fromTok.type === "Identifier" && fromTok.value === "from") {
+    ctx.consume();
+    source = ctx.expect("String").value;
+  }
+  skipTerminator(ctx);
+  return {
+    kind: "ExportList",
+    specifiers,
+    ...(source === undefined ? {} : { source }),
+    loc: { line: start.line, column: start.column },
+  };
+}
+
+/** `export * from "./m.aktion"` — re-export everything the module exports; `export * as ns` is rejected. */
+function parseExportAll(ctx: ParserContext, start: Token): Statement {
+  const star = ctx.expect("Operator", "*");
+  const after = ctx.peek();
+  if (after.type === "Identifier" && after.value === "as") {
+    throw {
+      message:
+        "`export * as name from …` is not supported — Aktion has no namespace objects; " +
+        "list the names: `export { a, b } from \"…\"`, or `export * from \"…\"`.",
+      line: star.line,
+      column: star.column,
+    } satisfies ParseError;
+  }
+  if (!(after.type === "Identifier" && after.value === "from")) {
+    throw {
+      message: unexpected(after, `Expected \`from\` after \`export *\`, got ${after.type} "${after.value}"`),
+      line: after.line,
+      column: after.column,
+    } satisfies ParseError;
+  }
+  ctx.consume();
+  const source = ctx.expect("String").value;
+  skipTerminator(ctx);
+  return { kind: "ExportList", specifiers: [], source, all: true, loc: { line: start.line, column: start.column } };
 }
 
 /**
