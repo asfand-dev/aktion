@@ -149,7 +149,7 @@ describe("a local list", () => {
       "/lib.aktion": `${lib}\nexport let z = 0`,
     }).diagnostics;
     expect(diagnostics.map((d) => d.message)).toEqual([`/lib.aktion: ${message}`]);
-    expect(diagnostics[0]).toMatchObject({ code: "AKT-LINK-EXPORT", path: "/lib.aktion", line: lib.split("\n").length });
+    expect(diagnostics[0]).toMatchObject({ code: "AKT-LINK-EXPORT", path: "/lib.aktion", line: lib.split("\n").length, column: 10 });
   });
 
   it("says an import must be re-exported with `from`", () => {
@@ -326,6 +326,9 @@ describe("formatting and declarations", () => {
     expect(aktionDeclarationText("function Card(title) { return Text(title) }\nexport { Card as Tile }").text).toContain(
       "export declare function Tile(",
     );
+    expect(aktionDeclarationText("function Card(title) { return Text(title) }\nexport { Card as Tile }").text).toContain(
+      'AktionNode<"Card">',
+    );
     expect(dts).toContain('export { x as y } from "./m.aktion";');
     expect(dts).toContain('export * from "./k.aktion";');
   });
@@ -334,7 +337,7 @@ describe("formatting and declarations", () => {
 describe("E108 through export chains", () => {
   const importer = (spec: string, name = "$todos") =>
     `import { ${spec} } from "./barrel.aktion"\nexport function add(t) {\n  ${name}.push(t)\n}`;
-  const run = async (barrel: string, imp: string, store = "export let $todos = []") => {
+  const run = async (barrel: string, imp: string, store = "export let $todos = []", extra: Files = {}) => {
     const res = await linkProject({
       entry: "app.aktion",
       files: {
@@ -342,6 +345,7 @@ describe("E108 through export chains", () => {
         "ops.aktion.js": imp,
         "barrel.aktion": barrel,
         "store.aktion": store,
+        ...extra,
       },
     });
     return res.diagnostics.map((d) => `${d.code}@${d.path}:${d.line}:${d.column}`);
@@ -353,9 +357,17 @@ describe("E108 through export chains", () => {
     ["an alias in a list", 'export { $todos as $items } from "./store.aktion"', importer("$items", "$items"), "export let $todos = []"],
     ["a local alias list", "let $todos = []\nexport { $todos as $items }", importer("$items", "$items"), ""],
     ["a star barrel", 'export * from "./store.aktion"', importer("$todos"), "export let $todos = []"],
-    ["a chain of barrels", 'export * from "./store.aktion"', importer("$todos"), "export let $todos = []"],
   ])("flags a data atom behind %s", async (_name, barrel, imp, store) => {
     expect(await run(barrel, imp, store)).toEqual(["E108@ops.aktion.js:3:10"]);
+  });
+
+  it("flags a data atom behind a chain of barrels: star, then from, then star", async () => {
+    expect(
+      await run('export * from "./mid.aktion"', importer("$todos"), "export let $todos = []", {
+        "mid.aktion": 'export { $todos } from "./leaf.aktion"',
+        "leaf.aktion": 'export * from "./store.aktion"',
+      }),
+    ).toEqual(["E108@ops.aktion.js:3:10"]);
   });
 
   it("stays quiet for a handle behind the same barrels", async () => {
@@ -417,6 +429,16 @@ describe("export diagnostics", () => {
     };
     expect(messages(files)).toEqual([]);
     expect(parse("export { a, $a }").errors).toEqual([]);
+  });
+
+  it("does not cache a result reached while a cycle was cut", () => {
+    const files: Files = {
+      "/app.aktion": 'import { v } from "./a.aktion"\nimport { v as w } from "./b.aktion"\n$app(Text(`${v}${w}`))',
+      "/a.aktion": 'export * from "./b.aktion"\nexport * from "./c.aktion"',
+      "/b.aktion": 'export * from "./a.aktion"',
+      "/c.aktion": "export const v = 1",
+    };
+    expect(messages(files)).toEqual([]);
   });
 
   it("resolves a long chain of stars without exploding", () => {

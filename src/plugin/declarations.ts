@@ -247,7 +247,7 @@ function declare(
   const uses = new Set<string>();
   switch (stmt.kind) {
     case "ComponentDeclaration":
-      return { name, lines: componentOverloads(name, stmt.params, uses), uses };
+      return { name, lines: componentOverloads(name, stmt.params, uses, stmt.name), uses };
     case "ActionDeclaration":
     case "HookDeclaration":
       return { name, lines: [`export declare function ${name}(${parameterList(stmt.params)}): any;`], uses };
@@ -343,9 +343,9 @@ function parameterList(params: ReadonlyArray<DeclParam>): string {
  * parameter keeps a single permissive positional form: the runtime binds its
  * rest parameter to one value.
  */
-function componentOverloads(name: string, params: ReadonlyArray<DeclParam>, uses: Set<string>): string[] {
+function componentOverloads(name: string, params: ReadonlyArray<DeclParam>, uses: Set<string>, tag = name): string[] {
   uses.add("AktionNode");
-  const result = `AktionNode<${JSON.stringify(name)}>`;
+  const result = `AktionNode<${JSON.stringify(tag)}>`;
   const names = parameterNames(params);
   const types = params.map(parameterType);
   if (params.some((p) => p.rest)) {
