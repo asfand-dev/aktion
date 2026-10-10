@@ -76,10 +76,11 @@ function diagnoseCompiled(frontend, source, file, lintOptions) {
 
 const argv = process.argv.slice(2);
 const bareDeclarations = !argv.includes("--no-bare-declarations");
-const args = argv.filter((arg) => arg !== "--no-bare-declarations");
-const lintOptions = { bareDeclarations };
+const importedStateWrites = argv.includes("--imported-state-writes");
+const args = argv.filter((arg) => arg !== "--no-bare-declarations" && arg !== "--imported-state-writes");
+const lintOptions = { bareDeclarations, importedStateWrites };
 if (args.length === 0) {
-  console.error("usage: node tools/validate-aktion.mjs [--no-bare-declarations] <file.aktion> [...]  (or - for stdin)");
+  console.error("usage: node tools/validate-aktion.mjs [--no-bare-declarations] [--imported-state-writes] <file.aktion> [...]  (or - for stdin)");
   process.exit(2);
 }
 

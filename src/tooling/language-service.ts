@@ -47,6 +47,7 @@ import {
   type ConfigKey,
 } from "../language/namespaces.js";
 import { analyseCallContext } from "./signature-help.js";
+import { walk } from "../parser/walk.js";
 
 export interface Position {
   /** 1-indexed line number. */
@@ -76,6 +77,16 @@ export interface LintOptions {
    * `tools/validate-aktion*.mjs` CLIs turn it on.
    */
   bareDeclarations?: boolean;
+  /**
+   * Also report `imported-state-write`: a write to a `$` atom the module imports
+   * (`$open = true`, `$n += 1`, `$o.k = 1` where `$open`, `$n` or `$o` comes from
+   * an `import`). The runtime accepts it and every importer shares one cell, but
+   * JavaScript forbids assigning to an import, so JavaScript tooling flags it
+   * (ESLint's `no-import-assign`). The warning suggests an exported setter action
+   * in the owning module instead. Default `false`: the write is documented, runs
+   * correctly, and a corpus of real apps contains many of them.
+   */
+  importedStateWrites?: boolean;
 }
 
 export interface CompletionItem {
@@ -194,6 +205,10 @@ export function getDiagnostics(
  *     (`y = 5`), and assignments to a name a `function`, `import`, `var`, `let` or
  *     `const` declares, are ordinary writes and are not flagged. Warning only:
  *     parsing is unchanged, so bare `$x = 0` programs keep running.
+ *   - `imported-state-write` (opt-in: `{ importedStateWrites: true }`) — a write
+ *     to a `$` atom this module imports: an assignment, a compound assignment, `++`
+ *     / `--`, or a write through a property (`$o.k = 1`). Warning only; see
+ *     {@link lintImportedStateWrites}.
  */
 export function getLintWarnings(
   source: string,
@@ -216,6 +231,7 @@ function lintProgram(
     ...lintInvalidRegExp(program),
     ...lintContinuationLine(program, source),
     ...(options.bareDeclarations === true ? lintBareDeclarations(program, source) : []),
+    ...(options.importedStateWrites === true ? lintImportedStateWrites(program) : []),
   ];
 }
 
@@ -610,6 +626,93 @@ function lintBareDeclarations(program: ReturnType<typeof parse>, source: string)
     }
     warnings.push({ line, column, severity: "warning", message });
   }
+  return warnings;
+}
+
+/** Internal builtins the parser lowers `=`, `+=`, `++` and `--` on an expression target to. */
+const WRITE_BUILTINS: ReadonlySet<string> = new Set(["__rui_assign__", "__rui_prefix__", "__rui_postfix__"]);
+
+/**
+ * `imported-state-write`: flag a write to a `$` atom that the module imports.
+ *
+ * Several modules can write one atom at run time, because every importer shares
+ * the exporter's cell. JavaScript does not allow it: an imported binding is
+ * read-only, which is why ESLint reports `no-import-assign` on the same source.
+ * The valid-JavaScript shape keeps every write in the module that declares the
+ * atom and exports an action that performs it:
+ *
+ * ```js
+ * // ui.aktion
+ * export let $open = false
+ * export const setOpen = (value) => { $open = value }
+ *
+ * // elsewhere
+ * import { $open, setOpen } from "./ui.aktion"
+ * Button("Toggle", () => setOpen(!$open))
+ * ```
+ *
+ * Flagged, wherever the write sits (handler, effect, nested block, lambda):
+ * `$x = …`, `$x += …` and the other compound operators, `$x++` / `--$x`, and a
+ * write through a property of the atom (`$x.key = …`, `$x[i] = …`). Not flagged:
+ * a read, a method call (`$x.push(1)`), a `let` / `const` that declares a local of
+ * the same name, and a write to a `$store` handle's property (`ui.open = …`),
+ * which is the imported store's own API and writes no import.
+ *
+ * A top-level `$x = …` of an imported atom gets its own wording. It is not a
+ * write at all: a top-level `$name = …` is a set-once declaration and the
+ * imported atom already exists, so the statement does nothing.
+ *
+ * Only the names this file imports are known here, not what the owning module
+ * exports, so the suggestion names the setter to add rather than checking that it
+ * exists. Property writes (`$o.k = 1`) are a copy-on-write path write on the
+ * owner's atom; the setter suggestion applies to them as well.
+ */
+function lintImportedStateWrites(program: ReturnType<typeof parse>): Diagnostic[] {
+  const importedFrom = new Map<string, string>();
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "Import") continue;
+    for (const spec of stmt.specifiers) {
+      if (spec.isState === true) importedFrom.set(spec.local, stmt.source);
+    }
+  }
+  if (importedFrom.size === 0) return [];
+
+  const warnings: Diagnostic[] = [];
+  const report = (name: string, loc: { line: number; column: number } | undefined, topLevel: boolean): void => {
+    const setter = `set${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+    const from = importedFrom.get(name)!;
+    const message = topLevel
+      ? `\`$${name}\` is imported from "${from}" and assigned at the top level, where \`$${name} = …\` is a set-once ` +
+        `declaration: the imported atom already exists, so this statement does nothing. JavaScript does not allow ` +
+        `assigning to an import either. Export a setter from "${from}" (\`export const ${setter} = (value) => { $${name} = value }\`) ` +
+        `and call \`${setter}(…)\` here.`
+      : `\`$${name}\` is imported from "${from}" and written here. The runtime shares one cell across importers, but ` +
+        `JavaScript does not allow assigning to an import (ESLint \`no-import-assign\`). Keep the write in the owning ` +
+        `module: export \`export const ${setter} = (value) => { $${name} = value }\` from "${from}" and call ` +
+        `\`${setter}(…)\` here.`;
+    warnings.push({ line: loc?.line ?? 0, column: loc?.column ?? 0, severity: "warning", message });
+  };
+  const rootOf = (node: { kind: string; object?: unknown }): { kind: string; name?: string } | undefined => {
+    let cur: any = node;
+    while (cur?.kind === "Member") cur = cur.object;
+    return cur;
+  };
+
+  walk(program, ({ node, parent }) => {
+    if (node.kind === "Import") return false;
+    if (node.kind === "Assignment") {
+      if (node.isState && node.declaration === undefined && importedFrom.has(node.identifier)) {
+        report(node.identifier, node.loc, parent === null);
+      }
+      return;
+    }
+    if (node.kind === "BuiltinCall" && WRITE_BUILTINS.has(node.name)) {
+      const root = rootOf(node.arguments[0] as { kind: string; object?: unknown });
+      if (root?.kind === "StateRef" && root.name !== undefined && importedFrom.has(root.name)) {
+        report(root.name, node.loc ?? (node.arguments[0] as { loc?: { line: number; column: number } }).loc, false);
+      }
+    }
+  });
   return warnings;
 }
 

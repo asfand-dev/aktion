@@ -486,6 +486,51 @@ describe("tools/validate-aktion*.mjs — bare declarations", () => {
 });
 
 /**
+ * `imported-state-write` is opt-in on the CLIs too: without
+ * `--imported-state-writes` a program that writes an imported atom stays `OK`,
+ * with it the write is a WARNING (exit code 0) naming the file that holds it.
+ */
+describe("tools/validate-aktion*.mjs — imported state writes", () => {
+  let dir: string;
+  const file = (name: string): string => join(dir, name);
+  const tools: Array<[string, string]> = [
+    ["validate-aktion.mjs", fileTool],
+    ["validate-aktion-app.mjs", appTool],
+  ];
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "aktion-validate-imported-writes-"));
+    const put = (name: string, lines: string[]): void => writeFileSync(file(name), `${lines.join("\n")}\n`, "utf8");
+    put("ui.aktion", ["export let $open = false", "export const setOpen = (value) => { $open = value }"]);
+    put("writes.aktion", [
+      'import { $open } from "./ui.aktion"',
+      '$app(Button("t", () => { $open = !$open }))',
+    ]);
+    put("setter.aktion", [
+      'import { $open, setOpen } from "./ui.aktion"',
+      '$app(Button("t", () => setOpen(!$open)))',
+    ]);
+  });
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it.each(tools)("%s warns about the write only with --imported-state-writes, and still exits 0", (_name, tool) => {
+    const off = run(tool, [file("writes.aktion")]);
+    expect(off.output).toMatch(/OK/);
+    const on = run(tool, ["--imported-state-writes", file("writes.aktion")]);
+    expect(on.output).toMatch(/L2: warning: .*`\$open` is imported from "\.\/ui\.aktion" and written here/);
+    expect(on.output).toMatch(/0 error\(s\), 1 warning\(s\)/);
+    expect(on.status).toBe(0);
+  });
+
+  it.each(tools)("%s passes the setter pattern with the flag on", (_name, tool) => {
+    const { status, output } = run(tool, ["--imported-state-writes", file("setter.aktion")]);
+    expect(output).toMatch(/OK/);
+    expect(status).toBe(0);
+  });
+});
+
+/**
  * Advice that touches `export` must not change what a module exports. The first
  * version of the warning for an `export` of an already declared name said to drop
  * the `export`, and an importer of that name then failed to link
