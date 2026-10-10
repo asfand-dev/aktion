@@ -11863,7 +11863,7 @@ function declare(stmt, name, assigned, taken) {
   const uses = /* @__PURE__ */ new Set();
   switch (stmt.kind) {
     case "ComponentDeclaration":
-      return { name, lines: componentOverloads(name, stmt.params, uses), uses };
+      return { name, lines: componentOverloads(name, stmt.params, uses, stmt.name), uses };
     case "ActionDeclaration":
     case "HookDeclaration":
       return { name, lines: [`export declare function ${name}(${parameterList(stmt.params)}): any;`], uses };
@@ -11907,9 +11907,9 @@ function parameterList(params) {
   const names = parameterNames(params);
   return params.map((p, i) => p.rest ? `...${names[i]}: any[]` : `${names[i]}?: ${parameterType(p)}`).join(", ");
 }
-function componentOverloads(name, params, uses) {
+function componentOverloads(name, params, uses, tag = name) {
   uses.add("AktionNode");
-  const result = `AktionNode<${JSON.stringify(name)}>`;
+  const result = `AktionNode<${JSON.stringify(tag)}>`;
   const names = parameterNames(params);
   const types = params.map(parameterType);
   if (params.some((p) => p.rest)) {
