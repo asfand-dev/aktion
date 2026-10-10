@@ -37603,15 +37603,15 @@ function lintImportedStateWrites(program) {
   for (const stmt of program.statements) {
     if (stmt.kind !== "Import") continue;
     for (const spec of stmt.specifiers) {
-      if (spec.isState === true) importedFrom.set(spec.local, stmt.source);
+      if (spec.isState === true) importedFrom.set(spec.local, { source: stmt.source, imported: spec.imported });
     }
   }
   if (importedFrom.size === 0) return [];
   const warnings = [];
   const report = (name, loc, topLevel) => {
-    const setter = `set${name.charAt(0).toUpperCase()}${name.slice(1)}`;
-    const from = importedFrom.get(name);
-    const message = topLevel ? `\`$${name}\` is imported from "${from}" and assigned at the top level, where \`$${name} = …\` is a set-once declaration: the imported atom already exists, so this statement does nothing. JavaScript does not allow assigning to an import either. Export a setter from "${from}" (\`export const ${setter} = (value) => { $${name} = value }\`) and call \`${setter}(…)\` here.` : `\`$${name}\` is imported from "${from}" and written here. The runtime shares one cell across importers, but JavaScript does not allow assigning to an import (ESLint \`no-import-assign\`). Keep the write in the owning module: export \`export const ${setter} = (value) => { $${name} = value }\` from "${from}" and call \`${setter}(…)\` here.`;
+    const { source: from, imported } = importedFrom.get(name);
+    const setter = `set${imported.charAt(0).toUpperCase()}${imported.slice(1)}`;
+    const message = topLevel ? `\`$${name}\` is imported from "${from}" and assigned at the top level, where \`$${name} = …\` is a set-once declaration: the imported atom already exists, so this statement does nothing. JavaScript does not allow assigning to an import either. Export a setter from "${from}" (\`export const ${setter} = (value) => { $${imported} = value }\`) and call \`${setter}(…)\` here.` : `\`$${name}\` is imported from "${from}" and written here. JavaScript does not allow assigning to an import (ESLint \`no-import-assign\`), and what the runtime does with it depends on where it runs: a handler or effect writes the shared atom, a component body writes a private copy, and a lowercase function called while rendering does nothing. Keep the write in the owning module: \`export const ${setter} = (value) => { $${imported} = value }\` from "${from}" and call \`${setter}(…)\` here.`;
     warnings.push({ line: loc?.line ?? 0, column: loc?.column ?? 0, severity: "warning", message });
   };
   const rootOf = (node) => {
@@ -37620,7 +37620,6 @@ function lintImportedStateWrites(program) {
     return cur;
   };
   walk(program, ({ node, parent }) => {
-    if (node.kind === "Import") return false;
     if (node.kind === "Assignment") {
       if (node.isState && node.declaration === void 0 && importedFrom.has(node.identifier)) {
         report(node.identifier, node.loc, parent === null);
