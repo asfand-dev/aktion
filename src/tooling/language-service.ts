@@ -411,6 +411,9 @@ function collectDeclaredTopLevelNames(program: ReturnType<typeof parse>): {
           }
         }
         break;
+      case "ExportList":
+        if (stmt.source === undefined) for (const spec of stmt.specifiers) exported.add(bindingKey(spec.local, spec.isState));
+        break;
       case "ComponentDeclaration":
       case "ActionDeclaration":
         add(stmt.name, stmt.exported);

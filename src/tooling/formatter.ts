@@ -549,6 +549,18 @@ function printStatement(stmt: Statement, indent: number, opts: ResolvedFormatOpt
         .join(", ");
       return `${padStr}import { ${specs} } from ${printStringLiteral(stmt.source, opts)}`;
     }
+    case "ExportList": {
+      const from = stmt.source === undefined ? "" : ` from ${printStringLiteral(stmt.source, opts)}`;
+      if (stmt.all) return `${padStr}export *${from}`;
+      const specs = stmt.specifiers
+        .map((s) => {
+          const local = s.isState ? `$${s.local}` : s.local;
+          if (s.exported === s.local) return local;
+          return `${local} as ${s.isState ? `$${s.exported}` : s.exported}`;
+        })
+        .join(", ");
+      return `${padStr}export { ${specs} }${from}`;
+    }
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
       // `let x` — declared without a value (its expression is the `void 0` the parser filled in).

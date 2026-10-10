@@ -885,6 +885,7 @@ class Analyzer {
     const hooks = this.hooksAt(context);
     switch (stmt.kind) {
       case "Import":
+      case "ExportList":
         break; // declared by hoistModule
       case "Assignment":
         this.assignment(stmt, context, hooks);
