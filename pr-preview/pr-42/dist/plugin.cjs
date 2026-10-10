@@ -2035,7 +2035,12 @@ function parseExportList(ctx, start) {
       };
     }
     seen.add(key);
-    specifiers.push(isState ? { local, exported, isState: true } : { local, exported });
+    specifiers.push({
+      local,
+      exported,
+      ...isState ? { isState: true } : {},
+      loc: { line: localTok.line, column: localTok.column }
+    });
     skipWhitespace(ctx);
     if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
       ctx.consume();
@@ -10082,6 +10087,7 @@ const defaultFrontends = {
   aktion: aktionFrontend,
   javascript: javascriptFrontend
 };
+const UNLOADED = "\0unloaded";
 function exportKey(name, isState) {
   return isState === true ? `$${name}` : name;
 }
@@ -10126,63 +10132,63 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
   const visiting = /* @__PURE__ */ new Set();
   const diagnostics = [];
   let nextId = 0;
-  const report = (path, line, column, message, severity, code) => {
+  const report = (path2, line, column, message, severity, code) => {
     const diagnostic = {
       line,
       column,
-      message: path === entryPath ? message : `${path}: ${message}`,
+      message: path2 === entryPath ? message : `${path2}: ${message}`,
       severity,
-      path
+      path: path2
     };
     if (code) diagnostic.code = code;
     diagnostics.push(diagnostic);
   };
-  const fail = (path, line, column, message, code) => report(path, line, column, message, "error", code);
-  function load(path, sourceOverride, language) {
-    const existing = modules.get(path);
+  const fail = (path2, line, column, message, code) => report(path2, line, column, message, "error", code);
+  function load(path2, sourceOverride, language) {
+    const existing = modules.get(path2);
     if (existing) return existing;
-    if (visiting.has(path)) return void 0;
-    visiting.add(path);
+    if (visiting.has(path2)) return void 0;
+    visiting.add(path2);
     let src;
     if (sourceOverride !== null) {
       src = sourceOverride;
     } else {
       try {
-        src = resolver.load(path);
+        src = resolver.load(path2);
       } catch {
-        visiting.delete(path);
-        fail(entryPath, 0, 0, `Failed to load imported module "${path}".`, "AKT-LINK-LOAD");
+        visiting.delete(path2);
+        fail(entryPath, 0, 0, `Failed to load imported module "${path2}".`, "AKT-LINK-LOAD");
         return void 0;
       }
     }
     const frontend = frontends[language];
     if (!frontend) {
-      visiting.delete(path);
+      visiting.delete(path2);
       fail(
-        path,
+        path2,
         0,
         0,
-        `"${path}" is a ${LANGUAGE_LABEL[language]} Aktion module, but no ${language} frontend is configured — compile it with aktion-runtime/vite, or pass a ${language} frontend to linkProgram (loadTypeScriptFrontend() from aktion-runtime/vite).`,
+        `"${path2}" is a ${LANGUAGE_LABEL[language]} Aktion module, but no ${language} frontend is configured — compile it with aktion-runtime/vite, or pass a ${language} frontend to linkProgram (loadTypeScriptFrontend() from aktion-runtime/vite).`,
         "AKT-LINK-NO-FRONTEND"
       );
       return void 0;
     }
     let compiled;
     try {
-      compiled = frontend.compile(src, path);
+      compiled = frontend.compile(src, path2);
     } catch (err) {
-      visiting.delete(path);
-      fail(path, 0, 0, `Failed to compile "${path}": ${err?.message ?? String(err)}`, "AKT-LINK-FRONTEND");
+      visiting.delete(path2);
+      fail(path2, 0, 0, `Failed to compile "${path2}": ${err?.message ?? String(err)}`, "AKT-LINK-FRONTEND");
       return void 0;
     }
     const { program: program2 } = compiled;
-    for (const e of program2.errors) fail(path, e.line, e.column, e.message);
+    for (const e of program2.errors) fail(path2, e.line, e.column, e.message);
     for (const d of compiled.diagnostics) {
-      report(path, d.line, d.column, d.message, d.severity, d.code);
+      report(path2, d.line, d.column, d.message, d.severity, d.code);
     }
     const rec = {
       id: nextId++,
-      path,
+      path: path2,
       language,
       originalSource: src,
       aktionSource: compiled.aktionSource,
@@ -10193,12 +10199,12 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
       declaredState: /* @__PURE__ */ new Set(),
       exportRefs: /* @__PURE__ */ new Map(),
       stars: [],
-      opaque: false,
+      starFailed: false,
       renamePlain: /* @__PURE__ */ new Map(),
       renameState: /* @__PURE__ */ new Map(),
       importedStateMutations: compiled.importedStateMutations ?? []
     };
-    modules.set(path, rec);
+    modules.set(path2, rec);
     buildSymbolTable(rec);
     for (const stmt of program2.statements) {
       if (stmt.kind !== "Import" && !(stmt.kind === "ExportList" && stmt.source !== void 0)) continue;
@@ -10207,29 +10213,29 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
       const column = stmt.loc?.column ?? 0;
       if (source === DSL_MODULE_ID) {
         if (stmt.kind === "ExportList") {
-          rec.opaque = true;
-          fail(path, line, column, "Built-ins from aktion-runtime/dsl cannot be re-exported — import them where you use them.", "AKT-LINK-EXPORT");
+          if (stmt.all) rec.starFailed = true;
+          fail(path2, line, column, "Built-ins from aktion-runtime/dsl cannot be re-exported — import them where you use them.", "AKT-LINK-EXPORT");
           continue;
         }
         checkBuiltinImport(rec, stmt, fail);
         rec.builtinImports.push(stmt);
         continue;
       }
-      const resolved = resolver.resolve(source, path);
+      const resolved = resolver.resolve(source, path2);
       if (resolved === null) {
-        rec.opaque = true;
+        if (stmt.kind === "ExportList" && stmt.all) rec.starFailed = true;
         rec.edges.push({ stmt, resolvedPath: null });
-        const why = resolver.explain?.(source, path);
-        fail(path, line, column, `Cannot resolve import "${source}".${why ? ` ${why}` : ""}`, "AKT-LINK-RESOLVE");
+        const why = resolver.explain?.(source, path2);
+        fail(path2, line, column, `Cannot resolve import "${source}".${why ? ` ${why}` : ""}`, "AKT-LINK-RESOLVE");
         continue;
       }
       const language2 = moduleLanguage(resolved);
       if (language2 === null) {
-        rec.opaque = true;
+        if (stmt.kind === "ExportList" && stmt.all) rec.starFailed = true;
         rec.edges.push({ stmt, resolvedPath: null });
         if (isReservedAktionPath(resolved)) {
           fail(
-            path,
+            path2,
             line,
             column,
             `"${source}": JSX Aktion modules (.aktion.tsx / .aktion.jsx) are not supported yet — use .aktion.ts or .aktion.js.`,
@@ -10238,7 +10244,7 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
         } else {
           const typeNames = rec.language === "typescript" && stmt.kind === "Import" && stmt.specifiers.length === 0 ? inlineTypeOnlyNames(src, line, column) : null;
           fail(
-            path,
+            path2,
             line,
             column,
             typeNames ? typeOnlyNativeImportMessage(source, typeNames) : nativeImportMessage(source, resolved),
@@ -10248,10 +10254,12 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
         continue;
       }
       rec.edges.push({ stmt, resolvedPath: resolved });
-      if (!load(resolved, null, language2) && !modules.has(resolved)) rec.opaque = true;
+      if (!load(resolved, null, language2) && !modules.has(resolved) && stmt.kind === "ExportList" && stmt.all) {
+        rec.starFailed = true;
+      }
     }
-    visiting.delete(path);
-    order.push(path);
+    visiting.delete(path2);
+    order.push(path2);
     return rec;
   }
   let entryLanguage = moduleLanguage(entryPath);
@@ -10284,34 +10292,54 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
   }
   const edgeSource = (rec) => (stmt) => rec.edges.find((e) => e.stmt === stmt)?.resolvedPath ?? null;
   for (const rec of modules.values()) collectExports(rec, fail, edgeSource(rec));
-  const resolveExport = (rec, key, seen = /* @__PURE__ */ new Set()) => {
+  const memo = /* @__PURE__ */ new Map();
+  const path = /* @__PURE__ */ new Set();
+  let cutCycles = 0;
+  const resolveExport = (rec, key) => {
     const visit = `${rec.path}\0${key}`;
-    if (seen.has(visit)) return "missing";
-    seen.add(visit);
+    const known = memo.get(visit);
+    if (known !== void 0) return known;
+    if (path.has(visit)) {
+      cutCycles += 1;
+      return "cycle";
+    }
+    path.add(visit);
+    const before = cutCycles;
+    const result = resolveExportUncached(rec, key);
+    path.delete(visit);
+    if (cutCycles === before) memo.set(visit, result);
+    return result;
+  };
+  const resolveExportUncached = (rec, key) => {
     const ref = rec.exportRefs.get(key);
     if (ref) {
       if (ref.from === null) return { rec, name: ref.name };
       const target = modules.get(ref.from);
-      return target ? resolveExport(target, exportKey(ref.name, key.startsWith("$")), seen) : "missing";
+      return target ? resolveExport(target, exportKey(ref.name, key.startsWith("$"))) : "opaque";
     }
     const origins = /* @__PURE__ */ new Map();
+    let opaque = rec.starFailed;
     for (const star of rec.stars) {
       const target = modules.get(star);
-      if (!target) continue;
-      const found = resolveExport(target, key, new Set(seen));
+      if (!target) {
+        opaque = true;
+        continue;
+      }
+      const found = resolveExport(target, key);
       if (found === "ambiguous") return found;
-      if (found !== "missing") origins.set(`${found.rec.path}\0${found.name}`, found);
+      if (found === "opaque") opaque = true;
+      else if (found !== "missing" && found !== "cycle") origins.set(`${found.rec.path}\0${found.name}`, found);
     }
     if (origins.size > 1) return "ambiguous";
-    return origins.values().next().value ?? "missing";
+    return origins.values().next().value ?? (opaque ? "opaque" : "missing");
   };
-  const exportProblem = (rec, owner, found, key, source, line, column) => {
-    if (found === "missing" && owner.opaque) return;
+  const exportProblem = (rec, found, key, source, line, column) => {
+    if (found === "opaque") return;
     fail(
       rec.path,
       line,
       column,
-      found === "ambiguous" ? `"${source}" exports \`${key}\` from more than one module through \`export *\` — export it by name to choose one.` : `"${source}" does not export \`${key}\`.`,
+      found === "ambiguous" ? `"${source}" exports \`${key}\` from more than one module through \`export *\` — export it by name to choose one.` : found === "cycle" ? `"${source}" re-exports \`${key}\` in a cycle of re-exports that never reaches a declaration.` : `"${source}" does not export \`${key}\`.`,
       "AKT-LINK-EXPORT"
     );
   };
@@ -10323,7 +10351,10 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
       for (const spec of stmt.specifiers) {
         const key = exportKey(spec.local, spec.isState);
         const found = resolveExport(src, key);
-        if (typeof found === "string") exportProblem(rec, src, found, key, stmt.source, stmt.loc?.line ?? 0, stmt.loc?.column ?? 0);
+        if (typeof found === "string") {
+          const at = spec.loc ?? stmt.loc;
+          exportProblem(rec, found, key, stmt.source, at?.line ?? 0, at?.column ?? 0);
+        }
       }
     }
   }
@@ -10339,7 +10370,7 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
         const key = exportKey(spec.imported, spec.isState);
         const found = resolveExport(src, key);
         if (typeof found === "string") {
-          exportProblem(rec, src, found, key, stmt.source, line, column);
+          exportProblem(rec, found, key, stmt.source, line, column);
           continue;
         }
         if (spec.isState) {
@@ -10354,7 +10385,8 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
     for (const mutation of rec.importedStateMutations) {
       const edge = rec.edges.find((e) => e.stmt.source === mutation.source && e.resolvedPath !== null);
       const exporter = edge ? modules.get(edge.resolvedPath) : void 0;
-      if (exporter && importedStateMutationApplies(mutation, exporter.program)) {
+      const found = exporter ? resolveExport(exporter, `$${mutation.imported}`) : void 0;
+      if (found && typeof found !== "string" && importedStateMutationApplies({ ...mutation, imported: found.name }, found.rec.program)) {
         fail(rec.path, mutation.line, mutation.column, mutation.message, "E108");
       }
     }
@@ -10362,16 +10394,16 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
   const merged = [];
   const sources = [entryPath];
   const sourceIndex = /* @__PURE__ */ new Map([[entryPath, 0]]);
-  for (const path of order) {
-    if (sourceIndex.has(path)) continue;
-    sourceIndex.set(path, sources.length);
-    sources.push(path);
+  for (const path2 of order) {
+    if (sourceIndex.has(path2)) continue;
+    sourceIndex.set(path2, sources.length);
+    sources.push(path2);
   }
   const multiModule = sources.length > 1;
-  for (const path of order) {
-    const rec = modules.get(path);
+  for (const path2 of order) {
+    const rec = modules.get(path2);
     const renamer = makeRenamer(rec);
-    const index = sourceIndex.get(path);
+    const index = sourceIndex.get(path2);
     for (const stmt of rec.program.statements) {
       if (stmt.kind === "Import" || stmt.kind === "ExportList") continue;
       renamer.renameTopLevel(stmt);
@@ -10390,8 +10422,8 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
   };
   if (multiModule) program.sources = sources;
   const linkedModules = [];
-  for (const path of sources) {
-    const rec = modules.get(path);
+  for (const path2 of sources) {
+    const rec = modules.get(path2);
     if (!rec) continue;
     linkedModules.push({
       path: rec.path,
@@ -10477,9 +10509,10 @@ function collectExports(rec, fail, resolved) {
       if (from2 !== null) rec.stars.push(from2);
       continue;
     }
-    const from = stmt.source === void 0 ? null : resolved(stmt);
-    if (stmt.source !== void 0 && from === null) continue;
+    const from = stmt.source === void 0 ? null : resolved(stmt) ?? UNLOADED;
     for (const spec of stmt.specifiers) {
+      const specLine = spec.loc?.line ?? line;
+      const specColumn = spec.loc?.column ?? column;
       const key = exportKey(spec.exported, spec.isState);
       if (from === null) {
         const localKey = exportKey(spec.local, spec.isState);
@@ -10487,8 +10520,8 @@ function collectExports(rec, fail, resolved) {
         if (!declared.has(spec.local)) {
           fail(
             rec.path,
-            line,
-            column,
+            specLine,
+            specColumn,
             imported.has(localKey) ? `\`${localKey}\` is imported, not declared in this module — re-export it with \`export { ${localKey} } from "…"\`.` : `Cannot export \`${localKey}\`: this module declares no top-level \`${localKey}\`.`,
             "AKT-LINK-EXPORT"
           );
@@ -10496,7 +10529,7 @@ function collectExports(rec, fail, resolved) {
         }
       }
       if (rec.exportRefs.has(key)) {
-        fail(rec.path, line, column, `\`${key}\` is exported more than once.`, "AKT-LINK-EXPORT");
+        fail(rec.path, specLine, specColumn, `\`${key}\` is exported more than once.`, "AKT-LINK-EXPORT");
         continue;
       }
       rec.exportRefs.set(key, { name: spec.local, from });

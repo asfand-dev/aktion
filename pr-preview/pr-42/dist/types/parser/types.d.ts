@@ -338,6 +338,8 @@ export interface ExportSpecifier {
     exported: string;
     /** True when the binding is a `$state` atom (`$` is kept across `as`). */
     isState?: boolean;
+    /** Where the entry starts, so a link error can point at it rather than at the statement. */
+    loc?: SourceLocation;
 }
 /**
  * `export { a, b as c }`, `export { x as y } from "./m.aktion"` and
