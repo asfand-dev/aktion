@@ -16,7 +16,7 @@
  */
 
 import { printProgram } from "../tooling/formatter.js";
-import type { ImportStatement, Program } from "../parser/types.js";
+import type { ExportListStatement, ImportStatement, Program } from "../parser/types.js";
 import { defaultFrontends, DSL_MODULE_ID, type ModuleFrontends } from "./frontend.js";
 import { linkProgram, type LinkDiagnostic, type LinkedModule, type ModuleResolver } from "./linker.js";
 import { moduleLanguage } from "./module-kind.js";
@@ -135,18 +135,23 @@ async function defaultFetch(url: string): Promise<string> {
 }
 
 /**
- * The import statements of a module, found by compiling it with the frontend
+ * The import and re-export statements of a module, found by compiling it with the frontend
  * for its language. Parsing a `.aktion.ts` file as plain Aktion would drop
  * every line a type annotation broke, imports included — so a module whose
  * language has no frontend contributes no edges here (the linker reports it).
  */
-function importsOf(source: string, path: string, frontends: ModuleFrontends): ImportStatement[] {
+function importsOf(
+  source: string,
+  path: string,
+  frontends: ModuleFrontends,
+): Array<ImportStatement | (ExportListStatement & { source: string })> {
   const language = moduleLanguage(path);
   const frontend = language === null ? undefined : frontends[language];
   if (!frontend) return [];
   try {
     return frontend.compile(source, path).program.statements.filter(
-      (s): s is ImportStatement => s.kind === "Import",
+      (s): s is ImportStatement | (ExportListStatement & { source: string }) =>
+        s.kind === "Import" || (s.kind === "ExportList" && s.source !== undefined),
     );
   } catch {
     return []; // a throwing frontend is diagnosed by the linker's own compile

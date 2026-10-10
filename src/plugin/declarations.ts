@@ -132,25 +132,50 @@ interface Declared {
  */
 export function aktionExportNames(program: Program): string[] {
   const names = new Set<string>();
+  const listed = listedExports(program);
   for (const stmt of program.statements) {
-    const name = exportName(stmt);
-    if (name !== null) names.add(name);
+    for (const name of exportNames(stmt, listed)) names.add(name);
+    if (stmt.kind === "ExportList" && stmt.source !== undefined) {
+      for (const spec of stmt.specifiers) names.add(spec.isState ? `$${spec.exported}` : spec.exported);
+    }
   }
   return [...names];
 }
 
-function exportName(stmt: Statement): string | null {
+/** The binding key of a declaration — `$count` for an atom or hook, `TodoRow` otherwise — or `null` for a statement that declares none. */
+function declaredKey(stmt: Statement): string | null {
   switch (stmt.kind) {
     case "ComponentDeclaration":
     case "ActionDeclaration":
-      return stmt.exported ? stmt.name : null;
+      return stmt.name;
     case "HookDeclaration":
-      return stmt.exported ? `$${stmt.name}` : null;
+      return `$${stmt.name}`;
     case "Assignment":
-      return stmt.exported ? (stmt.isState ? `$${stmt.identifier}` : stmt.identifier) : null;
+      return stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
     default:
       return null;
   }
+}
+
+/** Local binding key → the names an `export { … }` list gives it (no `from`; those are forwarded as written). */
+function listedExports(program: Program): Map<string, string[]> {
+  const listed = new Map<string, string[]>();
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "ExportList" || stmt.source !== undefined) continue;
+    for (const spec of stmt.specifiers) {
+      const key = spec.isState ? `$${spec.local}` : spec.local;
+      listed.set(key, [...(listed.get(key) ?? []), spec.isState ? `$${spec.exported}` : spec.exported]);
+    }
+  }
+  return listed;
+}
+
+/** The names a statement is exported under: its own, when it carries `export`, plus every `export { … }` entry for it. */
+function exportNames(stmt: Statement, listed: ReadonlyMap<string, string[]>): string[] {
+  const key = declaredKey(stmt);
+  if (key === null) return [];
+  const own = "exported" in stmt && stmt.exported ? [key] : [];
+  return [...new Set([...own, ...(listed.get(key) ?? [])])];
 }
 
 /** The declaration text for one `.aktion` module, and the parse errors it had. */
@@ -166,11 +191,29 @@ export function aktionDeclarationText(
   // Last declaration of a name wins, as top-level re-binding does at runtime —
   // two declarations of one name would be TS2451 / TS2300.
   const byName = new Map<string, Declared>();
+  const listed = listedExports(program);
   for (const stmt of program.statements) {
-    const declared = declare(stmt, assigned, taken);
-    if (declared === null) continue;
-    byName.delete(declared.name);
-    byName.set(declared.name, declared);
+    for (const name of exportNames(stmt, listed)) {
+      const declared = declare(stmt, name, assigned, taken);
+      if (declared === null) continue;
+      byName.delete(declared.name);
+      byName.set(declared.name, declared);
+    }
+  }
+  // A re-export is declared by pointing at the other module's own declaration
+  // file, which TypeScript finds through `allowArbitraryExtensions`.
+  const forwarded: string[] = [];
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "ExportList" || stmt.source === undefined) continue;
+    if (stmt.all) {
+      forwarded.push(`export * from ${JSON.stringify(stmt.source)};`);
+      continue;
+    }
+    const specs = stmt.specifiers.map((s) => {
+      const local = s.isState ? `$${s.local}` : s.local;
+      return s.exported === s.local ? local : `${local} as ${s.isState ? `$${s.exported}` : s.exported}`;
+    });
+    forwarded.push(`export { ${specs.join(", ")} } from ${JSON.stringify(stmt.source)};`);
   }
 
   const uses = new Set<string>(["CompiledProgram"]);
@@ -186,7 +229,8 @@ export function aktionDeclarationText(
     `import type { ${[...uses].sort().join(", ")} } from "aktion-runtime/dsl";`,
     "",
     ...lines,
-    ...(lines.length > 0 ? [""] : []),
+    ...forwarded,
+    ...(lines.length + forwarded.length > 0 ? [""] : []),
     `declare const ${local}: CompiledProgram;`,
     `export default ${local};`,
     "",
@@ -194,19 +238,22 @@ export function aktionDeclarationText(
   return { text, errors: program.errors };
 }
 
-function declare(stmt: Statement, assigned: ReadonlyMap<string, Written[]>, taken: Set<string>): Declared | null {
-  const name = exportName(stmt);
-  if (name === null) return null;
+function declare(
+  stmt: Statement,
+  name: string,
+  assigned: ReadonlyMap<string, Written[]>,
+  taken: Set<string>,
+): Declared | null {
   const uses = new Set<string>();
   switch (stmt.kind) {
     case "ComponentDeclaration":
-      return { name, lines: componentOverloads(stmt.name, stmt.params, uses), uses };
+      return { name, lines: componentOverloads(name, stmt.params, uses), uses };
     case "ActionDeclaration":
     case "HookDeclaration":
       return { name, lines: [`export declare function ${name}(${parameterList(stmt.params)}): any;`], uses };
     case "Assignment": {
       const mutable = stmt.isState || stmt.declaration === "let" || stmt.declaration === "var";
-      const type = mutable ? bindingType(stmt.expression, assigned.get(name) ?? [], uses) : valueType(stmt.expression, uses);
+      const type = mutable ? bindingType(stmt.expression, assigned.get(declaredKey(stmt)!) ?? [], uses) : valueType(stmt.expression, uses);
       return { name, lines: exportBinding(name, mutable ? "let" : "const", type, taken), uses };
     }
     default:
