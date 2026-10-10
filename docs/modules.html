@@ -153,10 +153,37 @@ export function $useToggle() {            // a hook ($-prefixed)
 export $count = 0                         // a reactive atom
 export accent = "var(--rui-primary)"      // a plain binding</code></pre>
       <p>
-        <code>export { a, b }</code> lists, re-exports, and
-        <code>export</code> of a destructuring declaration are not supported &mdash;
-        export each binding inline, where it is declared.
+        <code>export</code> of a destructuring declaration is not supported &mdash;
+        export each binding inline, or list the names it declares (below).
       </p>
+
+      <h3 id="export-lists">Export lists and re-exports</h3>
+      <p>
+        An <code>export { &hellip; }</code> list exports bindings the module already
+        declares, with <code>as</code> to rename them, and a <code>$</code> atom keeps
+        its <code>$</code> on both sides. It does exactly what writing
+        <code>export</code> before the declaration does &mdash; the same atom, shared
+        by every importer &mdash; and the declaration may come before or after the list.
+        A name can be exported once.
+      </p>
+<pre><code>let $count = 0
+function increment() { $count += 1 }
+export { $count, increment as bump }</code></pre>
+      <p>
+        <code>export { &hellip; } from "&hellip;"</code> and
+        <code>export * from "&hellip;"</code> forward another module's exports
+        without binding them in this file, so a <strong>barrel</strong> file can gather
+        a library behind one import. The source is linked where the statement stands
+        (see <a href="#link-order">link order</a>). Naming something the source does not
+        export is a link error, as is a name two <code>export *</code> statements supply
+        from different modules; an explicit export always wins over a star. A name that was
+        imported cannot be listed &mdash; re-export it with <code>from</code>. Aktion has no
+        namespace objects, so <code>export * as ns from "&hellip;"</code> is rejected.
+      </p>
+<pre><code>// barrel.aktion
+export { $count, bump } from "./counter.aktion"
+export { Card2 } from "./components.aktion"
+export * from "./format.aktion"</code></pre>
 
       <h2 id="importing">Importing</h2>
       <p>

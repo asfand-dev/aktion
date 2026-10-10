@@ -22,6 +22,12 @@ Each entry is dated and summarises what was added, changed, or fixed.
 * **prompt:** stop telling the model that every program is valid JavaScript ([#36](https://github.com/asfand-dev/aktion/issues/36)) ([530b095](https://github.com/asfand-dev/aktion/commit/530b0957b35f360d0570d5722ea72dcc49d42dd8))
 * **runtime:** make the state-write-during-render warning describe the real cause ([#37](https://github.com/asfand-dev/aktion/issues/37)) ([74cc08a](https://github.com/asfand-dev/aktion/commit/74cc08a22f0e883f019b33381e49a811fd5e997f))
 
+## 2026-10-10
+
+### Export Lists and Re-exports
+
+- Added `export { a, b as c }`, `export { x } from "./m.aktion"`, `export { x as y } from "…"` and `export * from "…"`, so a barrel file can gather a library behind one import. A list exports names the module already declares and behaves exactly like `export` before the declaration, including for `$` atoms. A re-export is linked where the statement stands, like an import. Exporting an undeclared or duplicate name, or re-exporting a name the source lacks, is a link error; `export * as ns` is rejected because Aktion has no namespace objects.
+
 ## 2026-10-06
 
 ### ESLint Knows the Names Aktion Injects

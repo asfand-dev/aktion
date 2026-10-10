@@ -2009,7 +2009,7 @@ it flags is this DSL's normal, unavoidable idiom):
 | Rule | Why |
 | ---- | --- |
 | `object-shorthand` | FORMERLY GRAMMAR, kept off: its fix rewrites a `key: function (…) {…}` handler into method shorthand (`onClick() {…}`), which used to be a parse error and now parses to the same handler. Kept off so an upgrade does not restyle existing `.aktion` files. |
-| `unicorn/prefer-export-from` | GRAMMAR: `export { … } from …` lists have no production at all — an explicit parse error. |
+| `unicorn/prefer-export-from` | FORMERLY GRAMMAR, kept off: its fix creates an `export { … } from …` list, which used to be a parse error and now parses and links. Kept off so an upgrade does not restyle existing `.aktion` files. |
 | `unicorn/prefer-string-raw` | GRAMMAR: no tagged-template-literal production — `` String.raw`…` `` is a parse error ("Tagged template literals are not supported"; it used to silently truncate the value with *no* reported error — see the citation in [`src/eslint/rules.ts`](./src/eslint/rules.ts)). |
 | `unicorn/switch-case-braces` | GRAMMAR: no generic block-statement production — a bare `{` in statement position can only be an object literal, so wrapping a `case N: return X` body in `{ }` is a parse error ("Aktion has no block statements or block scoping"). Found by this package's own corpus sweep, not carried over from any downstream pilot. |
 | `unicorn/prefer-switch` | GRAMMAR, same cause: its fix turns an `if … else if …` chain of three or more comparisons into a `switch` and keeps braced case bodies, so a branch that declares a binding becomes `case "ok": { const label = … }` — a block statement, which is a parse error ("Aktion has no block statements or block scoping"). |
@@ -2083,8 +2083,18 @@ names canonical (the `aktion` binding + the `$state` names that `serializeState`
 trailing comma, and a syntax error in an **imported** module is reported as a
 link diagnostic rather than silently dropping that module's statements.
 
+**Export lists and barrels.** `export { a, b as c, $count }` exports bindings the
+module already declares, exactly as `export` before the declaration would (an
+exported `$` atom is the same shared atom), and `export { x as y } from "./m.aktion"`
+and `export * from "./m.aktion"` forward another module's exports without binding
+them locally, so one file can gather a library behind a single import. Listing a
+name the module does not declare, exporting a name twice, or re-exporting a name
+the source lacks is a link error; a name two `export *` statements supply from
+different modules is ambiguous until exported by name. `export * as ns` is
+rejected (no namespace objects).
+
 **Link order is import order.** The linker walks the graph depth-first and
-merges a module after the modules it imports, taking `import` statements in the
+merges a module after the modules it imports, taking `import` statements (and `export … from` re-exports) in the
 order they are written — the same order ES modules evaluate in. Importing `a`
 then `b` links `a, b, entry`; swapped, `b, a, entry`. The merged program's
 top-level statements run in that order, so a tool that sorts or reorders a
