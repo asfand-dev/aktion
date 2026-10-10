@@ -308,6 +308,55 @@ Button("Toggle", { onClick: () =&gt; { ui.open = !ui.open } })</code></pre>
         the same instance &mdash; export the store itself, as above.
       </p>
 
+      <h3 id="choosing-a-write-shape">Which shape to use</h3>
+      <p>
+        Prefer <strong>the exported setter action</strong>. Every write to the atom
+        then lives in the module that declares it, the importers are plain
+        JavaScript (they only call a function), and nothing about reactivity
+        changes. Measured on the runtime, for an atom or store read in three
+        modules:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th></th><th>Setter action</th><th>Store property</th><th>Direct write</th></tr></thead>
+        <tbody>
+          <tr><td>Readers in other modules update</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>Valid JavaScript in the importer</td><td>Yes</td><td>Yes</td><td>No (<code>no-import-assign</code>)</td></tr>
+          <tr><td><code>$effect</code> in the owner and each importer re-runs</td><td>Yes, in link order (owner first)</td><td>No: <code>[ui.open]</code> is not a valid dependency, and an effect with no list runs once</td><td>Yes, same order</td></tr>
+          <tr><td>Called at the top level of an importer</td><td>Works: <code>setOpen(true)</code> sets it</td><td>Works</td><td>Does nothing: a top-level <code>$x = &hellip;</code> is a set-once declaration and the imported atom wins</td></tr>
+          <tr><td>Called while rendering</td><td>A <code>function</code> setter does nothing; an arrow setter applies without a re-render and logs the render-write warning</td><td>Applies without a re-render and logs the same warning</td><td>A component body gets a private copy that other modules never see; in a lowercase function it does nothing</td></tr>
+          <tr><td>Compound writes (<code>+=</code>, <code>++</code>, array updates)</td><td>Inside the setter, in the owner</td><td>By property</td><td>Works</td></tr>
+          <tr><td>Survives <code>formatProgram</code> unchanged</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Use a store when the shared value is naturally a record read and written by
+        property and nothing needs to <code>$effect</code> on it; use an atom with a
+        setter when it is a single value, a list that is replaced, or the target of
+        an effect. Do not write shared state while rendering with either shape: do
+        it from a handler or an effect.
+      </p>
+<pre><code>// ui.aktion
+export let $open = false
+export const setOpen = (value) =&gt; { $open = value }
+
+// any importer
+import { $open, setOpen } from "./ui.aktion"
+Button("Toggle", () =&gt; setOpen(!$open))</code></pre>
+      <p>
+        To find the direct writes in a program, turn on the opt-in
+        <code>imported-state-write</code> lint:
+        <code>getLintWarnings(source, library, { importedStateWrites: true })</code>,
+        or pass <code>--imported-state-writes</code> to
+        <code>tools/validate-aktion.mjs</code> or
+        <code>tools/validate-aktion-app.mjs</code>. Each warning names the imported
+        atom, the module it comes from and the setter to add. To migrate a site, add
+        one setter per imported atom to the owning module (the warning spells it
+        out: <code>setMockClusters</code> for <code>$mockClusters</code>) and
+        replace <code>$x = value</code> with <code>setX(value)</code>; a compound
+        write becomes <code>setX($x + 1)</code>. It is a warning, never an error, and
+        off by default: the direct write still runs.
+      </p>
+
       <h2 id="languages">Modules in TypeScript and JavaScript</h2>
       <p>
         The file name says which language a module is written in. All three compile
