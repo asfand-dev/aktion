@@ -39,6 +39,21 @@ describe("imported-state-write", () => {
     expect(warning!.message).toContain("`setMockClusters(…)`");
   });
 
+  it("names the setter after the name the owner exports when the import is aliased", () => {
+    const [warning] = lint('import { $open as $isOpen } from "./ui.aktion"\nfunction f() { $isOpen = true }');
+    expect(warning!.message).toContain("`$isOpen` is imported from \"./ui.aktion\"");
+    expect(warning!.message).toContain("export const setOpen = (value) => { $open = value }");
+    expect(warning!.message).not.toContain("setIsOpen");
+    const [topLevel] = lint('import { $open as $isOpen } from "./ui.aktion"\n$isOpen = true');
+    expect(topLevel!.message).toContain("`setOpen(…)`");
+  });
+
+  it("does not claim the runtime shares one cell for every write", () => {
+    const [warning] = lint(`${IMPORT}function f() { $open = true }`);
+    expect(warning!.message).toMatch(/private copy/);
+    expect(warning!.message).toMatch(/does nothing/);
+  });
+
   it("reports every write, each at its own position", () => {
     const warnings = lint(`${IMPORT}function f() {\n  $open = true\n  $n += 1\n  $o.k = 2\n}`);
     expect(warnings.map((w) => w.line)).toEqual([3, 4, 5]);

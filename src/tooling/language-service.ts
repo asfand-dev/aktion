@@ -668,38 +668,39 @@ const WRITE_BUILTINS: ReadonlySet<string> = new Set(["__rui_assign__", "__rui_pr
  * owner's atom; the setter suggestion applies to them as well.
  */
 function lintImportedStateWrites(program: ReturnType<typeof parse>): Diagnostic[] {
-  const importedFrom = new Map<string, string>();
+  const importedFrom = new Map<string, { source: string; imported: string }>();
   for (const stmt of program.statements) {
     if (stmt.kind !== "Import") continue;
     for (const spec of stmt.specifiers) {
-      if (spec.isState === true) importedFrom.set(spec.local, stmt.source);
+      if (spec.isState === true) importedFrom.set(spec.local, { source: stmt.source, imported: spec.imported });
     }
   }
   if (importedFrom.size === 0) return [];
 
   const warnings: Diagnostic[] = [];
   const report = (name: string, loc: { line: number; column: number } | undefined, topLevel: boolean): void => {
-    const setter = `set${name.charAt(0).toUpperCase()}${name.slice(1)}`;
-    const from = importedFrom.get(name)!;
+    const { source: from, imported } = importedFrom.get(name)!;
+    const setter = `set${imported.charAt(0).toUpperCase()}${imported.slice(1)}`;
     const message = topLevel
       ? `\`$${name}\` is imported from "${from}" and assigned at the top level, where \`$${name} = …\` is a set-once ` +
         `declaration: the imported atom already exists, so this statement does nothing. JavaScript does not allow ` +
-        `assigning to an import either. Export a setter from "${from}" (\`export const ${setter} = (value) => { $${name} = value }\`) ` +
+        `assigning to an import either. Export a setter from "${from}" (\`export const ${setter} = (value) => { $${imported} = value }\`) ` +
         `and call \`${setter}(…)\` here.`
-      : `\`$${name}\` is imported from "${from}" and written here. The runtime shares one cell across importers, but ` +
-        `JavaScript does not allow assigning to an import (ESLint \`no-import-assign\`). Keep the write in the owning ` +
-        `module: export \`export const ${setter} = (value) => { $${name} = value }\` from "${from}" and call ` +
+      : `\`$${name}\` is imported from "${from}" and written here. JavaScript does not allow assigning to an ` +
+        `import (ESLint \`no-import-assign\`), and what the runtime does with it depends on where it runs: a handler or ` +
+        `effect writes the shared atom, a component body writes a private copy, and a lowercase function called while ` +
+        `rendering does nothing. Keep the write in the owning module: \`export const ${setter} = (value) => { $${imported} = value }\` ` +
+        `from "${from}" and call ` +
         `\`${setter}(…)\` here.`;
     warnings.push({ line: loc?.line ?? 0, column: loc?.column ?? 0, severity: "warning", message });
   };
   const rootOf = (node: { kind: string; object?: unknown }): { kind: string; name?: string } | undefined => {
-    let cur: any = node;
-    while (cur?.kind === "Member") cur = cur.object;
-    return cur;
+    let cur: { kind: string; object?: unknown } | undefined = node;
+    while (cur?.kind === "Member") cur = cur.object as { kind: string; object?: unknown } | undefined;
+    return cur as { kind: string; name?: string } | undefined;
   };
 
   walk(program, ({ node, parent }) => {
-    if (node.kind === "Import") return false;
     if (node.kind === "Assignment") {
       if (node.isState && node.declaration === undefined && importedFrom.has(node.identifier)) {
         report(node.identifier, node.loc, parent === null);
