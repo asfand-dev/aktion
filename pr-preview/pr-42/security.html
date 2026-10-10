@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Security &amp; the trust model · Aktion</title>
+  <meta name="description" content="Aktion's two-layer trust model: program text is trusted code, everything it renders is untrusted data. How to narrow the host-global surface with setGlobalAccessPolicy, the full sink-to-sanitiser table, why the shadow DOM is not a security boundary, and CSP guidance." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    .callout { border: 1px solid var(--doc-border); border-left: 4px solid var(--doc-accent, #6366f1); border-radius: 8px; padding: 14px 16px; margin: 18px 0; background: var(--doc-surface-elev); }
+    .callout.warn { border-left-color: #f59e0b; }
+    .callout.bad { border-left-color: #ef4444; }
+    .callout h4 { margin: 0 0 8px; font-size: 15px; }
+    .callout p:last-child { margin-bottom: 0; }
+    .trust-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px 0 26px; }
+    @media (max-width: 880px) { .trust-grid { grid-template-columns: 1fr; } }
+    .trust-card { border: 1px solid var(--doc-border); border-radius: 12px; padding: 16px 18px; background: var(--doc-surface-elev); }
+    .trust-card h3 { margin: 0 0 6px; font-size: 15px; }
+    .trust-card .trust-tag { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--doc-text-muted); display: block; margin-bottom: 8px; }
+    .trust-card p:last-child { margin-bottom: 0; }
+    .trust-card.is-code { border-left: 4px solid #ef4444; }
+    .trust-card.is-data { border-left: 4px solid #10b981; }
+    .policy-table td code, .sink-table td code { white-space: nowrap; }
+    .sink-table td:last-child code { white-space: normal; }
+  </style>
+</head>
+<body data-page="security">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Guide</span>
+        <h1>Security &amp; the trust model.</h1>
+        <p class="lead">
+          Aktion has two security surfaces, and almost every mistake comes from
+          treating them as one. The <strong>program text</strong> is code &mdash; as
+          privileged as a <code>&lt;script&gt;</code> tag. Everything the program
+          <strong>renders</strong> is data &mdash; and that is what the sanitisers
+          defend. This page explains where the line falls, and what to do when your
+          program text is not fully trusted.
+        </p>
+      </header>
+
+      <div class="callout">
+        <h4>The mental model in one line</h4>
+        <p>
+          Sanitisers protect you from untrusted <em>data</em> flowing through a
+          trusted <em>program</em>. They cannot protect you from an untrusted program
+          author &mdash; that author would simply call <code>eval</code>. If program
+          text can come from somewhere you do not control, call
+          <code>setGlobalAccessPolicy("safe")</code> before you render anything.
+        </p>
+      </div>
+
+      <h2 id="two-layers">Two layers, two threat models</h2>
+      <div class="trust-grid">
+        <div class="trust-card is-code">
+          <span class="trust-tag">Layer 1</span>
+          <h3 id="layer-code">The program text is trusted code</h3>
+          <p>
+            By default a program reaches the whole host realm: <code>eval</code>,
+            <code>Function</code>, <code>document</code>, <code>fetch</code>,
+            <code>localStorage</code>. Authoring a program is equivalent to shipping
+            a JavaScript file. This is deliberate &mdash; it is what makes the
+            language a productive authoring surface.
+          </p>
+        </div>
+        <div class="trust-card is-data">
+          <span class="trust-tag">Layer 2</span>
+          <h3 id="layer-data">Everything it renders is untrusted data</h3>
+          <p>
+            API responses, LLM output, chat messages, tool results, URL parameters,
+            user input. This is the surface the per-sink sanitisers defend, and it is
+            the one that matters in the common case: a program <em>you</em> wrote,
+            rendering values you did not.
+          </p>
+        </div>
+      </div>
+      <p>
+        The distinction decides which control you need. A cross-site-scripting
+        attempt smuggled into a product name is a <em>Layer&nbsp;2</em> problem, and
+        the sanitisers already handle it. A program authored by a prompt-injectable
+        LLM is a <em>Layer&nbsp;1</em> problem, and no sanitiser addresses it &mdash;
+        you need to narrow the global surface instead.
+      </p>
+
+      <div class="callout bad">
+        <h4>Aktion is not a sandbox by default</h4>
+        <p>
+          Do not read the sanitiser table below as "Aktion safely runs untrusted
+          programs". Under the default policy it does not, and it does not try to.
+          Reach for <a href="#policy"><code>setGlobalAccessPolicy</code></a> when the
+          program author is not trusted, and treat that as the load-bearing control.
+        </p>
+      </div>
+
+      <h2 id="which-case">Which case are you in?</h2>
+      <table class="signature-table">
+        <thead><tr><th>Where the program text comes from</th><th>Trust it as</th><th>What to do</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Your own repo, a build artefact, a reviewed <code>.aktion</code> file</td>
+            <td>Your own source</td>
+            <td>Default <code>"all"</code> policy is appropriate. Sanitisers still cover the data you render.</td>
+          </tr>
+          <tr>
+            <td>An LLM you prompt, with a system prompt you control, no user-controlled tool output in context</td>
+            <td>Semi-trusted</td>
+            <td>Prefer <code>"safe"</code>. A program that only builds UI never needs <code>eval</code> or <code>document</code>.</td>
+          </tr>
+          <tr>
+            <td>An LLM whose context includes untrusted content (retrieved pages, emails, tool results)</td>
+            <td>Untrusted &mdash; prompt injection is a code-execution path</td>
+            <td><code>setGlobalAccessPolicy("safe")</code>, mandatory.</td>
+          </tr>
+          <tr>
+            <td>A multi-tenant database, a user-editable template, a URL parameter</td>
+            <td>Untrusted</td>
+            <td><code>setGlobalAccessPolicy("safe")</code>, or an explicit allow-list array.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="policy">Narrowing the global surface</h2>
+      <p>
+        <code>setGlobalAccessPolicy</code> gates the <em>last</em> step of identifier
+        resolution &mdash; the passthrough to the embedding realm. Knowing where that
+        step sits explains both what the policy can reach and what it cannot touch:
+      </p>
+      <ol>
+        <li>user state (<code>$name</code>)</li>
+        <li>bindings in scope</li>
+        <li>action declarations</li>
+        <li>user component declarations (PascalCase <code>function</code>)</li>
+        <li>the curated <code>GLOBAL_NAMESPACES</code> fast path</li>
+        <li>the component library</li>
+        <li><code>cleanup</code></li>
+        <li><strong>host globals &mdash; policy-gated</strong></li>
+      </ol>
+      <p>
+        Two consequences fall out of that ordering. Everything above step&nbsp;8 is
+        resolved before the policy is consulted, so the policy cannot break it. And a
+        library component always wins over a same-named host constructor &mdash; the
+        <code>Text</code> and <code>Map</code> <em>components</em> beat DOM
+        <code>Text</code> and JS <code>Map</code>, under every policy.
+      </p>
+<pre><code>import { setGlobalAccessPolicy, getGlobalAccessPolicy } from "aktion-runtime";
+
+setGlobalAccessPolicy("safe");        // data + formatting only
+getGlobalAccessPolicy();              // -> "safe"</code></pre>
+      <table class="signature-table policy-table">
+        <thead><tr><th>Policy</th><th>Reachable host globals</th><th>Use when</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>"all"</code> <em>(default)</em></td>
+            <td>Everything on <code>globalThis</code>, including <code>eval</code>, <code>Function</code>, <code>document</code>, <code>fetch</code>, <code>localStorage</code>.</td>
+            <td>Program text is as trusted as your own source code.</td>
+          </tr>
+          <tr>
+            <td><code>"safe"</code></td>
+            <td>A fixed allow-list of data, formatting, and encoding globals &mdash; enumerated below. No code execution, no DOM, no network, no persistence.</td>
+            <td>Program text may come from anywhere you do not fully control.</td>
+          </tr>
+          <tr>
+            <td><code>readonly string[]</code></td>
+            <td>Exactly the names you list, and nothing else.</td>
+            <td>You need one extra capability beyond <code>"safe"</code>, or a stricter set than it.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3 id="safe-list">What <code>"safe"</code> allows</h3>
+      <p>
+        Capabilities a program needs to compute with values &mdash; and nothing that
+        grants code execution, DOM access, network access, or persistence:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Category</th><th>Globals</th></tr></thead>
+        <tbody>
+          <tr><td>Values &amp; collections</td><td><code>BigInt</code> <code>Symbol</code> <code>Map</code> <code>Set</code> <code>WeakMap</code> <code>WeakSet</code> <code>Promise</code> <code>ArrayBuffer</code> <code>DataView</code> and the nine typed-array constructors</td></tr>
+          <tr><td>Formatting &amp; parsing</td><td><code>Intl</code> <code>RegExp</code> <code>Error</code> <code>TypeError</code> <code>RangeError</code> <code>SyntaxError</code> <code>isNaN</code> <code>isFinite</code> <code>parseInt</code> <code>parseFloat</code></td></tr>
+          <tr><td>Encoding</td><td><code>atob</code> <code>btoa</code> <code>TextEncoder</code> <code>TextDecoder</code> <code>encodeURIComponent</code> <code>decodeURIComponent</code> <code>encodeURI</code> <code>decodeURI</code> <code>structuredClone</code></td></tr>
+          <tr><td>URL parsing <em>(inert &mdash; parses and formats, issues no request)</em></td><td><code>URL</code> <code>URLSearchParams</code></td></tr>
+          <tr><td>Inert data containers</td><td><code>Blob</code> <code>File</code> <code>FormData</code> <code>Headers</code></td></tr>
+          <tr><td>Diagnostics</td><td><code>console</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="safe-excluded">What <code>"safe"</code> blocks, and why</h3>
+      <table class="signature-table">
+        <thead><tr><th>Excluded</th><th>Reason</th></tr></thead>
+        <tbody>
+          <tr><td><code>eval</code> <code>Function</code> <code>WebAssembly</code></td><td>Code execution. Allowing any one of these makes the rest of the policy decorative.</td></tr>
+          <tr><td><code>window</code> <code>self</code> <code>globalThis</code> <code>top</code> <code>parent</code> <code>frames</code> <code>document</code></td><td>Each one re-exposes the whole realm, including the names excluded here.</td></tr>
+          <tr><td><code>fetch</code> <code>XMLHttpRequest</code> <code>EventSource</code> <code>WebSocket</code> <code>navigator</code> <code>Worker</code></td><td>Network and threads. <a href="http.html"><code>$http</code></a> is the vetted path &mdash; it flows through your host's interceptors.</td></tr>
+          <tr><td><code>localStorage</code> <code>sessionStorage</code> <code>indexedDB</code> <code>caches</code></td><td>Persistence. <a href="language-reference.html"><code>storage</code></a> is the vetted path.</td></tr>
+          <tr><td><code>import</code> <code>Reflect</code> <code>Proxy</code></td><td>Reflection escapes &mdash; each can reconstruct a blocked capability.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout warn">
+        <h4>The curated fast path is not affected by the policy</h4>
+        <p>
+          <code>Math</code>, <code>JSON</code>, <code>Object</code>,
+          <code>Array</code>, <code>Number</code>, <code>String</code>,
+          <code>Boolean</code>, <code>Date</code>, <code>Map</code>,
+          <code>Set</code>, <code>RegExp</code>, <code>Promise</code> and friends
+          resolve through a curated table <em>before</em> the host passthrough, so
+          they keep working under every policy &mdash; they are already a vetted
+          surface. The same is true of Aktion's own namespaces
+          (<code>$http</code>, <code>storage</code>, <code>$util</code>, &hellip;)
+          and of timers, which are handled by dedicated tracked handlers so they are
+          cleared on dispose rather than leaking past a replan. Setting
+          <code>"safe"</code> therefore does <em>not</em> break ordinary
+          value-crunching programs.
+        </p>
+      </div>
+
+      <h3 id="policy-custom">A custom allow-list</h3>
+      <p>
+        Pass an array when <code>"safe"</code> is the wrong shape &mdash; either
+        because you need one more capability, or because you want less. The array is
+        exhaustive: nothing outside it resolves.
+      </p>
+<pre><code>// "safe", plus crypto for client-side id generation
+setGlobalAccessPolicy([
+  "Map", "Set", "Promise", "Intl", "RegExp", "URL", "URLSearchParams",
+  "encodeURIComponent", "decodeURIComponent", "atob", "btoa", "console",
+  "crypto",
+]);
+
+// Stricter than "safe": formatting only, no containers, no console
+setGlobalAccessPolicy(["Intl", "RegExp", "parseInt", "parseFloat", "isNaN"]);</code></pre>
+      <p>
+        A blocked name does not throw &mdash; it simply does not resolve, so the
+        expression evaluates as if the identifier were undeclared. Turn on
+        <a href="errors.html#strict"><code>strict</code></a> while developing to see
+        those lookups reported instead of silently yielding
+        <code>undefined</code>.
+      </p>
+      <div class="callout warn">
+        <h4>The policy is process-global</h4>
+        <p>
+          It is one setting for every program on the page &mdash; not per
+          <code>&lt;aktion-app&gt;</code> and not per context. Call it once at host
+          bootstrap, before mounting. In tests, reset it in an
+          <code>afterEach</code> or a later suite will inherit it.
+        </p>
+      </div>
+
+      <h3 id="policy-breaks">What breaks under <code>"safe"</code></h3>
+      <p>
+        Worth knowing before you flip it, because the failures are quiet rather than
+        loud:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Stops working</th><th>Use instead</th></tr></thead>
+        <tbody>
+          <tr><td><code>eval("&hellip;")</code>, <code>Function("&hellip;")()</code></td><td>Nothing &mdash; this is the point of the policy.</td></tr>
+          <tr><td><code>window.x</code>, <code>globalThis.x</code>, <code>self.x</code>, <code>top.x</code>, <code>document.&hellip;</code></td><td><code>$dom</code> where a vetted equivalent exists, otherwise restructure so the host does it.</td></tr>
+          <tr><td>bare <code>fetch(&hellip;)</code></td><td><a href="http.html"><code>$http({...})</code></a> &mdash; and it flows through your interceptors.</td></tr>
+          <tr><td><code>localStorage</code>, <code>sessionStorage</code></td><td><code>storage</code>, the vetted namespace.</td></tr>
+          <tr><td><code>crypto.randomUUID()</code>, <code>navigator.&hellip;</code>, <code>alert</code>/<code>confirm</code>/<code>prompt</code>, <code>performance</code>, <code>location</code>, <code>history</code>, <code>matchMedia</code></td><td>Add the specific name via the array form if you genuinely need it.</td></tr>
+          <tr><td><code>$script({ src })</code> &mdash; <strong>disabled outright</strong>, not merely restricted</td><td>Nothing. It loads and executes remote code, so any non-<code>"all"</code> policy switches it off. The resource bag comes back with <code>error</code> set and <code>ready</code> still <code>false</code>, so a program that gates on <code>$s.ready</code> degrades instead of crashing.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The rule is simply "not in the 46 names above", so treat that table as the
+        allow-list and this one as the common cases &mdash; not as an exhaustive
+        deny-list.
+      </p>
+
+      <h3 id="forbidden-props">Why the policy is not trivially bypassable</h3>
+      <p>
+        Narrowing globals would accomplish nothing on its own, because every lambda a
+        program can write is a real JavaScript function &mdash; and
+        <code>f.constructor</code> is <code>Function</code>. So three property names
+        are refused on <em>every</em> access path: dot access, computed access,
+        method-call dispatch, and both write paths.
+      </p>
+<pre><code>$f = () =&gt; 1
+$f.constructor            // undefined — not the Function constructor
+$f["cons" + "tructor"]    // undefined — computed access is checked too
+$o.__proto__              // falsy
+$o.prototype              // undefined</code></pre>
+      <p>
+        The same three segments (<code>__proto__</code>, <code>constructor</code>,
+        <code>prototype</code>) are refused on state writes, where they would
+        otherwise be a prototype-pollution primitive. A write through them is a silent
+        no-op rather than an error.
+      </p>
+
+      <div class="callout bad">
+        <h4>Residual risk &mdash; <code>"safe"</code> bounds capability, it does not isolate the realm</h4>
+        <p>
+          Be clear-eyed about what you are buying. <code>"safe"</code> removes code
+          execution, DOM, network, and storage <em>capability</em>. It is
+          <strong>not a hardened sandbox and has not been adversarially audited as
+          one</strong>. Specifically: <code>Object</code> stays available under every
+          policy and still exposes <code>getPrototypeOf</code> and
+          <code>assign</code>, which can be combined to reach and mutate shared
+          prototypes; and <code>$http</code>, <code>storage</code>,
+          <code>$socket</code> and <code>$sse</code> remain available <em>by
+          design</em>, so a <code>"safe"</code> program can still talk to the network
+          and still persist data.
+        </p>
+        <p>
+          For genuinely untrusted program text, do both: set the policy
+          <strong>and</strong> host the app in a cross-origin
+          <code>&lt;iframe&gt;</code> with a restrictive <code>sandbox</code>
+          attribute, so a residual escape cannot reach your origin's cookies or DOM.
+          Constrain the network at the host too &mdash;
+          <code>registerHttpInterceptors</code> plus a CSP
+          <code>connect-src</code>.
+        </p>
+      </div>
+
+      <h2 id="shadow-dom">The shadow DOM is not a security boundary</h2>
+      <p>
+        <code>&lt;aktion-app&gt;</code> renders into a shadow root, which is easy to
+        mistake for isolation. It is not. A shadow root gives you <strong>style
+        encapsulation</strong> &mdash; the host page's CSS does not leak in, and the
+        component stylesheet does not leak out. It gives you no origin separation:
+        script running inside a shadow root has the host page's full origin
+        privileges, and can read cookies, <code>localStorage</code>, and the rest of
+        the document.
+      </p>
+      <p>
+        If you need a real boundary, use one the platform actually provides: a
+        cross-origin <code>&lt;iframe&gt;</code> with a restrictive
+        <code>sandbox</code> attribute. Inside the same document,
+        <code>setGlobalAccessPolicy</code> is the control that matters.
+      </p>
+
+      <h2 id="sinks">The sink-to-sanitiser table</h2>
+      <p>
+        These defend Layer&nbsp;2 &mdash; untrusted values flowing through a trusted
+        program. They are always on; there is nothing to configure. The underlying
+        principle is worth more than the table: <strong>every URL-typed prop in the
+        library goes through one of two chokepoints</strong>
+        (<code>sanitiseHref</code> for link targets, <code>sanitiseImageSrc</code> for
+        image sources), so the guarantee holds for components added after this page
+        was written.
+      </p>
+      <div class="callout warn">
+        <p>
+          <strong>These are runtime behaviours, not validation errors.</strong> A
+          rejected value is dropped or replaced while rendering &mdash; the program
+          still parses and still passes
+          <code>validateProgramSchema</code>. So you will not catch a
+          <code>rel: "stylesheet"</code> or a <code>javascript:</code> href in CI by
+          validating the program; look for the missing output, or the
+          <code>console.warn</code> where one is emitted.
+        </p>
+      </div>
+      <table class="signature-table sink-table">
+        <thead><tr><th>Sink</th><th>Helper</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Anchor <code>href</code> &mdash; <code>Link</code>, <code>BreadcrumbItem</code>, <code>NavbarItem</code>, Markdown links</td>
+            <td><code>sanitiseHref</code></td>
+            <td>Allow-lists the <code>http</code>, <code>https</code>, <code>mailto</code> and <code>tel</code> schemes, plus fragment, root-relative, query-only and scheme-less relative paths. Rejects <code>javascript:</code>, <code>vbscript:</code>, <code>data:</code>, <code>file:</code>, protocol-relative <code>//host/&hellip;</code>, and control-character bypasses (<code>java&#9;script:</code> &mdash; C0 controls are stripped <em>before</em> scheme detection). A rejected URL collapses to a safe fallback: either <code>#</code> or no <code>href</code> at all, depending on the component.</td>
+          </tr>
+          <tr>
+            <td>Image <code>src</code> &mdash; <code>Image</code>, <code>Avatar</code>, <code>MediaCard</code>, <code>Hero</code>, <code>Testimonial</code>, <code>ChatBubble</code></td>
+            <td><code>sanitiseImageSrc</code></td>
+            <td>Allow-lists <code>http(s):</code>, <code>data:image/*</code>, <code>blob:</code>, and relative paths. Anything else becomes an empty string so the caller renders a placeholder.</td>
+          </tr>
+          <tr>
+            <td>Inline <code>style</code> lengths &mdash; <code>Container.maxWidth</code>, <code>Skeleton.height</code>, &hellip;</td>
+            <td><code>sanitiseCssLength</code></td>
+            <td>Restricts the alphabet so semicolons and quotes cannot inject extra declarations.</td>
+          </tr>
+          <tr>
+            <td><code>background-image: url(&hellip;)</code> &mdash; <code>Hero.imageSrc</code></td>
+            <td><code>sanitiseCssUrl</code></td>
+            <td>Drops characters that would close the <code>url()</code> literal.</td>
+          </tr>
+          <tr>
+            <td><code>helpers.openUrl(&hellip;)</code> from an action body</td>
+            <td><code>sanitiseHref</code> (renderer)</td>
+            <td>The renderer sanitises before calling <code>window.open</code>. External windows open with <code>noopener,noreferrer</code>.</td>
+          </tr>
+          <tr>
+            <td>Inline SVG &mdash; <code>Svg</code>, <code>$theme({ icons })</code></td>
+            <td><code>sanitiseSvgMarkup</code></td>
+            <td>Parses in an inert document and applies an element/attribute <strong>allow-list</strong>. Drops <code>&lt;script&gt;</code>, <code>&lt;foreignObject&gt;</code>, SVG <code>&lt;a&gt;</code> (whose <code>href</code> executes <code>javascript:</code>), <code>&lt;style&gt;</code>, <code>&lt;image&gt;</code>, SMIL <code>&lt;animate attributeName="href"&gt;</code>, and every <code>on*</code>. Never assigns <code>innerHTML</code> on the live document.</td>
+          </tr>
+          <tr>
+            <td>Rich-text HTML &mdash; <code>Markdown</code> output, <code>RichTextEditor</code> value <em>and read-back</em></td>
+            <td>HTML sanitiser</td>
+            <td>Same inert-document + allow-list strategy as the SVG path. Disallowed elements are <strong>unwrapped rather than deleted</strong>, so a stray <code>&lt;section&gt;</code> does not swallow the user's text. <code>style</code> is dropped outright and <code>id</code> is deliberately absent (a DOM-clobbering primitive); <code>&lt;img&gt;</code> survives, its <code>onerror</code> does not. It also sanitises on the way <em>out</em> of a <code>contenteditable</code> &mdash; a user can paste arbitrary markup, and an unsanitised read-back would persist it and re-inject it on the next render.</td>
+          </tr>
+          <tr>
+            <td>Inline <code>style</code> colours &mdash; <code>sx</code> colour props, token values</td>
+            <td><code>sanitiseCssColor</code></td>
+            <td>Restricted alphabet, 64-char cap, plus explicit rejection of <code>url(</code>, <code>expression(</code>, <code>javascript:</code>, and <code>@import</code>. <code>var(--token)</code> passes.</td>
+          </tr>
+          <tr>
+            <td><code>Styles</code> &mdash; CSS body <em>and</em> the <code>scope</code> selector</td>
+            <td>CSS filter + selector shape allow-list</td>
+            <td>CSS is applied via <code>textContent</code>, never parsed as HTML, and is rejected wholesale if it contains <code>&lt;/style</code>, <code>&lt;script</code>, <code>expression(</code>, <code>javascript:</code>, <code>behavior:</code>, or <code>@import</code> (64&nbsp;KB cap). The <code>scope</code> prop is itself a sink &mdash; it is concatenated into the generated sheet, so it must match a plain-selector shape (128-char cap). On rejection the <strong>whole sheet is dropped</strong> rather than emitted unscoped, since an unscoped sheet would leak every rule into the shadow root. Every rejection is announced with <code>console.warn</code>.</td>
+          </tr>
+          <tr>
+            <td><code>$script({ src })</code></td>
+            <td><code>sanitiseScriptSrc</code> + the policy gate</td>
+            <td><code>http(s)</code> or same-origin <code>/</code>, <code>./</code>, <code>../</code> only; protocol-relative, <code>javascript:</code>, <code>data:</code> and <code>blob:</code> rejected. Disabled entirely whenever the global-access policy is not <code>"all"</code> &mdash; see <a href="#policy-breaks">what breaks under <code>"safe"</code></a>.</td>
+          </tr>
+          <tr>
+            <td><code>WebComponent</code> &mdash; <code>properties</code> and <code>attributes</code></td>
+            <td>blocked-property list + URL sanitisers</td>
+            <td>Tag names must contain a hyphen, else the element collapses to a <code>div</code> with a one-time warn. <code>on*</code> is skipped on both maps; <code>srcdoc</code> is dropped; <code>href</code>/<code>src</code>/<code>action</code>/<code>formaction</code>/<code>poster</code>/<code>ping</code> attributes are sanitised. Sixteen property names are blocked, including <code>innerHTML</code>, <code>outerHTML</code>, <code>insertAdjacentHTML</code>, <code>shadowRoot</code>, <code>contentEditable</code>, <code>style</code>, <code>id</code>, and the three forbidden property names. Ordinary custom properties pass through untouched.</td>
+          </tr>
+          <tr>
+            <td><code>$theme({ icons })</code> registration</td>
+            <td><code>registerIcons</code> &rarr; SVG allow-list</td>
+            <td>Icon <em>names</em> must match <code>/^[a-zA-Z0-9:_-]+$/</code>; markup is capped at 16&nbsp;KB and re-sanitised <strong>again at render time</strong>, so a registry reached by another route still cannot inject.</td>
+          </tr>
+          <tr>
+            <td>Web-font <code>import</code> shorthand</td>
+            <td><code>buildFontUrl</code></td>
+            <td>Family names must match <code>/^[A-Za-z0-9 ]{1,48}$/</code> and weights must be integers 100&ndash;900. The URL is <em>constructed</em> against <code>fonts.googleapis.com</code> &mdash; never taken from the program &mdash; so a hostile value cannot smuggle a different origin or a CSS payload into the page.</td>
+          </tr>
+          <tr>
+            <td>Markdown text and attributes</td>
+            <td>text/attribute escapers</td>
+            <td>Escapes attribute contexts as well as text (<code>alt</code>, fence info strings), decodes entities before scheme checks (<code>&amp;#106;avascript:</code>), and isolates generated markup so a later pass cannot rewrite inside an earlier one.</td>
+          </tr>
+          <tr>
+            <td><a href="head.html"><code>$head({&hellip;})</code></a> &mdash; title, meta, link, base, <code>htmlAttrs</code></td>
+            <td>per-field allow-lists</td>
+            <td><code>&lt;base&gt;</code> limited to same-origin paths (an absolute base would re-target every relative URL in the <em>host</em> page); <code>&lt;link&gt;</code> limited to metadata/hint <code>rel</code> values (no <code>stylesheet</code>, <code>preload</code>, <code>modulepreload</code>); <code>&lt;html&gt;</code> attributes limited to <code>lang</code>/<code>dir</code>/<code>class</code>/<code>data-*</code>. Attribute <em>names</em> are validated so they cannot inject a second attribute into SSR output.</td>
+          </tr>
+          <tr>
+            <td><code>HTMLTag</code> attributes</td>
+            <td>tag + attribute allow-list</td>
+            <td>Unknown tags collapse to <code>div</code>; <code>on*</code> dropped; <code>href</code>/<code>src</code> sanitised; <code>srcset</code>/<code>srcdoc</code>/<code>data</code>/<code>background</code> dropped; <code>target="_blank"</code> forced to carry <code>rel="noopener noreferrer"</code>.</td>
+          </tr>
+          <tr>
+            <td>Cookies &mdash; <code>storage.cookies</code></td>
+            <td>attribute validation</td>
+            <td>Name and value percent-encoded; <code>path</code>/<code>domain</code> validated so a <code>;</code> cannot append attributes; <code>SameSite</code> always emitted, defaulting to <code>Lax</code>.</td>
+          </tr>
+          <tr>
+            <td>State-path writes &mdash; <code>$a.b.c = &hellip;</code></td>
+            <td>forbidden-segment check</td>
+            <td><code>__proto__</code>, <code>constructor</code>, and <code>prototype</code> segments are refused, so an untrusted key cannot reach <code>Object.prototype</code>.</td>
+          </tr>
+          <tr>
+            <td>CSV export &mdash; <code>DataGrid</code></td>
+            <td>formula-injection guard</td>
+            <td>Cells starting <code>=</code>, <code>+</code>, <code>-</code>, <code>@</code>, TAB, or CR are prefixed so a spreadsheet reads them as text rather than a live formula.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        External links rendered by <code>Link</code>, <code>NavbarItem</code>, and the
+        Markdown renderer carry <code>rel="noopener noreferrer"</code>, so the
+        destination cannot read the opener's <code>document.referrer</code>.
+      </p>
+
+      <h2 id="dos">Resource bounds</h2>
+      <p>
+        Every one of these limits is data-driven, so without them untrusted
+        <em>data</em> &mdash; a 40&nbsp;MB Markdown blob, an array with a billion
+        entries, a self-nesting component tree &mdash; could freeze the host tab. That
+        makes them a security control, not just a performance one.
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Bound</th><th>Limit</th></tr></thead>
+        <tbody>
+          <tr><td>Component nesting depth</td><td>150</td></tr>
+          <tr><td>Loop iterations per render, across all loops</td><td>250,000</td></tr>
+          <tr><td>Array length for <code>@Range</code> / <code>@Repeat</code></td><td>100,000</td></tr>
+          <tr><td>Markdown document / single line</td><td>128&nbsp;KB / 8&nbsp;KB</td></tr>
+          <tr><td>SVG sanitiser input / nodes / depth</td><td>64&nbsp;KB / 4,096 / 32</td></tr>
+          <tr><td>HTML sanitiser input / nodes / depth</td><td>512&nbsp;KB / 8,192 / 64</td></tr>
+          <tr><td><code>Styles</code> CSS body / <code>scope</code> selector</td><td>64&nbsp;KB / 128 chars</td></tr>
+          <tr><td>Custom-icon markup</td><td>16&nbsp;KB</td></tr>
+          <tr><td><code>Progress.segments</code> / <code>Text.lines</code></td><td>200 / 20 <em>(clamped)</em></td></tr>
+          <tr><td>Highest materialised state index (<code>$rows[n] = &hellip;</code>)</td><td>1,000,000</td></tr>
+        </tbody>
+      </table>
+      <p>
+        The failure modes differ, and the difference matters when you are debugging.
+        Over-long Markdown is <strong>truncated</strong>, so the beginning still
+        renders. Clamped props silently take the ceiling. Budget overruns throw
+        <code>RuntimeBudgetError</code>, which the host surfaces as a banner rather
+        than a hung tab &mdash; see
+        <a href="performance.html">Performance</a> for tuning the budget and
+        <a href="errors.html">Error handling</a> for catching it.
+      </p>
+
+      <h2 id="http">Keeping network access under host control</h2>
+      <p>
+        <code>$http({...})</code> is the vetted network path, and it is the only one
+        left under a <code>"safe"</code> policy. Every request flows through your
+        host's interceptor chain, so auth headers, CORS workarounds, and
+        refresh-token retries stay yours to decide:
+      </p>
+<pre><code>app.registerHttpInterceptors({
+  onRequest: (req) =&gt; ({ ...req, headers: { ...req.headers, Authorization: `Bearer ${token}` } }),
+  onResponse: (res) =&gt; res,
+  onError: (err) =&gt; { report(err); throw err; },
+});</code></pre>
+      <p>
+        Use <code>onRequest</code> to enforce a destination allow-list when programs
+        are semi-trusted &mdash; the interceptor sees the final URL and can reject it
+        before the request leaves the page. See <a href="http.html">HTTP</a> for the
+        full contract.
+      </p>
+
+      <h2 id="csp">Content-Security-Policy</h2>
+      <p>
+        A CSP hardens the <em>host page</em>. It is useful defence in depth, and the
+        two controls compose neatly here &mdash; but only in one direction, so it is
+        worth being precise about which does what.
+      </p>
+      <ul>
+        <li>
+          <strong>The runtime needs no <code>'unsafe-eval'</code>.</strong> It uses
+          neither <code>eval</code> nor <code>new Function</code>; action and effect
+          bodies are interpreted from the AST by a tree-walking evaluator.
+        </li>
+        <li>
+          <strong>A <em>program</em> can still need it</strong> &mdash; under the
+          default <code>"all"</code> policy a program may call <code>eval</code> or
+          <code>Function</code> itself. <code>setGlobalAccessPolicy("safe")</code>
+          removes that reachability, which is exactly what makes a
+          <code>script-src</code> <em>without</em> <code>'unsafe-eval'</code>
+          meaningful. The policy is what earns you the tighter CSP; the CSP does not
+          substitute for the policy.
+        </li>
+        <li>
+          <strong>Aktion never injects a <code>&lt;script&gt;</code></strong> element
+          and never assigns <code>innerHTML</code> on the live document, so
+          <code>script-src</code> needs no <code>'unsafe-inline'</code> either.
+        </li>
+        <li>
+          <strong><code>style-src</code> does need relaxing.</strong> The runtime
+          emits inline <code>style</code> attributes and injects
+          <code>&lt;style&gt;</code> elements, so it needs
+          <code>'unsafe-inline'</code> or a nonce/hash strategy.
+        </li>
+      </ul>
+      <p>
+        The complete policy &mdash; including the <code>style-src</code>,
+        <code>font-src</code>, and <code>img-src</code> directives the renderer
+        actually requires &mdash; is in
+        <a href="deployment.html#csp">Production &amp; deployment</a>.
+      </p>
+
+      <h2 id="node">Node-side tooling</h2>
+      <div class="callout bad">
+        <h4>On the server, Layer&nbsp;1 gets sharper</h4>
+        <p>
+          <code>renderToString</code> <em>evaluates the program</em>. In the browser an
+          untrusted program is same-origin XSS; on your server it is
+          <strong>remote code execution</strong>, with the filesystem, the internal
+          network, and your environment variables in reach. Set the policy in the Node
+          entry point too, before you render, and run it in a separate low-privilege
+          process.
+        </p>
+      </div>
+<pre><code>import { setGlobalAccessPolicy, renderToStaticMarkup } from "aktion-runtime";
+
+setGlobalAccessPolicy("safe");           // before rendering anything untrusted
+const html = renderToStaticMarkup(program);</code></pre>
+      <p>
+        Two more things to know about the SSR path. The <code>$head</code> allow-lists
+        apply there as well &mdash; in fact the attribute-<em>name</em> validation
+        exists specifically because the server path emits names outside quotes. And
+        the hydration snapshot it hands back is <strong>your</strong> job to escape for
+        the <code>&lt;script&gt;</code> context you serialise it into; the runtime does
+        not do that for you.
+      </p>
+      <p>
+        The build tooling has its own path-confinement story:
+      </p>
+      <ul>
+        <li>
+          <strong>The Vite plugin</strong> confines <code>.aktion</code> imports to the
+          Vite project root, so a specifier like
+          <code>../../../../etc/passwd</code> is refused rather than read &mdash; and,
+          under <code>vite dev</code>, rather than served to the browser. The opt-out
+          is <code>aktion({ allowOutsideRoot: true })</code>; use it only for trusted
+          monorepo layouts. See <a href="modules.html">Modules</a>.
+        </li>
+        <li>
+          <strong><code>create-aktion</code></strong> turns the project name into a
+          filesystem path, so it rejects control characters, a leading <code>-</code>
+          or <code>~</code>, absolute paths and drive letters, <code>..</code>
+          segments, and Windows reserved device names.
+        </li>
+        <li>
+          <strong><code>linkProgram</code></strong> takes a caller-supplied module
+          resolver, which means path confinement is <em>your</em> responsibility if you
+          wire your own &mdash; the plugin supplies a confined one, but a custom
+          resolver gets no root check for free.
+        </li>
+      </ul>
+
+      <h2 id="checklist">Review checklist</h2>
+      <ul>
+        <li>Can program text reach us from anywhere other than our own repo? If yes &rarr; <code>setGlobalAccessPolicy("safe")</code>, set once at host setup.</li>
+        <li>Is an LLM's context free of untrusted content? If not, treat prompt injection as a code-execution path.</li>
+        <li>Are <code>$http</code> destinations constrained by an <code>onRequest</code> interceptor?</li>
+        <li>Does the CSP cover <code>style-src</code> and <code>font-src</code>, not just <code>script-src</code>? (See <a href="deployment.html#csp">deployment</a>.)</li>
+        <li>Is anything relying on the shadow root for isolation rather than styling?</li>
+        <li>Is the Node/SSR process running the same policy as the browser?</li>
+      </ul>
+
+      <h2 id="reporting">Reporting a vulnerability</h2>
+      <p>
+        Report security issues privately &mdash; please do not open a public issue
+        first. The repository's
+        <a href="https://github.com/asfand-dev/aktion/blob/main/SECURITY.md">SECURITY.md</a>
+        carries the current contact route, the supported-version policy, and the
+        reporting scope, including which behaviours are considered by-design rather
+        than vulnerabilities. Behaviour reachable only under the default
+        <code>"all"</code> policy with attacker-authored program text is in the
+        by-design category &mdash; that is the surface
+        <code>setGlobalAccessPolicy</code> exists to close.
+      </p>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="deployment.html">
+          <span class="demo-tag">Guide</span>
+          <h3>Production &amp; deployment</h3>
+          <p>The full CSP, SRI pinning, SSR and hydration, and the pre-launch checklist.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="http.html">
+          <span class="demo-tag">Advanced</span>
+          <h3>HTTP</h3>
+          <p>The <code>$http</code> resource contract and the host interceptor chain.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="llm-integration.html">
+          <span class="demo-tag">Guide</span>
+          <h3>LLM integration</h3>
+          <p>Streaming programs from a model, and where the trust boundary sits.</p>
+          <span class="demo-arrow">Open the guide &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+</body>
+</html>
