@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { linkProgram, defineCompiledProgram, COMPILED_PROGRAM_VERSION } from "../src/compiler/index.js";
 import type { ModuleResolver } from "../src/compiler/index.js";
 import { renderCompiled, cleanup } from "../src/testing/index.js";
+import { parse, formatProgram } from "../src/language-api.js";
 
 afterEach(() => cleanup());
 
@@ -205,5 +206,83 @@ describe("a setter action, measured", () => {
     };
     expect(result("ui.open", "export const ui = $store({ open: false })", "ui")).toBeGreaterThan(0);
     expect(result("$open", "export let $open = false", "$open")).toBe(0);
+  });
+});
+
+/** More measurements behind `docs/modules.html#choosing-a-write-shape`. */
+describe("writing shared state while rendering, effect order and formatting", () => {
+  const text = (screen: ReturnType<typeof mount>) => (screen.shadowRoot?.textContent ?? "").replace(/<style[\s\S]*?<\/style>/g, "");
+  const warnings = async (run: () => Promise<void>): Promise<string[]> => {
+    const seen: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => void seen.push(args.join(" "));
+    try {
+      await run();
+    } finally {
+      console.warn = original;
+    }
+    return seen;
+  };
+
+  it("an arrow setter called while rendering applies the write and warns once", async () => {
+    const seen = await warnings(async () => {
+      const screen = mount({
+        "/ui.aktion": "export let $open = false\nexport const setOpen = v => { $open = v }",
+        "/app.aktion": 'import { $open, setOpen } from "./ui.aktion"\nfunction C() { setOpen(true)\n return Text(`open=${$open}`) }\n$app(C())',
+      });
+      await screen.flush(12);
+      expect(text(screen)).toContain("open=true");
+    });
+    expect(seen.filter((m) => m.includes("write happened during render"))).toHaveLength(1);
+  });
+
+  it("a store property written while rendering applies the write and warns once", async () => {
+    const seen = await warnings(async () => {
+      const screen = mount({
+        "/ui.aktion": "export const ui = $store({ open: false })",
+        "/app.aktion": 'import { ui } from "./ui.aktion"\nfunction C() { ui.open = true\n return Text(`open=${ui.open}`) }\n$app(C())',
+      });
+      await screen.flush(12);
+      expect(text(screen)).toContain("open=true");
+    });
+    expect(seen.filter((m) => m.includes("write happened during render"))).toHaveLength(1);
+  });
+
+  it("a direct write in a lowercase function called while rendering does nothing", async () => {
+    const screen = mount({
+      "/ui.aktion": "export let $open = false",
+      "/app.aktion": 'import { $open } from "./ui.aktion"\nfunction c() { $open = true\n return Text(`open=${$open}`) }\n$app(c())',
+    });
+    await screen.flush(12);
+    expect(text(screen)).toContain("open=false");
+  });
+
+  it("a direct write re-runs the effects in link order, as a setter does", async () => {
+    const log: string[] = [];
+    (globalThis as { __log?: string[] }).__log = log;
+    const effect = (who: string) => `$effect(() => { globalThis.__log.push("${who}:" + $open) }, [$open])`;
+    const screen = mount({
+      "/ui.aktion": `export let $open = false\n${effect("owner")}`,
+      "/b.aktion": `import { $open } from "./ui.aktion"\n${effect("b")}\nexport function B() { return Button("tog-b", () => { $open = !$open }) }`,
+      "/app.aktion": `import { $open } from "./ui.aktion"\nimport { B } from "./b.aktion"\n${effect("app")}\n$app(Column([B()]))`,
+    });
+    await screen.flush(12);
+    log.length = 0;
+    await screen.click("tog-b");
+    expect(log).toEqual(["owner:true", "b:true", "app:true"]);
+  });
+
+  const strip = (value: unknown): unknown => JSON.parse(JSON.stringify(value, (key, v) => (key === "loc" ? undefined : v)));
+
+  it.each([
+    ["the owner of a setter", "export let $open = false\nexport const setOpen = v => { $open = v }\nexport function toggle() { $open = !$open }\n"],
+    ["its importer", 'import { $open, setOpen } from "./ui.aktion"\n$app(Button("t", () => { setOpen(!$open) }))\n'],
+    ["an exported store and its importer", 'export const ui = $store({ open: false })\nimport { ui as u } from "./ui.aktion"\n$app(Button("t", () => { u.open = true }))\n'],
+  ])("formatProgram keeps the program of %s and is stable", (_label, source) => {
+    const once = formatProgram(source);
+    expect(once.errors).toEqual([]);
+    expect(once.warnings ?? []).toEqual([]);
+    expect(strip(parse(once.formatted).statements)).toEqual(strip(parse(source).statements));
+    expect(formatProgram(once.formatted).formatted).toBe(once.formatted);
   });
 });
