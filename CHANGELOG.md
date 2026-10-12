@@ -7,6 +7,10 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ## 2026-10-10
 
+### Export Lists and Re-exports
+
+- Added `export { a, b as c }`, `export { x } from "./m.aktion"`, `export { x as y } from "…"` and `export * from "…"`, so a barrel file can gather a library behind one import. A list exports names the module already declares and behaves exactly like `export` before the declaration, including for `$` atoms. A re-export is linked where the statement stands, like an import. Exporting an undeclared or duplicate name, or re-exporting a name the source lacks, is a link error; `export * as ns` is rejected because Aktion has no namespace objects.
+
 ### Finding Writes to Imported State
 
 - Added an opt-in `imported-state-write` lint warning. It flags a write to a `$` atom that a module imports and suggests an exported setter action in the owning module, which is valid JavaScript where the direct write is not.

@@ -1664,6 +1664,7 @@ function installStatementBinding(stmt: Statement, ctx: EvaluationContext): void 
     case "Return":
       return;
     case "Import":
+    case "ExportList":
       // Module syntax is resolved + merged by the in-browser linker
       // (`linkProject` / `linkProgram`) before the program reaches the runtime.
       // The streaming single-file runtime has no module map, so a stray

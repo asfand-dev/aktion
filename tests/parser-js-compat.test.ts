@@ -164,7 +164,7 @@ const BATTERY: Row[] = [
   { construct: "`{ get x() {} }`", source: "o = { get x() { return 1 } }\n", outcome: err("getters and setters are not supported — use a plain property or a function", 1, 7) },
   { construct: "`{ set x(v) {} }`", source: "o = { set x(v) {} }\n", outcome: err("getters and setters are not supported", 1, 7) },
   { construct: "`export default …` (not `$app`)", source: "export default App\n", outcome: err("`export default` is only supported for the entry's `$app(…)` call", 1, 8) },
-  { construct: "`export * from`", source: 'export * from "./x"\n', outcome: err("`export * from …` is not supported", 1, 8) },
+  { construct: "`export * as ns from`", source: 'export * as ns from "./x"\n', outcome: err("`export * as name from …` is not supported", 1, 8) },
   { construct: "`import App from`", source: 'import App from "./x"\n', outcome: err("Default imports are not supported in Aktion", 1, 8) },
   { construct: "`import * as ui from`", source: 'import * as ui from "./x"\n', outcome: err("Namespace imports (`import * as name`) are not supported", 1, 8) },
   { construct: '`import "./x"`', source: 'import "./x"\n', outcome: err("Side-effect imports", 1, 1) },
@@ -182,7 +182,8 @@ const BATTERY: Row[] = [
 
   // --- changed: was accepted without an error, or the message changed ---------------
   { construct: "`this.x`", source: "a = this.x\n", outcome: err("`this` is not supported in Aktion", 1, 5) },
-  { construct: "`export { a, b }`", source: "export { a, b }\n", outcome: err("`export { … }` lists (and re-export lists) are not supported") },
+  { construct: "`export { a, b }`", source: "export { a, b }\n", outcome: ok },
+  { construct: "`export * from`", source: 'export * from "./x"\n', outcome: ok },
 
   // --- unchanged errors ----------------------------------------------------------
   { construct: "`class A {}`", source: "class A {}\n", outcome: err("`class` is not supported in Aktion") },

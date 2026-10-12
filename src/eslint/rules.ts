@@ -46,12 +46,11 @@ export const aktionRecommendedRules: Linter.RulesRecord = {
   // TypeScript preset below switches the rule on in `properties` mode instead,
   // which reports only `{ title: title }` — never a handler, in either form.
   "object-shorthand": "off",
-  // GENUINE GRAMMAR INCOMPATIBILITY: `parseExportStatement` in
-  // `src/parser/parser.ts` throws an explicit parse error on `export { … }`
-  // ("`export { … }` lists (and re-export lists) are not supported") — there is
-  // no production for a re-export list at all. `unicorn/prefer-export-from`'s autofix
-  // CREATES exactly that construct from a plain same-file `import` plus
-  // `export`.
+  // FORMERLY A GRAMMAR INCOMPATIBILITY, KEPT OFF: `unicorn/prefer-export-from`'s
+  // autofix turns a plain `import` plus `export` into an `export { … } from …`
+  // list. That used to be a parse error; since export lists and re-exports were
+  // added, it parses and links (`tests/export-lists.test.ts`). Kept off so an
+  // upgrade does not restyle existing `.aktion` corpora.
   "unicorn/prefer-export-from": "off",
   // GENUINE GRAMMAR INCOMPATIBILITY: this repo's tokenizer/parser has no
   // tagged-template-literal production — a program is built from plain

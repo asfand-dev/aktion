@@ -231,6 +231,10 @@ export function increment() { $count += 1 }
 import { $count, increment } from "./counter.aktion"
 ```
 
+A list exports names already declared (`export { $count, increment as bump }`),
+and `export { x } from "./m.aktion"` / `export * from "./m.aktion"` re-export
+another module's names, so a barrel file works. `export * as ns` is not supported.
+
 Only relative specifiers resolve. Validate a multi-module app with
 `node tools/validate-aktion-app.mjs app.aktion`, which links first — a per-file
 check reports every imported name as unknown.
