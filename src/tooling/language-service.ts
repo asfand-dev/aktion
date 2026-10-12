@@ -78,13 +78,15 @@ export interface LintOptions {
    */
   bareDeclarations?: boolean;
   /**
-   * Also report `imported-state-write`: a write to a `$` atom the module imports
+   * Report `imported-state-write`: a write to a `$` atom the module imports
    * (`$open = true`, `$n += 1`, `$o.k = 1` where `$open`, `$n` or `$o` comes from
    * an `import`). The runtime accepts it and every importer shares one cell, but
    * JavaScript forbids assigning to an import, so JavaScript tooling flags it
    * (ESLint's `no-import-assign`). The warning suggests an exported setter action
-   * in the owning module instead. Default `false`: the write is documented, runs
-   * correctly, and a corpus of real apps contains many of them.
+   * in the owning module instead. Default `true`; pass `false` to turn it off.
+   * It is a warning only: the write is documented and runs correctly, so parsing,
+   * linking and rendering are unchanged. The `tools/validate-aktion*.mjs` CLIs
+   * report it too (`--no-imported-state-writes` turns it off).
    */
   importedStateWrites?: boolean;
 }
@@ -205,7 +207,7 @@ export function getDiagnostics(
  *     (`y = 5`), and assignments to a name a `function`, `import`, `var`, `let` or
  *     `const` declares, are ordinary writes and are not flagged. Warning only:
  *     parsing is unchanged, so bare `$x = 0` programs keep running.
- *   - `imported-state-write` (opt-in: `{ importedStateWrites: true }`) — a write
+ *   - `imported-state-write` (on by default; `{ importedStateWrites: false }` turns it off) — a write
  *     to a `$` atom this module imports: an assignment, a compound assignment, `++`
  *     / `--`, or a write through a property (`$o.k = 1`). Warning only; see
  *     {@link lintImportedStateWrites}.
@@ -231,7 +233,7 @@ function lintProgram(
     ...lintInvalidRegExp(program),
     ...lintContinuationLine(program, source),
     ...(options.bareDeclarations === true ? lintBareDeclarations(program, source) : []),
-    ...(options.importedStateWrites === true ? lintImportedStateWrites(program) : []),
+    ...(options.importedStateWrites !== false ? lintImportedStateWrites(program) : []),
   ];
 }
 
@@ -668,7 +670,10 @@ const WRITE_BUILTINS: ReadonlySet<string> = new Set(["__rui_assign__", "__rui_pr
  *
  * Only the names this file imports are known here, not what the owning module
  * exports, so the suggestion names the setter to add rather than checking that it
- * exists. Property writes (`$o.k = 1`) are a copy-on-write path write on the
+ * exists. An atom imported through a barrel (`export { $open } from "./store.aktion"`)
+ * is the barrel's own export as far as this file can tell: the setter follows the
+ * name the barrel exports (`setIsOpen` for `export { $open as $isOpen } from …`) and
+ * the message points at the barrel, not at the file that declares the atom. Property writes (`$o.k = 1`) are a copy-on-write path write on the
  * owner's atom; the setter suggestion applies to them as well.
  */
 function lintImportedStateWrites(program: ReturnType<typeof parse>): Diagnostic[] {

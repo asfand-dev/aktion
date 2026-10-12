@@ -23,7 +23,10 @@
  * error; warnings are reported but do not fail the run. That includes
  * `bare-declaration`, the warning for a top-level binding written without
  * `let` / `const` (`export B = 1`, a first `y = 4`); pass `--no-bare-declarations`
- * to leave it out of the report.
+ * to leave it out of the report. So is `imported-state-write`, the warning for a
+ * write to a `$` atom the file imports (`$open = true`); pass
+ * `--no-imported-state-writes` to leave it out, or keep the older
+ * `--imported-state-writes`, which is accepted and does nothing.
  *
  * Reads the built DOM-free surface (`dist/language.js`) and the Node plugin entry
  * (`dist/plugin.js`) — run `npm run build` first if either is missing.
@@ -62,7 +65,7 @@ const cliAlias = {};
 const cliRoots = [];
 let entry = null;
 let bareDeclarations = true;
-let importedStateWrites = false;
+let importedStateWrites = true;
 
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i];
@@ -78,18 +81,20 @@ for (let i = 0; i < argv.length; i += 1) {
     cliRoots.push(resolvePath(argv[++i] ?? ""));
   } else if (arg === "--no-bare-declarations") {
     bareDeclarations = false;
+  } else if (arg === "--no-imported-state-writes") {
+    importedStateWrites = false;
   } else if (arg === "--imported-state-writes") {
-    importedStateWrites = true;
+    // The lint is on by default; the flag stays accepted so existing scripts keep working.
   } else if (entry === null) {
     entry = arg;
   } else {
-    console.error("usage: node tools/validate-aktion-app.mjs [--alias p=dir] [--root dir] [--no-bare-declarations] [--imported-state-writes] <entry.aktion>");
+    console.error("usage: node tools/validate-aktion-app.mjs [--alias p=dir] [--root dir] [--no-bare-declarations] [--no-imported-state-writes] <entry.aktion>");
     process.exit(2);
   }
 }
 
 if (entry === null) {
-  console.error("usage: node tools/validate-aktion-app.mjs [--alias p=dir] [--root dir] [--no-bare-declarations] [--imported-state-writes] <entry.aktion>");
+  console.error("usage: node tools/validate-aktion-app.mjs [--alias p=dir] [--root dir] [--no-bare-declarations] [--no-imported-state-writes] <entry.aktion>");
   process.exit(2);
 }
 

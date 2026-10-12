@@ -486,9 +486,10 @@ describe("tools/validate-aktion*.mjs — bare declarations", () => {
 });
 
 /**
- * `imported-state-write` is opt-in on the CLIs too: without
- * `--imported-state-writes` a program that writes an imported atom stays `OK`,
- * with it the write is a WARNING (exit code 0) naming the file that holds it.
+ * `imported-state-write` is on by default on the CLIs too: a program that writes
+ * an imported atom gets a WARNING (exit code 0) naming the file that holds it,
+ * and `--no-imported-state-writes` leaves it out. The older
+ * `--imported-state-writes` is still accepted and does nothing.
  */
 describe("tools/validate-aktion*.mjs — imported state writes", () => {
   let dir: string;
@@ -514,17 +515,37 @@ describe("tools/validate-aktion*.mjs — imported state writes", () => {
 
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-  it.each(tools)("%s warns about the write only with --imported-state-writes, and still exits 0", (_name, tool) => {
-    const off = run(tool, [file("writes.aktion")]);
-    expect(off.output).toMatch(/OK/);
-    const on = run(tool, ["--imported-state-writes", file("writes.aktion")]);
-    expect(on.output).toMatch(/L2: warning: .*`\$open` is imported from "\.\/ui\.aktion" and written here/);
-    expect(on.output).toMatch(/0 error\(s\), 1 warning\(s\)/);
-    expect(on.status).toBe(0);
+  it.each(tools)("%s warns about the write by default, and still exits 0", (_name, tool) => {
+    const { status, output } = run(tool, [file("writes.aktion")]);
+    expect(output).toMatch(/L2: warning: .*`\$open` is imported from "\.\/ui\.aktion" and written here/);
+    expect(output).toMatch(/0 error\(s\), 1 warning\(s\)/);
+    expect(status).toBe(0);
   });
 
-  it.each(tools)("%s passes the setter pattern with the flag on", (_name, tool) => {
-    const { status, output } = run(tool, ["--imported-state-writes", file("setter.aktion")]);
+  it.each(tools)("%s leaves the warning out with --no-imported-state-writes", (_name, tool) => {
+    const { status, output } = run(tool, ["--no-imported-state-writes", file("writes.aktion")]);
+    expect(output).toMatch(/OK/);
+    expect(output).not.toMatch(/warning/);
+    expect(status).toBe(0);
+  });
+
+  it.each(tools)("%s still accepts --imported-state-writes, which does nothing", (_name, tool) => {
+    const withFlag = run(tool, ["--imported-state-writes", file("writes.aktion")]);
+    expect(withFlag.output).toBe(run(tool, [file("writes.aktion")]).output);
+    expect(withFlag.output).toMatch(/0 error\(s\), 1 warning\(s\)/);
+    expect(withFlag.status).toBe(0);
+  });
+
+  it.each(tools)("%s lets --no-imported-state-writes win over the older flag, in either order", (_name, tool) => {
+    for (const flags of [["--imported-state-writes", "--no-imported-state-writes"], ["--no-imported-state-writes", "--imported-state-writes"]]) {
+      const { status, output } = run(tool, [...flags, file("writes.aktion")]);
+      expect(output).toMatch(/OK/);
+      expect(status).toBe(0);
+    }
+  });
+
+  it.each(tools)("%s passes the setter pattern", (_name, tool) => {
+    const { status, output } = run(tool, [file("setter.aktion")]);
     expect(output).toMatch(/OK/);
     expect(status).toBe(0);
   });

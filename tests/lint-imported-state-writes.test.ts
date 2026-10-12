@@ -1,14 +1,14 @@
 /**
- * `imported-state-write` (opt-in `{ importedStateWrites: true }`): a write to a
+ * `imported-state-write` (on by default, off with `{ importedStateWrites: false }`): a write to a
  * `$` atom the module imports, with a suggestion to write it from an exported
  * setter action in the owning module.
  */
 
 import { describe, expect, it } from "vitest";
-import { getLintWarnings } from "../src/language-api.js";
+import { getDiagnostics, getLintWarnings } from "../src/language-api.js";
+import { defaultLibrary } from "../src/library/index.js";
 
-const on = { importedStateWrites: true } as const;
-const lint = (source: string) => getLintWarnings(source, undefined, on);
+const lint = (source: string) => getLintWarnings(source);
 const IMPORT = 'import { $open, $n, $o } from "./ui.aktion"\n';
 
 describe("imported-state-write", () => {
@@ -85,10 +85,28 @@ describe("imported-state-write", () => {
     expect(lint(IMPORT + body)).toEqual([]);
   });
 
-  it("is off unless asked for", () => {
+  it("is on by default in getLintWarnings and getDiagnostics, and an explicit true changes nothing", () => {
     const source = `${IMPORT}$app(Button("t", () => { $open = true }))`;
-    expect(getLintWarnings(source)).toEqual([]);
+    expect(getLintWarnings(source)).toHaveLength(1);
+    expect(getLintWarnings(source, defaultLibrary)).toHaveLength(1);
+    expect(getLintWarnings(source, undefined, {})).toHaveLength(1);
+    expect(getLintWarnings(source, undefined, { importedStateWrites: true })).toEqual(getLintWarnings(source));
+    const diagnostics = getDiagnostics(source, defaultLibrary);
+    expect(diagnostics.map((d) => d.severity)).toEqual(["warning"]);
+    expect(diagnostics[0]!.message).toMatch(/is imported from "\.\/ui\.aktion" and written here/);
+  });
+
+  it("is turned off with importedStateWrites: false, in getLintWarnings and getDiagnostics", () => {
+    const source = `${IMPORT}$app(Button("t", () => { $open = true }))`;
     expect(getLintWarnings(source, undefined, { importedStateWrites: false })).toEqual([]);
+    expect(getDiagnostics(source, defaultLibrary, { importedStateWrites: false })).toEqual([]);
+  });
+
+  it("leaves the other lints alone when it is turned off", () => {
+    const source = 'function f(v) { const ok = await $util.copy(v)\n return ok }\n' + IMPORT + "$open = true";
+    const withLint = getLintWarnings(source).filter((w) => !/imported from/.test(w.message));
+    expect(withLint.length).toBeGreaterThan(0);
+    expect(getLintWarnings(source, undefined, { importedStateWrites: false })).toEqual(withLint);
   });
 
   it("is silent for a program without imports", () => {
@@ -97,5 +115,43 @@ describe("imported-state-write", () => {
 
   it("is silent on the setter pattern it recommends", () => {
     expect(lint("export let $open = false\nexport const setOpen = (value) => { $open = value }")).toEqual([]);
+  });
+});
+
+/**
+ * A barrel (`export { $open } from "./store.aktion"`) is a new path to an atom.
+ * The lint reads one file, so for an import it knows only the name the module it
+ * imports FROM exports: the setter follows that name, and the message sends the
+ * reader to that module, which is the barrel, not the file that declares the atom.
+ */
+describe("imported-state-write — atoms imported through a re-export", () => {
+  it("flags a direct write to an atom imported from a barrel and names the barrel", () => {
+    const warnings = lint('import { $open } from "./index.aktion"\n$app(Button("t", () => { $open = !$open }))');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.line).toBe(2);
+    expect(warnings[0]!.message).toContain('`$open` is imported from "./index.aktion" and written here');
+    expect(warnings[0]!.message).toContain("`setOpen(…)`");
+  });
+
+  it("names the setter after the name the barrel exports, not the name the store declares", () => {
+    // index.aktion: `export { $open as $isOpen } from "./store.aktion"`
+    const [aliased] = lint('import { $isOpen } from "./index.aktion"\nfunction f() { $isOpen = true }');
+    expect(aliased!.message).toContain("export const setIsOpen = (value) => { $isOpen = value }");
+    expect(aliased!.message).not.toContain("setOpen");
+    // the importer renames it again: still the name the barrel exports
+    const [renamed] = lint('import { $isOpen as $o } from "./index.aktion"\nfunction f() { $o = true }');
+    expect(renamed!.message).toContain("`$o` is imported from \"./index.aktion\"");
+    expect(renamed!.message).toContain("`setIsOpen(…)`");
+  });
+
+  it("flags a write to a barrel atom at the top level with the set-once wording", () => {
+    const [warning] = lint('import { $isOpen } from "./index.aktion"\n$isOpen = true');
+    expect(warning!.message).toMatch(/set-once declaration/);
+    expect(warning!.message).toContain("`setIsOpen(…)`");
+  });
+
+  it("is silent on the barrel itself, which only re-exports", () => {
+    expect(lint('export { $open } from "./store.aktion"\nexport { $open as $isOpen } from "./store.aktion"')).toEqual([]);
+    expect(lint('import { $open } from "./store.aktion"\nexport { $open }')).toEqual([]);
   });
 });

@@ -134,9 +134,9 @@ Export the atom plus a setter action (`export let $open = false` and
 property (`export const ui = $store({…})`, then `ui.open = !ui.open`); every importer
 shares one cell. Declare the atom with `let` — a bare `export $open = false` becomes
 a `const` under the ESLint processor and the setter is flagged `no-const-assign`. Writing an imported atom directly also works but is what JS
-tooling flags as `no-import-assign`; prefer the setter (the opt-in
-`imported-state-write` lint, `--imported-state-writes` on the validate scripts,
-finds the direct writes). A top-level `$x = …` of an imported atom does nothing,
+tooling flags as `no-import-assign`; prefer the setter (the
+`imported-state-write` lint, a warning that is on by default and off with
+`--no-imported-state-writes` on the validate scripts, finds the direct writes). A top-level `$x = …` of an imported atom does nothing,
 and a setter called while rendering is not a reliable write: use a handler or
 an effect. Never export a function that returns
 `$store({…})` — a store is keyed by its call site, so every caller gets the same
