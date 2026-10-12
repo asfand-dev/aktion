@@ -37707,7 +37707,8 @@ function lintImportedStateWrites(program) {
   const report = (name, loc, topLevel) => {
     const { source: from, imported } = importedFrom.get(name);
     const setter = `set${imported.charAt(0).toUpperCase()}${imported.slice(1)}`;
-    const message = topLevel ? `\`$${name}\` is imported from "${from}" and assigned at the top level, where \`$${name} = …\` is a set-once declaration: the imported atom already exists, so this statement does nothing. JavaScript does not allow assigning to an import either. Export a setter from "${from}" (\`export const ${setter} = (value) => { $${imported} = value }\`) and call \`${setter}(…)\` here.` : `\`$${name}\` is imported from "${from}" and written here. JavaScript does not allow assigning to an import (ESLint \`no-import-assign\`), and what the runtime does with it depends on where it runs: a handler or effect writes the shared atom, a component body writes a private copy, and a lowercase function called while rendering does nothing. Keep the write in the owning module: \`export const ${setter} = (value) => { $${imported} = value }\` from "${from}" and call \`${setter}(…)\` here.`;
+    const advice = `Keep the write in the module that declares the atom (\`export let $…\`): add \`export const ${setter} = (value) => { $… = value }\` there, assigning the atom under the name that module declares it with (\`$${imported}\` when "${from}" is that module), and call \`${setter}(…)\` here. If "${from}" only re-exports the atom (\`export { … } from\`), add the setter to the declaring module and re-export it from "${from}".`;
+    const message = topLevel ? `\`$${name}\` is imported from "${from}" and assigned at the top level, where \`$${name} = …\` is a set-once declaration: the imported atom already exists, so this statement does nothing. JavaScript does not allow assigning to an import either. ${advice}` : `\`$${name}\` is imported from "${from}" and written here. JavaScript does not allow assigning to an import (ESLint \`no-import-assign\`), and what the runtime does with it depends on where it runs: a handler or effect writes the shared atom, a component body writes a private copy, and a lowercase function called while rendering does nothing. ${advice}`;
     warnings.push({ line: loc?.line ?? 0, column: loc?.column ?? 0, severity: "warning", message });
   };
   const rootOf = (node) => {
@@ -37717,7 +37718,7 @@ function lintImportedStateWrites(program) {
   };
   walk(program, ({ node, parent }) => {
     if (node.kind === "Assignment") {
-      if (node.isState && node.declaration === void 0 && importedFrom.has(node.identifier)) {
+      if (node.isState && (node.declaration === void 0 || parent !== null) && importedFrom.has(node.identifier)) {
         report(node.identifier, node.loc, parent === null);
       }
       return;
