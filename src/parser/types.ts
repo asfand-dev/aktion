@@ -391,6 +391,45 @@ export interface ImportStatement {
 }
 
 /**
+ * One entry of an `export { … }` list. Names are stored WITHOUT the leading `$`.
+ * `local` is the binding being exported — a top-level name of this module, or,
+ * when the statement has a `source`, a name that module exports. `exported` is
+ * the name importers see (the `as` alias, else `local`).
+ */
+export interface ExportSpecifier {
+  local: string;
+  exported: string;
+  /** True when the binding is a `$state` atom (`$` is kept across `as`). */
+  isState?: boolean;
+  /** Where the entry starts, so a link error can point at it rather than at the statement. */
+  loc?: SourceLocation;
+}
+
+/**
+ * `export { a, b as c }`, `export { x as y } from "./m.aktion"` and
+ * `export * from "./m.aktion"` — a local export list, or a re-export. A local
+ * list marks existing top-level bindings exactly as `export` in front of their
+ * declaration would; a re-export forwards another module's export WITHOUT
+ * binding it in this module, and links `source` at the position of the
+ * statement (link order is import order). The streaming runtime treats it as
+ * a no-op, like `Import`.
+ */
+export interface ExportListStatement {
+  kind: "ExportList";
+  /** Empty for `export * from`. */
+  specifiers: ReadonlyArray<ExportSpecifier>;
+  /** Raw module specifier of a re-export; absent for a local list. */
+  source?: string;
+  /** `export * from "…"`: re-export every name the source exports. */
+  all?: boolean;
+  loc?: SourceLocation;
+  /** Comment(s) immediately preceding this statement — see `AttachedComment`. */
+  leadingComments?: ReadonlyArray<AttachedComment>;
+  /** Comment(s) on the same source line as this statement's end. */
+  trailingComments?: ReadonlyArray<AttachedComment>;
+}
+
+/**
  * `function Name(p, q) { ... }` declaration. PascalCase names are treated
  * as component declarations; camelCase/snake_case as action declarations.
  * Components MUST have an explicit `return` statement.
@@ -802,6 +841,7 @@ export interface TryStatement {
 export type Statement =
   | AssignmentStatement
   | ImportStatement
+  | ExportListStatement
   | ComponentDeclaration
   | EffectDeclaration
   | ActionDeclaration

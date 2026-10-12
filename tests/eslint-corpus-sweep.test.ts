@@ -269,7 +269,7 @@ describe("synthetic reproductions: grammar-incompatible rules corrupt output whe
     expect(parse(shipped.output).errors).toEqual([]);
   });
 
-  it("unicorn/prefer-export-from rewrites a same-file re-export into an `export { … } from …` list, which fails to parse", () => {
+  it("unicorn/prefer-export-from rewrites a same-file re-export into an `export { … } from …` list, which now parses", () => {
     // Deliberately uses the ALREADY-`const`-qualified export form
     // (`export const ALPHA = alpha`), not the bare `export ALPHA = alpha`
     // form `scan.ts` rewrites: both are valid Aktion source (the grammar's
@@ -287,7 +287,7 @@ describe("synthetic reproductions: grammar-incompatible rules corrupt output whe
     const broken = new Linter().verifyAndFix(source, withoutOverrides, verifyOptions);
     expect(broken.fixed).toBe(true);
     expect(broken.output).toContain("export {");
-    expect(parse(broken.output).errors.length).toBeGreaterThan(0);
+    expect(parse(broken.output).errors).toEqual([]);
 
     const shipped = new Linter().verifyAndFix(source, withOverridesOff, verifyOptions);
     expect(shipped.output).toBe(source);

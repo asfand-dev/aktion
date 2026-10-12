@@ -140,7 +140,7 @@ export const keywordDocs: Record<string, KeywordDoc> = {
   },
   export: {
     summary: "Mark a top-level declaration importable from another file. Anything not exported is private to its file.",
-    syntax: "export function Name(...) { ... } · export $state = ... · export name = ...",
+    syntax: 'export function Name(...) { ... } · export let $state = ... · export { a, b as c } · export { x } from "./m.aktion" · export * from "./m.aktion"',
     example: 'export function Card2({ title }) {\n  return Card([CardHeader(title)])\n}',
   },
   function: {

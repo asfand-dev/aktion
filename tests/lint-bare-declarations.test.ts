@@ -163,7 +163,13 @@ describe("bare-declaration — reporting", () => {
     [
       "an imported name: it can be neither exported nor assigned",
       'import { B } from "./other.aktion"\nexport B = 2',
-      [/which this file imports/, /neither assigned nor re-exported/, /import it under another local name/, /`export let B = …` here/],
+      [
+        /which this file imports/,
+        /cannot be assigned/,
+        /`export \{ B \} from "…"`/,
+        /import it under another local name/,
+        /`export let B = …` here/,
+      ],
       [/put `export` on the declaration/i, /drop the `export` here/],
     ],
     [
@@ -171,6 +177,7 @@ describe("bare-declaration — reporting", () => {
       'import { X as B } from "./other.aktion"\nexport B = 2',
       [
         /which this file imports/,
+        /`export \{ X as B \} from "…"`/,
         /\(`import \{ X as … \}`, in place of `X as B`\)/,
         /`export let B = …` here/,
       ],
