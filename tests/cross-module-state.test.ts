@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { linkProgram, defineCompiledProgram, COMPILED_PROGRAM_VERSION } from "../src/compiler/index.js";
 import type { ModuleResolver } from "../src/compiler/index.js";
 import { renderCompiled, cleanup } from "../src/testing/index.js";
-import { parse, formatProgram } from "../src/language-api.js";
+import { parse, formatProgram, getLintWarnings } from "../src/language-api.js";
 
 afterEach(() => cleanup());
 
@@ -35,6 +35,13 @@ function mount(files: Record<string, string>) {
       path: "/app.aktion",
     }),
   );
+}
+
+/** The rendered text of the shadow root, read from a clone of the DOM with the theme's `<style>` elements removed. */
+function text(screen: ReturnType<typeof mount>): string {
+  const clone = screen.shadowRoot!.cloneNode(true) as DocumentFragment;
+  for (const style of clone.querySelectorAll("style")) style.remove();
+  return clone.textContent ?? "";
 }
 
 /** The entry and an imported component each show the flag and each own a toggle button. */
@@ -118,7 +125,6 @@ describe("a $store factory", () => {
  */
 describe("a setter action, measured", () => {
   const ui = "export let $open = false\nexport const setOpen = v => { $open = v }";
-  const text = (screen: ReturnType<typeof mount>) => (screen.shadowRoot?.textContent ?? "").replace(/<style[\s\S]*?<\/style>/g, "");
 
   it("re-runs an effect in the owner, the importer and a third module, whichever module calls it", async () => {
     const log: string[] = [];
@@ -211,7 +217,6 @@ describe("a setter action, measured", () => {
 
 /** More measurements behind `docs/modules.html#choosing-a-write-shape`. */
 describe("writing shared state while rendering, effect order and formatting", () => {
-  const text = (screen: ReturnType<typeof mount>) => (screen.shadowRoot?.textContent ?? "").replace(/<style[\s\S]*?<\/style>/g, "");
   const warnings = async (run: () => Promise<void>): Promise<string[]> => {
     const seen: string[] = [];
     const original = console.warn;
@@ -284,5 +289,35 @@ describe("writing shared state while rendering, effect order and formatting", ()
     expect(once.warnings ?? []).toEqual([]);
     expect(strip(parse(once.formatted).statements)).toEqual(strip(parse(source).statements));
     expect(formatProgram(once.formatted).formatted).toBe(once.formatted);
+  });
+});
+
+/** A barrel re-exports the atom, which is a second path to the owner's cell. */
+describe("a direct write to an atom imported through a re-export", () => {
+  const files = {
+    "/store.aktion": "export let $open = false",
+    "/index.aktion": 'export { $open as $isOpen } from "./store.aktion"',
+    "/app.aktion":
+      'import { $isOpen } from "./index.aktion"\n$app(Column([Text(`open=${$isOpen}`), Button("tog", () => { $isOpen = !$isOpen })]))',
+  };
+
+  it("still writes the owner's atom at runtime", async () => {
+    const screen = mount(files);
+    await screen.flush(12);
+    expect(text(screen)).toContain("open=false");
+    await screen.click("tog");
+    expect(text(screen)).toContain("open=true");
+  });
+
+  it("is flagged in the importer, with the setter named after the name the barrel exports", () => {
+    const warnings = getLintWarnings(files["/app.aktion"]);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.message).toContain('`$isOpen` is imported from "./index.aktion" and written here');
+    expect(warnings[0]!.message).toContain("`setIsOpen(…)`");
+  });
+
+  it("is not flagged in the barrel or the store, which write nothing", () => {
+    expect(getLintWarnings(files["/index.aktion"])).toEqual([]);
+    expect(getLintWarnings(files["/store.aktion"])).toEqual([]);
   });
 });
