@@ -22,8 +22,7 @@
  * without `let` / `const` (`export B = 1`, a first `y = 4`); pass
  * `--no-bare-declarations` to leave it out of the report. So is
  * `imported-state-write`, the warning for a write to a `$` atom the file imports
- * (`$open = true`); pass `--no-imported-state-writes` to leave it out, or keep the
- * older `--imported-state-writes`, which is accepted and does nothing.
+ * (`$open = true`); pass `--no-imported-state-writes` to leave it out.
  *
  * Reads the built DOM-free surface (`dist/language.js`), which bundles the
  * parser, the schema validator, AND the lint pass in a single `getDiagnostics`
@@ -79,11 +78,8 @@ function diagnoseCompiled(frontend, source, file, lintOptions) {
 
 const argv = process.argv.slice(2);
 const bareDeclarations = !argv.includes("--no-bare-declarations");
-// On by default; `--imported-state-writes` is accepted as a no-op so existing scripts keep working.
 const importedStateWrites = !argv.includes("--no-imported-state-writes");
-const args = argv.filter(
-  (arg) => arg !== "--no-bare-declarations" && arg !== "--no-imported-state-writes" && arg !== "--imported-state-writes",
-);
+const args = argv.filter((arg) => arg !== "--no-bare-declarations" && arg !== "--no-imported-state-writes");
 const lintOptions = { bareDeclarations, importedStateWrites };
 if (args.length === 0) {
   console.error("usage: node tools/validate-aktion.mjs [--no-bare-declarations] [--no-imported-state-writes] <file.aktion> [...]  (or - for stdin)");

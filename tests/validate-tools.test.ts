@@ -488,8 +488,7 @@ describe("tools/validate-aktion*.mjs — bare declarations", () => {
 /**
  * `imported-state-write` is on by default on the CLIs too: a program that writes
  * an imported atom gets a WARNING (exit code 0) naming the file that holds it,
- * and `--no-imported-state-writes` leaves it out. The older
- * `--imported-state-writes` is still accepted and does nothing.
+ * and `--no-imported-state-writes` leaves it out.
  */
 describe("tools/validate-aktion*.mjs — imported state writes", () => {
   let dir: string;
@@ -519,34 +518,23 @@ describe("tools/validate-aktion*.mjs — imported state writes", () => {
     const { status, output } = run(tool, [file("writes.aktion")]);
     expect(output).toMatch(/L2: warning: .*`\$open` is imported from "\.\/ui\.aktion" and written here/);
     expect(output).toMatch(/0 error\(s\), 1 warning\(s\)/);
+    expect(output).not.toMatch(/writes\.aktion: OK$/m);
     expect(status).toBe(0);
   });
 
+  // `/OK/` alone could match a random temp-path suffix; the tools print the all-clear as a `<file>: OK` line.
   it.each(tools)("%s leaves the warning out with --no-imported-state-writes", (_name, tool) => {
     const { status, output } = run(tool, ["--no-imported-state-writes", file("writes.aktion")]);
-    expect(output).toMatch(/OK/);
+    expect(output).toMatch(/writes\.aktion: OK$/m);
     expect(output).not.toMatch(/warning/);
+    expect(output).not.toContain("is imported from");
     expect(status).toBe(0);
-  });
-
-  it.each(tools)("%s still accepts --imported-state-writes, which does nothing", (_name, tool) => {
-    const withFlag = run(tool, ["--imported-state-writes", file("writes.aktion")]);
-    expect(withFlag.output).toBe(run(tool, [file("writes.aktion")]).output);
-    expect(withFlag.output).toMatch(/0 error\(s\), 1 warning\(s\)/);
-    expect(withFlag.status).toBe(0);
-  });
-
-  it.each(tools)("%s lets --no-imported-state-writes win over the older flag, in either order", (_name, tool) => {
-    for (const flags of [["--imported-state-writes", "--no-imported-state-writes"], ["--no-imported-state-writes", "--imported-state-writes"]]) {
-      const { status, output } = run(tool, [...flags, file("writes.aktion")]);
-      expect(output).toMatch(/OK/);
-      expect(status).toBe(0);
-    }
   });
 
   it.each(tools)("%s passes the setter pattern", (_name, tool) => {
     const { status, output } = run(tool, [file("setter.aktion")]);
-    expect(output).toMatch(/OK/);
+    expect(output).toMatch(/setter\.aktion: OK$/m);
+    expect(output).not.toMatch(/warning/);
     expect(status).toBe(0);
   });
 });

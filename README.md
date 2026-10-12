@@ -1895,10 +1895,8 @@ Both scripts also report `imported-state-write` by default: a write to a `$`
 atom the file imports, which JavaScript forbids (`no-import-assign`) although
 the runtime allows it. The warning names the atom, the module it comes from and
 the setter action to export from there. It never changes the exit code; pass
-`--no-imported-state-writes` to leave it out of the report. The older
-`--imported-state-writes` flag is still accepted and does nothing, so existing
-scripts keep working. A job that treats warnings as failures will report these
-writes.
+`--no-imported-state-writes` to leave it out of the report. A job that treats
+warnings as failures will report these writes.
 
 ---
 

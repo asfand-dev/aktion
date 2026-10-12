@@ -25,8 +25,7 @@
  * `let` / `const` (`export B = 1`, a first `y = 4`); pass `--no-bare-declarations`
  * to leave it out of the report. So is `imported-state-write`, the warning for a
  * write to a `$` atom the file imports (`$open = true`); pass
- * `--no-imported-state-writes` to leave it out, or keep the older
- * `--imported-state-writes`, which is accepted and does nothing.
+ * `--no-imported-state-writes` to leave it out.
  *
  * Reads the built DOM-free surface (`dist/language.js`) and the Node plugin entry
  * (`dist/plugin.js`) — run `npm run build` first if either is missing.
@@ -83,8 +82,6 @@ for (let i = 0; i < argv.length; i += 1) {
     bareDeclarations = false;
   } else if (arg === "--no-imported-state-writes") {
     importedStateWrites = false;
-  } else if (arg === "--imported-state-writes") {
-    // The lint is on by default; the flag stays accepted so existing scripts keep working.
   } else if (entry === null) {
     entry = arg;
   } else {
