@@ -26,13 +26,15 @@ export interface LintOptions {
      */
     bareDeclarations?: boolean;
     /**
-     * Also report `imported-state-write`: a write to a `$` atom the module imports
+     * Report `imported-state-write`: a write to a `$` atom the module imports
      * (`$open = true`, `$n += 1`, `$o.k = 1` where `$open`, `$n` or `$o` comes from
      * an `import`). The runtime accepts it and every importer shares one cell, but
      * JavaScript forbids assigning to an import, so JavaScript tooling flags it
      * (ESLint's `no-import-assign`). The warning suggests an exported setter action
-     * in the owning module instead. Default `false`: the write is documented, runs
-     * correctly, and a corpus of real apps contains many of them.
+     * in the owning module instead. Default `true`; pass `false` to turn it off.
+     * It is a warning only: the write is documented and runs correctly, so parsing,
+     * linking and rendering are unchanged. The `tools/validate-aktion*.mjs` CLIs
+     * report it too (`--no-imported-state-writes` turns it off).
      */
     importedStateWrites?: boolean;
 }
@@ -102,7 +104,7 @@ export declare function getDiagnostics(source: string, library: ComponentLibrary
  *     (`y = 5`), and assignments to a name a `function`, `import`, `var`, `let` or
  *     `const` declares, are ordinary writes and are not flagged. Warning only:
  *     parsing is unchanged, so bare `$x = 0` programs keep running.
- *   - `imported-state-write` (opt-in: `{ importedStateWrites: true }`) — a write
+ *   - `imported-state-write` (on by default; `{ importedStateWrites: false }` turns it off) — a write
  *     to a `$` atom this module imports: an assignment, a compound assignment, `++`
  *     / `--`, or a write through a property (`$o.k = 1`). Warning only; see
  *     {@link lintImportedStateWrites}.

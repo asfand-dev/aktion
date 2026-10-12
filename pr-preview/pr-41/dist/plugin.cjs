@@ -1940,20 +1940,8 @@ function parseExportStatement(ctx) {
   const start = ctx.expect("Keyword", "export");
   const next = ctx.peek();
   if (next.type === "Keyword" && next.value === "default") return parseExportDefault(ctx, next);
-  if (next.type === "Operator" && next.value === "*") {
-    throw {
-      message: "`export * from …` is not supported — Aktion modules cannot re-export; import what you need from that module directly.",
-      line: next.line,
-      column: next.column
-    };
-  }
-  if (next.type === "Punctuation" && next.value === "{") {
-    throw {
-      message: "`export { … }` lists (and re-export lists) are not supported — declare each binding with `export` where it is defined (e.g. `export function Foo() {…}`, `export let $count = 0`, `export const NAME = …`).",
-      line: next.line,
-      column: next.column
-    };
-  }
+  if (next.type === "Operator" && next.value === "*") return parseExportAll(ctx, start);
+  if (next.type === "Punctuation" && next.value === "{") return parseExportList(ctx, start);
   let stmt;
   if (next.type === "Keyword" && next.value === "function") {
     stmt = parseFunctionDecl(ctx);
@@ -1992,6 +1980,111 @@ function parseExportStatement(ctx) {
     line: start.line,
     column: start.column
   };
+}
+const EXPORT_DEFAULT_MESSAGE = "Aktion modules only have named exports — `default` cannot be an export name; `export default` is reserved for the entry's `$app(…)` call.";
+function parseExportList(ctx, start) {
+  ctx.expect("Punctuation", "{");
+  const specifiers = [];
+  const seen = /* @__PURE__ */ new Set();
+  skipWhitespace(ctx);
+  while (!ctx.isEnd() && !(ctx.peek().type === "Punctuation" && ctx.peek().value === "}")) {
+    const localTok = ctx.peek();
+    if (localTok.type === "Keyword" && localTok.value === "default") {
+      throw { message: EXPORT_DEFAULT_MESSAGE, line: localTok.line, column: localTok.column };
+    }
+    if (localTok.type !== "StateIdentifier" && localTok.type !== "Identifier") {
+      throw {
+        message: unexpected(localTok, `Expected an export name, got ${localTok.type} "${localTok.value}"`),
+        line: localTok.line,
+        column: localTok.column
+      };
+    }
+    if (localTok.type === "Identifier") rejectUnsupportedWord(ctx, localTok);
+    const isState = localTok.type === "StateIdentifier";
+    const local = ctx.consume().value;
+    let exported = local;
+    if (ctx.peek().type === "Identifier" && ctx.peek().value === "as") {
+      ctx.consume();
+      const aliasTok = ctx.peek();
+      if (aliasTok.type === "Keyword" && aliasTok.value === "default") {
+        throw { message: EXPORT_DEFAULT_MESSAGE, line: aliasTok.line, column: aliasTok.column };
+      }
+      if (aliasTok.type !== "StateIdentifier" && aliasTok.type !== "Identifier") {
+        throw {
+          message: unexpected(aliasTok, `Expected an alias after \`as\`, got ${aliasTok.type} "${aliasTok.value}"`),
+          line: aliasTok.line,
+          column: aliasTok.column
+        };
+      }
+      if (aliasTok.type === "Identifier") rejectUnsupportedWord(ctx, aliasTok);
+      if (aliasTok.type === "StateIdentifier" !== isState) {
+        throw {
+          message: "A `$state` export must keep its `$` across `as` (e.g. `{ $x as $y }`); a non-state export must not gain one.",
+          line: aliasTok.line,
+          column: aliasTok.column
+        };
+      }
+      exported = ctx.consume().value;
+    }
+    const key = isState ? `$${exported}` : exported;
+    if (seen.has(key)) {
+      throw {
+        message: `\`${key}\` is exported twice in this list.`,
+        line: localTok.line,
+        column: localTok.column
+      };
+    }
+    seen.add(key);
+    specifiers.push({
+      local,
+      exported,
+      ...isState ? { isState: true } : {},
+      loc: { line: localTok.line, column: localTok.column }
+    });
+    skipWhitespace(ctx);
+    if (ctx.peek().type === "Punctuation" && ctx.peek().value === ",") {
+      ctx.consume();
+      skipWhitespace(ctx);
+      continue;
+    }
+    break;
+  }
+  ctx.expect("Punctuation", "}");
+  let source;
+  const fromTok = ctx.peek();
+  if (fromTok.type === "Identifier" && fromTok.value === "from") {
+    ctx.consume();
+    source = ctx.expect("String").value;
+  }
+  skipTerminator(ctx);
+  return {
+    kind: "ExportList",
+    specifiers,
+    ...source === void 0 ? {} : { source },
+    loc: { line: start.line, column: start.column }
+  };
+}
+function parseExportAll(ctx, start) {
+  const star = ctx.expect("Operator", "*");
+  const after = ctx.peek();
+  if (after.type === "Identifier" && after.value === "as") {
+    throw {
+      message: '`export * as name from …` is not supported — Aktion has no namespace objects; list the names: `export { a, b } from "…"`, or `export * from "…"`.',
+      line: star.line,
+      column: star.column
+    };
+  }
+  if (!(after.type === "Identifier" && after.value === "from")) {
+    throw {
+      message: unexpected(after, `Expected \`from\` after \`export *\`, got ${after.type} "${after.value}"`),
+      line: after.line,
+      column: after.column
+    };
+  }
+  ctx.consume();
+  const source = ctx.expect("String").value;
+  skipTerminator(ctx);
+  return { kind: "ExportList", specifiers: [], source, all: true, loc: { line: start.line, column: start.column } };
 }
 function parseExportDefault(ctx, defaultTok) {
   ctx.consume();
@@ -8920,6 +9013,7 @@ class Analyzer {
     const hooks2 = this.hooksAt(context);
     switch (stmt.kind) {
       case "Import":
+      case "ExportList":
         break;
       case "Assignment":
         this.assignment(stmt, context, hooks2);
@@ -9993,6 +10087,10 @@ const defaultFrontends = {
   aktion: aktionFrontend,
   javascript: javascriptFrontend
 };
+const UNLOADED = "\0unloaded";
+function exportKey(name, isState) {
+  return isState === true ? `$${name}` : name;
+}
 const LANGUAGE_LABEL = {
   aktion: "Aktion",
   javascript: "JavaScript",
@@ -10034,63 +10132,63 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
   const visiting = /* @__PURE__ */ new Set();
   const diagnostics = [];
   let nextId = 0;
-  const report = (path, line, column, message, severity, code) => {
+  const report = (path2, line, column, message, severity, code) => {
     const diagnostic = {
       line,
       column,
-      message: path === entryPath ? message : `${path}: ${message}`,
+      message: path2 === entryPath ? message : `${path2}: ${message}`,
       severity,
-      path
+      path: path2
     };
     if (code) diagnostic.code = code;
     diagnostics.push(diagnostic);
   };
-  const fail = (path, line, column, message, code) => report(path, line, column, message, "error", code);
-  function load(path, sourceOverride, language) {
-    const existing = modules.get(path);
+  const fail = (path2, line, column, message, code) => report(path2, line, column, message, "error", code);
+  function load(path2, sourceOverride, language) {
+    const existing = modules.get(path2);
     if (existing) return existing;
-    if (visiting.has(path)) return void 0;
-    visiting.add(path);
+    if (visiting.has(path2)) return void 0;
+    visiting.add(path2);
     let src;
     if (sourceOverride !== null) {
       src = sourceOverride;
     } else {
       try {
-        src = resolver.load(path);
+        src = resolver.load(path2);
       } catch {
-        visiting.delete(path);
-        fail(entryPath, 0, 0, `Failed to load imported module "${path}".`, "AKT-LINK-LOAD");
+        visiting.delete(path2);
+        fail(entryPath, 0, 0, `Failed to load imported module "${path2}".`, "AKT-LINK-LOAD");
         return void 0;
       }
     }
     const frontend = frontends[language];
     if (!frontend) {
-      visiting.delete(path);
+      visiting.delete(path2);
       fail(
-        path,
+        path2,
         0,
         0,
-        `"${path}" is a ${LANGUAGE_LABEL[language]} Aktion module, but no ${language} frontend is configured — compile it with aktion-runtime/vite, or pass a ${language} frontend to linkProgram (loadTypeScriptFrontend() from aktion-runtime/vite).`,
+        `"${path2}" is a ${LANGUAGE_LABEL[language]} Aktion module, but no ${language} frontend is configured — compile it with aktion-runtime/vite, or pass a ${language} frontend to linkProgram (loadTypeScriptFrontend() from aktion-runtime/vite).`,
         "AKT-LINK-NO-FRONTEND"
       );
       return void 0;
     }
     let compiled;
     try {
-      compiled = frontend.compile(src, path);
+      compiled = frontend.compile(src, path2);
     } catch (err) {
-      visiting.delete(path);
-      fail(path, 0, 0, `Failed to compile "${path}": ${err?.message ?? String(err)}`, "AKT-LINK-FRONTEND");
+      visiting.delete(path2);
+      fail(path2, 0, 0, `Failed to compile "${path2}": ${err?.message ?? String(err)}`, "AKT-LINK-FRONTEND");
       return void 0;
     }
     const { program: program2 } = compiled;
-    for (const e of program2.errors) fail(path, e.line, e.column, e.message);
+    for (const e of program2.errors) fail(path2, e.line, e.column, e.message);
     for (const d of compiled.diagnostics) {
-      report(path, d.line, d.column, d.message, d.severity, d.code);
+      report(path2, d.line, d.column, d.message, d.severity, d.code);
     }
     const rec = {
       id: nextId++,
-      path,
+      path: path2,
       language,
       originalSource: src,
       aktionSource: compiled.aktionSource,
@@ -10099,58 +10197,69 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
       builtinImports: [],
       declaredPlain: /* @__PURE__ */ new Set(),
       declaredState: /* @__PURE__ */ new Set(),
-      exportedPlain: /* @__PURE__ */ new Set(),
-      exportedState: /* @__PURE__ */ new Set(),
+      exportRefs: /* @__PURE__ */ new Map(),
+      stars: [],
+      starFailed: false,
       renamePlain: /* @__PURE__ */ new Map(),
       renameState: /* @__PURE__ */ new Map(),
       importedStateMutations: compiled.importedStateMutations ?? []
     };
-    modules.set(path, rec);
+    modules.set(path2, rec);
     buildSymbolTable(rec);
     for (const stmt of program2.statements) {
-      if (stmt.kind !== "Import") continue;
+      if (stmt.kind !== "Import" && !(stmt.kind === "ExportList" && stmt.source !== void 0)) continue;
+      const source = stmt.source;
       const line = stmt.loc?.line ?? 0;
       const column = stmt.loc?.column ?? 0;
-      if (stmt.source === DSL_MODULE_ID) {
+      if (source === DSL_MODULE_ID) {
+        if (stmt.kind === "ExportList") {
+          if (stmt.all) rec.starFailed = true;
+          fail(path2, line, column, "Built-ins from aktion-runtime/dsl cannot be re-exported — import them where you use them.", "AKT-LINK-EXPORT");
+          continue;
+        }
         checkBuiltinImport(rec, stmt, fail);
         rec.builtinImports.push(stmt);
         continue;
       }
-      const resolved = resolver.resolve(stmt.source, path);
+      const resolved = resolver.resolve(source, path2);
       if (resolved === null) {
+        if (stmt.kind === "ExportList" && stmt.all) rec.starFailed = true;
         rec.edges.push({ stmt, resolvedPath: null });
-        const why = resolver.explain?.(stmt.source, path);
-        fail(path, line, column, `Cannot resolve import "${stmt.source}".${why ? ` ${why}` : ""}`, "AKT-LINK-RESOLVE");
+        const why = resolver.explain?.(source, path2);
+        fail(path2, line, column, `Cannot resolve import "${source}".${why ? ` ${why}` : ""}`, "AKT-LINK-RESOLVE");
         continue;
       }
       const language2 = moduleLanguage(resolved);
       if (language2 === null) {
+        if (stmt.kind === "ExportList" && stmt.all) rec.starFailed = true;
         rec.edges.push({ stmt, resolvedPath: null });
         if (isReservedAktionPath(resolved)) {
           fail(
-            path,
+            path2,
             line,
             column,
-            `"${stmt.source}": JSX Aktion modules (.aktion.tsx / .aktion.jsx) are not supported yet — use .aktion.ts or .aktion.js.`,
+            `"${source}": JSX Aktion modules (.aktion.tsx / .aktion.jsx) are not supported yet — use .aktion.ts or .aktion.js.`,
             "AKT-LINK-JSX"
           );
         } else {
-          const typeNames = rec.language === "typescript" && stmt.specifiers.length === 0 ? inlineTypeOnlyNames(src, line, column) : null;
+          const typeNames = rec.language === "typescript" && stmt.kind === "Import" && stmt.specifiers.length === 0 ? inlineTypeOnlyNames(src, line, column) : null;
           fail(
-            path,
+            path2,
             line,
             column,
-            typeNames ? typeOnlyNativeImportMessage(stmt.source, typeNames) : nativeImportMessage(stmt.source, resolved),
+            typeNames ? typeOnlyNativeImportMessage(source, typeNames) : nativeImportMessage(source, resolved),
             "AKT-LINK-NATIVE"
           );
         }
         continue;
       }
       rec.edges.push({ stmt, resolvedPath: resolved });
-      load(resolved, null, language2);
+      if (!load(resolved, null, language2) && !modules.has(resolved) && stmt.kind === "ExportList" && stmt.all) {
+        rec.starFailed = true;
+      }
     }
-    visiting.delete(path);
-    order.push(path);
+    visiting.delete(path2);
+    order.push(path2);
     return rec;
   }
   let entryLanguage = moduleLanguage(entryPath);
@@ -10181,27 +10290,93 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
     for (const name of rec.declaredPlain) rec.renamePlain.set(name, moduleLocalSymbol(rec.id, name));
     for (const name of rec.declaredState) rec.renameState.set(name, moduleLocalSymbol(rec.id, name));
   }
+  const edgeSource = (rec) => (stmt) => rec.edges.find((e) => e.stmt === stmt)?.resolvedPath ?? null;
+  for (const rec of modules.values()) collectExports(rec, fail, edgeSource(rec));
+  const memo = /* @__PURE__ */ new Map();
+  const path = /* @__PURE__ */ new Set();
+  let cutCycles = 0;
+  const resolveExport = (rec, key) => {
+    const visit = `${rec.path}\0${key}`;
+    const known = memo.get(visit);
+    if (known !== void 0) return known;
+    if (path.has(visit)) {
+      cutCycles += 1;
+      return "cycle";
+    }
+    path.add(visit);
+    const before = cutCycles;
+    const result = resolveExportUncached(rec, key);
+    path.delete(visit);
+    if (cutCycles === before) memo.set(visit, result);
+    return result;
+  };
+  const resolveExportUncached = (rec, key) => {
+    const ref = rec.exportRefs.get(key);
+    if (ref) {
+      if (ref.from === null) return { rec, name: ref.name };
+      const target = modules.get(ref.from);
+      return target ? resolveExport(target, exportKey(ref.name, key.startsWith("$"))) : "opaque";
+    }
+    const origins = /* @__PURE__ */ new Map();
+    let opaque = rec.starFailed;
+    for (const star of rec.stars) {
+      const target = modules.get(star);
+      if (!target) {
+        opaque = true;
+        continue;
+      }
+      const found = resolveExport(target, key);
+      if (found === "ambiguous") return found;
+      if (found === "opaque") opaque = true;
+      else if (found !== "missing" && found !== "cycle") origins.set(`${found.rec.path}\0${found.name}`, found);
+    }
+    if (origins.size > 1) return "ambiguous";
+    return origins.values().next().value ?? (opaque ? "opaque" : "missing");
+  };
+  const exportProblem = (rec, found, key, source, line, column) => {
+    if (found === "opaque") return;
+    fail(
+      rec.path,
+      line,
+      column,
+      found === "ambiguous" ? `"${source}" exports \`${key}\` from more than one module through \`export *\` — export it by name to choose one.` : found === "cycle" ? `"${source}" re-exports \`${key}\` in a cycle of re-exports that never reaches a declaration.` : `"${source}" does not export \`${key}\`.`,
+      "AKT-LINK-EXPORT"
+    );
+  };
+  for (const rec of modules.values()) {
+    for (const { stmt, resolvedPath } of rec.edges) {
+      if (stmt.kind !== "ExportList" || resolvedPath === null) continue;
+      const src = modules.get(resolvedPath);
+      if (!src) continue;
+      for (const spec of stmt.specifiers) {
+        const key = exportKey(spec.local, spec.isState);
+        const found = resolveExport(src, key);
+        if (typeof found === "string") {
+          const at = spec.loc ?? stmt.loc;
+          exportProblem(rec, found, key, stmt.source, at?.line ?? 0, at?.column ?? 0);
+        }
+      }
+    }
+  }
   const exportSymbol = (src, name, renames) => renames.get(name) ?? (src.path === entryPath ? name : moduleLocalSymbol(src.id, name));
   for (const rec of modules.values()) {
     for (const { stmt, resolvedPath } of rec.edges) {
-      if (resolvedPath === null) continue;
+      if (resolvedPath === null || stmt.kind !== "Import") continue;
       const src = modules.get(resolvedPath);
       if (!src) continue;
       for (const spec of stmt.specifiers) {
         const line = stmt.loc?.line ?? 0;
         const column = stmt.loc?.column ?? 0;
+        const key = exportKey(spec.imported, spec.isState);
+        const found = resolveExport(src, key);
+        if (typeof found === "string") {
+          exportProblem(rec, found, key, stmt.source, line, column);
+          continue;
+        }
         if (spec.isState) {
-          if (!src.exportedState.has(spec.imported)) {
-            fail(rec.path, line, column, `"${stmt.source}" does not export \`$${spec.imported}\`.`, "AKT-LINK-EXPORT");
-            continue;
-          }
-          rec.renameState.set(spec.local, exportSymbol(src, spec.imported, src.renameState));
+          rec.renameState.set(spec.local, exportSymbol(found.rec, found.name, found.rec.renameState));
         } else {
-          if (!src.exportedPlain.has(spec.imported)) {
-            fail(rec.path, line, column, `"${stmt.source}" does not export \`${spec.imported}\`.`, "AKT-LINK-EXPORT");
-            continue;
-          }
-          rec.renamePlain.set(spec.local, exportSymbol(src, spec.imported, src.renamePlain));
+          rec.renamePlain.set(spec.local, exportSymbol(found.rec, found.name, found.rec.renamePlain));
         }
       }
     }
@@ -10210,7 +10385,8 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
     for (const mutation of rec.importedStateMutations) {
       const edge = rec.edges.find((e) => e.stmt.source === mutation.source && e.resolvedPath !== null);
       const exporter = edge ? modules.get(edge.resolvedPath) : void 0;
-      if (exporter && importedStateMutationApplies(mutation, exporter.program)) {
+      const found = exporter ? resolveExport(exporter, `$${mutation.imported}`) : void 0;
+      if (found && typeof found !== "string" && importedStateMutationApplies({ ...mutation, imported: found.name }, found.rec.program)) {
         fail(rec.path, mutation.line, mutation.column, mutation.message, "E108");
       }
     }
@@ -10218,18 +10394,18 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
   const merged = [];
   const sources = [entryPath];
   const sourceIndex = /* @__PURE__ */ new Map([[entryPath, 0]]);
-  for (const path of order) {
-    if (sourceIndex.has(path)) continue;
-    sourceIndex.set(path, sources.length);
-    sources.push(path);
+  for (const path2 of order) {
+    if (sourceIndex.has(path2)) continue;
+    sourceIndex.set(path2, sources.length);
+    sources.push(path2);
   }
   const multiModule = sources.length > 1;
-  for (const path of order) {
-    const rec = modules.get(path);
+  for (const path2 of order) {
+    const rec = modules.get(path2);
     const renamer = makeRenamer(rec);
-    const index = sourceIndex.get(path);
+    const index = sourceIndex.get(path2);
     for (const stmt of rec.program.statements) {
-      if (stmt.kind === "Import") continue;
+      if (stmt.kind === "Import" || stmt.kind === "ExportList") continue;
       renamer.renameTopLevel(stmt);
       stripExported(stmt);
       if (multiModule) stampSourceIndex(stmt, index);
@@ -10246,8 +10422,8 @@ function linkProgram(entrySource, entryPath, resolver, options = {}) {
   };
   if (multiModule) program.sources = sources;
   const linkedModules = [];
-  for (const path of sources) {
-    const rec = modules.get(path);
+  for (const path2 of sources) {
+    const rec = modules.get(path2);
     if (!rec) continue;
     linkedModules.push({
       path: rec.path,
@@ -10296,26 +10472,67 @@ function buildSymbolTable(rec) {
       case "Assignment":
         if (stmt.isState) {
           rec.declaredState.add(stmt.identifier);
-          if (stmt.exported) rec.exportedState.add(stmt.identifier);
+          if (stmt.exported) rec.exportRefs.set(`$${stmt.identifier}`, { name: stmt.identifier, from: null });
         } else {
           rec.declaredPlain.add(stmt.identifier);
-          if (stmt.exported) rec.exportedPlain.add(stmt.identifier);
+          if (stmt.exported) rec.exportRefs.set(stmt.identifier, { name: stmt.identifier, from: null });
         }
         break;
       case "ComponentDeclaration":
       case "ActionDeclaration":
         rec.declaredPlain.add(stmt.name);
-        if (stmt.exported) rec.exportedPlain.add(stmt.name);
+        if (stmt.exported) rec.exportRefs.set(stmt.name, { name: stmt.name, from: null });
         break;
       case "HookDeclaration":
         rec.declaredState.add(stmt.name);
-        if (stmt.exported) rec.exportedState.add(stmt.name);
+        if (stmt.exported) rec.exportRefs.set(`$${stmt.name}`, { name: stmt.name, from: null });
         break;
       case "DestructureStatement":
         for (const name of collectPatternNames({ kind: stmt.patternKind, bindings: stmt.bindings })) {
           rec.declaredPlain.add(name);
         }
         break;
+    }
+  }
+}
+function collectExports(rec, fail, resolved) {
+  const imported = /* @__PURE__ */ new Set();
+  for (const { stmt } of rec.edges) {
+    if (stmt.kind === "Import") for (const spec of stmt.specifiers) imported.add(exportKey(spec.local, spec.isState));
+  }
+  for (const stmt of rec.program.statements) {
+    if (stmt.kind !== "ExportList") continue;
+    const line = stmt.loc?.line ?? 0;
+    const column = stmt.loc?.column ?? 0;
+    if (stmt.all) {
+      const from2 = resolved(stmt);
+      if (from2 !== null) rec.stars.push(from2);
+      continue;
+    }
+    const from = stmt.source === void 0 ? null : resolved(stmt) ?? UNLOADED;
+    for (const spec of stmt.specifiers) {
+      const specLine = spec.loc?.line ?? line;
+      const specColumn = spec.loc?.column ?? column;
+      const key = exportKey(spec.exported, spec.isState);
+      if (from === null) {
+        const localKey = exportKey(spec.local, spec.isState);
+        const declared = spec.isState ? rec.declaredState : rec.declaredPlain;
+        if (!declared.has(spec.local)) {
+          fail(
+            rec.path,
+            specLine,
+            specColumn,
+            imported.has(localKey) ? `\`${localKey}\` is imported, not declared in this module — re-export it with \`export { ${localKey} } from "…"\`.` : `Cannot export \`${localKey}\`: this module declares no top-level \`${localKey}\`.`,
+            "AKT-LINK-EXPORT"
+          );
+          continue;
+        }
+      }
+      if (rec.exportRefs.has(key)) {
+        fail(rec.path, specLine, specColumn, `\`${key}\` is exported more than once.`, "AKT-LINK-EXPORT");
+        continue;
+      }
+      rec.exportRefs.set(key, { name: spec.local, from });
     }
   }
 }
@@ -10462,6 +10679,7 @@ function makeRenamer(rec) {
   function renameStatement(stmt, topLevel) {
     switch (stmt.kind) {
       case "Import":
+      case "ExportList":
         return;
       case "Assignment":
         stmt.identifier = stmt.isState ? rState(stmt.identifier) : rPlain(stmt.identifier);
@@ -10774,6 +10992,16 @@ function printStatement(stmt, indent, opts) {
         return `${imported} as ${local}`;
       }).join(", ");
       return `${padStr}import { ${specs} } from ${printStringLiteral(stmt.source, opts)}`;
+    }
+    case "ExportList": {
+      const from = stmt.source === void 0 ? "" : ` from ${printStringLiteral(stmt.source, opts)}`;
+      if (stmt.all) return `${padStr}export *${from}`;
+      const specs = stmt.specifiers.map((s) => {
+        const local = s.isState ? `$${s.local}` : s.local;
+        if (s.exported === s.local) return local;
+        return `${local} as ${s.isState ? `$${s.exported}` : s.exported}`;
+      }).join(", ");
+      return `${padStr}export { ${specs} }${from}`;
     }
     case "Assignment": {
       const lhs = stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
@@ -11570,35 +11798,71 @@ const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 const propertyName = (key) => IDENTIFIER.test(key) ? key : JSON.stringify(key);
 function aktionExportNames(program) {
   const names = /* @__PURE__ */ new Set();
+  const listed = listedExports(program);
   for (const stmt of program.statements) {
-    const name = exportName(stmt);
-    if (name !== null) names.add(name);
+    for (const name of exportNames(stmt, listed)) names.add(name);
+    if (stmt.kind === "ExportList" && stmt.source !== void 0) {
+      for (const spec of stmt.specifiers) names.add(spec.isState ? `$${spec.exported}` : spec.exported);
+    }
   }
   return [...names];
 }
-function exportName(stmt) {
+function declaredKey(stmt) {
   switch (stmt.kind) {
     case "ComponentDeclaration":
     case "ActionDeclaration":
-      return stmt.exported ? stmt.name : null;
+      return stmt.name;
     case "HookDeclaration":
-      return stmt.exported ? `$${stmt.name}` : null;
+      return `$${stmt.name}`;
     case "Assignment":
-      return stmt.exported ? stmt.isState ? `$${stmt.identifier}` : stmt.identifier : null;
+      return stmt.isState ? `$${stmt.identifier}` : stmt.identifier;
     default:
       return null;
   }
+}
+function listedExports(program) {
+  const listed = /* @__PURE__ */ new Map();
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "ExportList" || stmt.source !== void 0) continue;
+    for (const spec of stmt.specifiers) {
+      const key = spec.isState ? `$${spec.local}` : spec.local;
+      listed.set(key, [...listed.get(key) ?? [], spec.isState ? `$${spec.exported}` : spec.exported]);
+    }
+  }
+  return listed;
+}
+function exportNames(stmt, listed) {
+  const key = declaredKey(stmt);
+  if (key === null) return [];
+  const own = "exported" in stmt && stmt.exported ? [key] : [];
+  return [.../* @__PURE__ */ new Set([...own, ...listed.get(key) ?? []])];
 }
 function aktionDeclarationText(source, sourceName = "module.aktion") {
   const program = parse(source);
   const assigned = assignedValues(program);
   const taken = new Set(aktionExportNames(program));
   const byName = /* @__PURE__ */ new Map();
+  const listed = listedExports(program);
   for (const stmt of program.statements) {
-    const declared = declare(stmt, assigned, taken);
-    if (declared === null) continue;
-    byName.delete(declared.name);
-    byName.set(declared.name, declared);
+    for (const name of exportNames(stmt, listed)) {
+      const declared = declare(stmt, name, assigned, taken);
+      if (declared === null) continue;
+      byName.delete(declared.name);
+      byName.set(declared.name, declared);
+    }
+  }
+  const forwarded = [];
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "ExportList" || stmt.source === void 0) continue;
+    if (stmt.all) {
+      forwarded.push(`export * from ${JSON.stringify(stmt.source)};`);
+      continue;
+    }
+    const specs = stmt.specifiers.map((s) => {
+      const local2 = s.isState ? `$${s.local}` : s.local;
+      return s.exported === s.local ? local2 : `${local2} as ${s.isState ? `$${s.exported}` : s.exported}`;
+    });
+    forwarded.push(`export { ${specs.join(", ")} } from ${JSON.stringify(stmt.source)};`);
   }
   const uses = /* @__PURE__ */ new Set(["CompiledProgram"]);
   const lines = [];
@@ -11612,26 +11876,25 @@ function aktionDeclarationText(source, sourceName = "module.aktion") {
     `import type { ${[...uses].sort().join(", ")} } from "aktion-runtime/dsl";`,
     "",
     ...lines,
-    ...lines.length > 0 ? [""] : [],
+    ...forwarded,
+    ...lines.length + forwarded.length > 0 ? [""] : [],
     `declare const ${local}: CompiledProgram;`,
     `export default ${local};`,
     ""
   ].join("\n");
   return { text, errors: program.errors };
 }
-function declare(stmt, assigned, taken) {
-  const name = exportName(stmt);
-  if (name === null) return null;
+function declare(stmt, name, assigned, taken) {
   const uses = /* @__PURE__ */ new Set();
   switch (stmt.kind) {
     case "ComponentDeclaration":
-      return { name, lines: componentOverloads(stmt.name, stmt.params, uses), uses };
+      return { name, lines: componentOverloads(name, stmt.params, uses, stmt.name), uses };
     case "ActionDeclaration":
     case "HookDeclaration":
       return { name, lines: [`export declare function ${name}(${parameterList(stmt.params)}): any;`], uses };
     case "Assignment": {
       const mutable = stmt.isState || stmt.declaration === "let" || stmt.declaration === "var";
-      const type = mutable ? bindingType(stmt.expression, assigned.get(name) ?? [], uses) : valueType(stmt.expression, uses);
+      const type = mutable ? bindingType(stmt.expression, assigned.get(declaredKey(stmt)) ?? [], uses) : valueType(stmt.expression, uses);
       return { name, lines: exportBinding(name, mutable ? "let" : "const", type, taken), uses };
     }
     default:
@@ -11669,9 +11932,9 @@ function parameterList(params) {
   const names = parameterNames(params);
   return params.map((p, i) => p.rest ? `...${names[i]}: any[]` : `${names[i]}?: ${parameterType(p)}`).join(", ");
 }
-function componentOverloads(name, params, uses) {
+function componentOverloads(name, params, uses, tag = name) {
   uses.add("AktionNode");
-  const result = `AktionNode<${JSON.stringify(name)}>`;
+  const result = `AktionNode<${JSON.stringify(tag)}>`;
   const names = parameterNames(params);
   const types = params.map(parameterType);
   if (params.some((p) => p.rest)) {

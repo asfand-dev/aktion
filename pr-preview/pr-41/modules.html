@@ -153,10 +153,37 @@ export function $useToggle() {            // a hook ($-prefixed)
 export $count = 0                         // a reactive atom
 export accent = "var(--rui-primary)"      // a plain binding</code></pre>
       <p>
-        <code>export { a, b }</code> lists, re-exports, and
-        <code>export</code> of a destructuring declaration are not supported &mdash;
-        export each binding inline, where it is declared.
+        <code>export</code> of a destructuring declaration is not supported &mdash;
+        export each binding inline, or list the names it declares (below).
       </p>
+
+      <h3 id="export-lists">Export lists and re-exports</h3>
+      <p>
+        An <code>export { &hellip; }</code> list exports bindings the module already
+        declares, with <code>as</code> to rename them, and a <code>$</code> atom keeps
+        its <code>$</code> on both sides. It does exactly what writing
+        <code>export</code> before the declaration does &mdash; the same atom, shared
+        by every importer &mdash; and the declaration may come before or after the list.
+        A name can be exported once.
+      </p>
+<pre><code>let $count = 0
+function increment() { $count += 1 }
+export { $count, increment as bump }</code></pre>
+      <p>
+        <code>export { &hellip; } from "&hellip;"</code> and
+        <code>export * from "&hellip;"</code> forward another module's exports
+        without binding them in this file, so a <strong>barrel</strong> file can gather
+        a library behind one import. The source is linked where the statement stands
+        (see <a href="#link-order">link order</a>). Naming something the source does not
+        export is a link error, as is a name two <code>export *</code> statements supply
+        from different modules; an explicit export always wins over a star. A name that was
+        imported cannot be listed &mdash; re-export it with <code>from</code>. Aktion has no
+        namespace objects, so <code>export * as ns from "&hellip;"</code> is rejected.
+      </p>
+<pre><code>// barrel.aktion
+export { $count, bump } from "./counter.aktion"
+export { Card2 } from "./components.aktion"
+export * from "./format.aktion"</code></pre>
 
       <h2 id="importing">Importing</h2>
       <p>
@@ -343,18 +370,30 @@ export const setOpen = (value) =&gt; { $open = value }
 import { $open, setOpen } from "./ui.aktion"
 Button("Toggle", () =&gt; setOpen(!$open))</code></pre>
       <p>
-        To find the direct writes in a program, turn on the opt-in
-        <code>imported-state-write</code> lint:
-        <code>getLintWarnings(source, library, { importedStateWrites: true })</code>,
-        or pass <code>--imported-state-writes</code> to
-        <code>tools/validate-aktion.mjs</code> or
-        <code>tools/validate-aktion-app.mjs</code>. Each warning names the imported
+        The <code>imported-state-write</code> lint finds the direct writes in a
+        program. It is on by default in <code>getLintWarnings</code>,
+        <code>getDiagnostics</code>, <code>tools/validate-aktion.mjs</code> and
+        <code>tools/validate-aktion-app.mjs</code>; turn it off with
+        <code>{ importedStateWrites: false }</code> or
+        <code>--no-imported-state-writes</code> (the older
+        <code>--imported-state-writes</code> is still accepted and does nothing).
+        Each warning names the imported
         atom, the module it comes from and the setter to add. To migrate a site, add
         one setter per imported atom to the owning module (the warning spells it
         out: <code>setMockClusters</code> for <code>$mockClusters</code>) and
         replace <code>$x = value</code> with <code>setX(value)</code>; a compound
-        write becomes <code>setX($x + 1)</code>. It is a warning, never an error, and
-        off by default: the direct write still runs.
+        write becomes <code>setX($x + 1)</code>. It is a warning, never an error, so
+        the direct write still runs; a job that treats warnings as failures will
+        report these writes.
+      </p>
+      <p>
+        The lint reads one file at a time, so it names the setter to add but does
+        not check that the owner exports it. An atom imported through a barrel
+        (<code>export { $open } from "./store.aktion"</code>) is treated as the
+        barrel's own export: the setter is named after the name the barrel exports
+        (<code>setIsOpen</code> for <code>export { $open as $isOpen } from …</code>)
+        and the warning points at the barrel, so add the setter to the module that
+        declares the atom and re-export it from the barrel too.
       </p>
 
       <h2 id="languages">Modules in TypeScript and JavaScript</h2>
@@ -539,8 +578,28 @@ import { Hero } from "https://example.com/ui/Hero.aktion"    // remote, fetched 
           </tr>
           <tr>
             <td><code>"./store.aktion" does not export `increment`</code></td>
-            <td>The name exists in that file but is not prefixed with <code>export</code>. State imports report the sigil: <code>does not export `$count`</code>.</td>
+            <td>The name exists in that file but is not exported, or an <code>export { x } from</code> re-exports a name its source lacks (reported at the specifier). State imports report the sigil: <code>does not export `$count`</code>.</td>
             <td>Add <code>export</code> to the declaration.</td>
+          </tr>
+          <tr>
+            <td><code>Cannot export `x`: this module declares no top-level `x`.</code></td>
+            <td>An <code>export { x }</code> list names something the file does not declare (check the <code>$</code> too: <code>a</code> and <code>$a</code> are different names). An imported name gets its own message pointing at <code>export { x } from "&hellip;"</code>.</td>
+            <td>Declare it, or fix the spelling.</td>
+          </tr>
+          <tr>
+            <td><code>`x` is exported more than once.</code></td>
+            <td>Two exports &mdash; declarations, lists or re-exports &mdash; give the same name.</td>
+            <td>Export it once, or rename one with <code>as</code>.</td>
+          </tr>
+          <tr>
+            <td><code>"./barrel.aktion" exports `x` from more than one module through `export *`</code></td>
+            <td>Two <code>export *</code> statements reach different declarations of <code>x</code>.</td>
+            <td>Export it by name (<code>export { x } from "&hellip;"</code>) to choose one.</td>
+          </tr>
+          <tr>
+            <td><code>"./a.aktion" re-exports `x` in a cycle of re-exports that never reaches a declaration</code></td>
+            <td>Re-exports of <code>x</code> point at each other and no file declares it.</td>
+            <td>Declare it in one of the files.</td>
           </tr>
           <tr>
             <td><code>Greeting.aktion: Unexpected token &hellip;</code></td>
