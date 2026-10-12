@@ -321,3 +321,113 @@ describe("a direct write to an atom imported through a re-export", () => {
     expect(getLintWarnings(files["/store.aktion"])).toEqual([]);
   });
 });
+
+/**
+ * The advice of the `imported-state-write` warning, APPLIED: the setter name is read out of the warning, the
+ * setter is added where the warning says (the module that declares the atom, under that module's own name for
+ * it), the importer calls it, and the write must reach every reader and leave every module lint-clean.
+ */
+describe("applying the advice of the imported-state-write warning", () => {
+  const setterNameIn = (message: string): string => /`(set\w+)\(…\)`/.exec(message)![1]!;
+
+  it("a plain import: the setter goes into the module the import names", async () => {
+    const ui = "export let $open = false";
+    const before = 'import { $open } from "./ui.aktion"\n$app(Column([Text(`open=${$open}`), Button("tog", () => { $open = !$open })]))';
+    const warnings = getLintWarnings(before);
+    expect(warnings).toHaveLength(1);
+    const setter = setterNameIn(warnings[0]!.message);
+    expect(setter).toBe("setOpen");
+
+    const files = {
+      "/ui.aktion": `${ui}\nexport const ${setter} = (value) => { $open = value }`,
+      "/app.aktion": `import { $open, ${setter} } from "./ui.aktion"\n$app(Column([Text(\`open=\${$open}\`), Button("tog", () => ${setter}(!$open))]))`,
+    };
+    const screen = mount(files);
+    await screen.flush(12);
+    expect(text(screen)).toContain("open=false");
+    await screen.click("tog");
+    expect(text(screen)).toContain("open=true");
+    for (const file of Object.values(files)) expect(getLintWarnings(file)).toEqual([]);
+  });
+
+  describe("an aliased re-export: the setter goes into the declaring module, under its own name, and is re-exported", () => {
+    const store = "export let $open = false";
+    const barrel = 'export { $open as $isOpen } from "./store.aktion"';
+    const before =
+      'import { $isOpen } from "./index.aktion"\nimport { Panel } from "./panel.aktion"\n$app(Column([Text(`bar=${$isOpen}`), Button("tog", () => { $isOpen = !$isOpen }), Panel()]))';
+    // reads the atom straight from the declaring module, so a write that reaches only a private copy shows up
+    const panel = 'import { $open } from "./store.aktion"\nexport function Panel() { return Text(`st=${$open}`) }';
+
+    it("writes the atom every reader sees, and leaves every module lint-clean", async () => {
+      const warnings = getLintWarnings(before);
+      expect(warnings).toHaveLength(1);
+      const setter = setterNameIn(warnings[0]!.message);
+      expect(setter).toBe("setIsOpen");
+
+      const files = {
+        "/store.aktion": `${store}\nexport const ${setter} = (value) => { $open = value }`,
+        "/index.aktion": `export { $open as $isOpen, ${setter} } from "./store.aktion"`,
+        "/panel.aktion": panel,
+        "/app.aktion": before
+          .replace('import { $isOpen }', `import { $isOpen, ${setter} }`)
+          .replace("{ $isOpen = !$isOpen }", `${setter}(!$isOpen)`),
+      };
+      const screen = mount(files);
+      await screen.flush(12);
+      expect(text(screen)).toContain("bar=false");
+      expect(text(screen)).toContain("st=false");
+      await screen.click("tog");
+      expect(text(screen)).toContain("bar=true");
+      expect(text(screen)).toContain("st=true");
+      for (const file of Object.values(files)) expect(getLintWarnings(file)).toEqual([]);
+    });
+
+    it("control: the same setter written in the barrel under the barrel's name links, lints clean and writes nothing", async () => {
+      const files = {
+        "/store.aktion": store,
+        "/index.aktion": `${barrel}\nexport const setIsOpen = (value) => { $isOpen = value }`,
+        "/panel.aktion": panel,
+        "/app.aktion": before
+          .replace('import { $isOpen }', "import { $isOpen, setIsOpen }")
+          .replace("{ $isOpen = !$isOpen }", "setIsOpen(!$isOpen)"),
+      };
+      const screen = mount(files);
+      await screen.flush(12);
+      await screen.click("tog");
+      expect(text(screen)).toContain("bar=false");
+      expect(text(screen)).toContain("st=false");
+      expect(getLintWarnings(files["/index.aktion"])).toEqual([]);
+    });
+  });
+});
+
+/**
+ * `$` names have no scope. This is why the warning does not skip a `let` / `const` of an imported name below the
+ * top level: it is not a local, it writes the shared atom, and a `$` parameter or loop binding does not parse.
+ */
+describe("a nested declaration of an imported `$` name, measured", () => {
+  const importer = (handler: string): Record<string, string> => ({
+    "/ui.aktion": "export let $open = 0",
+    "/app.aktion": `import { $open } from "./ui.aktion"\n$app(Column([Text(\`open=\${$open}\`), Button("t", () => { ${handler} })]))`,
+  });
+
+  it.each([
+    ["a let in a handler", "let $open = 5", "open=5"],
+    ["a const in a handler", "const $open = 6", "open=6"],
+    ["a write after a let in the same handler", "let $open = 1\n $open = 2", "open=2"],
+    ["a write after a let in an inner block, once the block has ended", "if (true) { let $open = 1 }\n $open = 3", "open=3"],
+  ])("%s writes the shared atom", async (_label, handler, expected) => {
+    const screen = mount(importer(handler));
+    await screen.flush(12);
+    await screen.click("t");
+    expect(text(screen)).toContain(expected);
+  });
+
+  it.each([
+    ["a lambda parameter", "const f = ($open) => 1"],
+    ["a function parameter", "function f($open) { return 1 }"],
+    ["a for-of binding", "for (const $open of [1]) { }"],
+  ])("%s named like a `$` atom does not parse", (_label, source) => {
+    expect(parse(source).errors.length).toBeGreaterThan(0);
+  });
+});

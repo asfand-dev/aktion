@@ -660,9 +660,16 @@ const WRITE_BUILTINS: ReadonlySet<string> = new Set(["__rui_assign__", "__rui_pr
  * Flagged, wherever the write sits (handler, effect, nested block, lambda):
  * `$x = …`, `$x += …` and the other compound operators, `$x++` / `--$x`, and a
  * write through a property of the atom (`$x.key = …`, `$x[i] = …`). Not flagged:
- * a read, a method call (`$x.push(1)`), a `let` / `const` that declares a local of
- * the same name, and a write to a `$store` handle's property (`ui.open = …`),
- * which is the imported store's own API and writes no import.
+ * a read, a method call (`$x.push(1)`), a `delete $x.key` (measured: it changes
+ * nothing), and a write to a `$store` handle's property (`ui.open = …`), which is
+ * the imported store's own API and writes no import.
+ *
+ * Scope is not tracked, because Aktion has none for `$` names: a `$`-prefixed
+ * parameter or loop binding is a parse error, and a `let $x = …` or `const $x = …`
+ * inside a function, handler or block does not shadow the import (measured on the
+ * runtime: it writes the shared atom, and so does a later `$x = …` in the same
+ * block). A declaration below the top level is therefore flagged like an assignment;
+ * a top-level `let $x` of an imported name is not, since it declares nothing new.
  *
  * A top-level `$x = …` of an imported atom gets its own wording. It is not a
  * write at all: a top-level `$name = …` is a set-once declaration and the
@@ -670,11 +677,15 @@ const WRITE_BUILTINS: ReadonlySet<string> = new Set(["__rui_assign__", "__rui_pr
  *
  * Only the names this file imports are known here, not what the owning module
  * exports, so the suggestion names the setter to add rather than checking that it
- * exists. An atom imported through a barrel (`export { $open } from "./store.aktion"`)
- * is the barrel's own export as far as this file can tell: the setter follows the
- * name the barrel exports (`setIsOpen` for `export { $open as $isOpen } from …`) and
- * the message points at the barrel, not at the file that declares the atom. Property writes (`$o.k = 1`) are a copy-on-write path write on the
- * owner's atom; the setter suggestion applies to them as well.
+ * exists, and it cannot tell a module that declares an atom from a barrel that
+ * re-exports it (`export { $open as $isOpen } from "./store.aktion"`). The setter
+ * must assign the atom under the name the DECLARING module gives it (`$open`), so a
+ * setter added to the barrel under the barrel's name (`$isOpen`) would write
+ * nothing. The warning therefore says where the setter belongs (the declaring
+ * module), that its body uses that module's own name, and that a re-exporting
+ * module has to re-export it; the setter's NAME follows the name the imported
+ * module exports (`setIsOpen`). Property writes (`$o.k = 1`) are a copy-on-write
+ * path write on the owner's atom; the setter suggestion applies to them as well.
  */
 function lintImportedStateWrites(program: ReturnType<typeof parse>): Diagnostic[] {
   const importedFrom = new Map<string, { source: string; imported: string }>();
@@ -690,17 +701,23 @@ function lintImportedStateWrites(program: ReturnType<typeof parse>): Diagnostic[
   const report = (name: string, loc: { line: number; column: number } | undefined, topLevel: boolean): void => {
     const { source: from, imported } = importedFrom.get(name)!;
     const setter = `set${imported.charAt(0).toUpperCase()}${imported.slice(1)}`;
+    // The setter assigns the atom under the name its DECLARING module gives it. This file only knows the name
+    // `from` exports it under, which is that name only when `from` declares the atom, so say so instead of
+    // presenting the snippet as valid in `from`.
+    const advice =
+      `Keep the write in the module that declares the atom (\`export let $…\`): add ` +
+      `\`export const ${setter} = (value) => { $… = value }\` there, assigning the atom under the name that module ` +
+      `declares it with (\`$${imported}\` when "${from}" is that module), and call \`${setter}(…)\` here. ` +
+      `If "${from}" only re-exports the atom (\`export { … } from\`), add the setter to the declaring module and ` +
+      `re-export it from "${from}".`;
     const message = topLevel
       ? `\`$${name}\` is imported from "${from}" and assigned at the top level, where \`$${name} = …\` is a set-once ` +
         `declaration: the imported atom already exists, so this statement does nothing. JavaScript does not allow ` +
-        `assigning to an import either. Export a setter from "${from}" (\`export const ${setter} = (value) => { $${imported} = value }\`) ` +
-        `and call \`${setter}(…)\` here.`
+        `assigning to an import either. ${advice}`
       : `\`$${name}\` is imported from "${from}" and written here. JavaScript does not allow assigning to an ` +
         `import (ESLint \`no-import-assign\`), and what the runtime does with it depends on where it runs: a handler or ` +
         `effect writes the shared atom, a component body writes a private copy, and a lowercase function called while ` +
-        `rendering does nothing. Keep the write in the owning module: \`export const ${setter} = (value) => { $${imported} = value }\` ` +
-        `from "${from}" and call ` +
-        `\`${setter}(…)\` here.`;
+        `rendering does nothing. ${advice}`;
     warnings.push({ line: loc?.line ?? 0, column: loc?.column ?? 0, severity: "warning", message });
   };
   const rootOf = (node: { kind: string; object?: unknown }): { kind: string; name?: string } | undefined => {
@@ -711,7 +728,9 @@ function lintImportedStateWrites(program: ReturnType<typeof parse>): Diagnostic[
 
   walk(program, ({ node, parent }) => {
     if (node.kind === "Assignment") {
-      if (node.isState && node.declaration === undefined && importedFrom.has(node.identifier)) {
+      // A `let` / `const` of an imported name below the top level declares nothing: `$` names are never
+      // shadowed, so it writes the imported atom like a plain assignment does. Only a top-level declaration is skipped.
+      if (node.isState && (node.declaration === undefined || parent !== null) && importedFrom.has(node.identifier)) {
         report(node.identifier, node.loc, parent === null);
       }
       return;

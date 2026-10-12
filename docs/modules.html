@@ -375,8 +375,7 @@ Button("Toggle", () =&gt; setOpen(!$open))</code></pre>
         <code>getDiagnostics</code>, <code>tools/validate-aktion.mjs</code> and
         <code>tools/validate-aktion-app.mjs</code>; turn it off with
         <code>{ importedStateWrites: false }</code> or
-        <code>--no-imported-state-writes</code> (the older
-        <code>--imported-state-writes</code> is still accepted and does nothing).
+        <code>--no-imported-state-writes</code>.
         Each warning names the imported
         atom, the module it comes from and the setter to add. To migrate a site, add
         one setter per imported atom to the owning module (the warning spells it
@@ -387,13 +386,28 @@ Button("Toggle", () =&gt; setOpen(!$open))</code></pre>
         report these writes.
       </p>
       <p>
-        The lint reads one file at a time, so it names the setter to add but does
-        not check that the owner exports it. An atom imported through a barrel
-        (<code>export { $open } from "./store.aktion"</code>) is treated as the
-        barrel's own export: the setter is named after the name the barrel exports
-        (<code>setIsOpen</code> for <code>export { $open as $isOpen } from …</code>)
-        and the warning points at the barrel, so add the setter to the module that
-        declares the atom and re-export it from the barrel too.
+        The lint reads one file at a time, so it cannot tell the module that
+        declares an atom from a barrel that re-exports it, and it does not check
+        that the owner exports the setter. The setter belongs in the module that
+        <em>declares</em> the atom (<code>export let $open</code>), and its body
+        assigns the atom under that module's own name. When the import comes
+        through a re-export (<code>export { $open as $isOpen } from
+        "./store.aktion"</code>), add the setter to the declaring module
+        (<code>export const setIsOpen = (value) =&gt; { $open = value }</code>) and
+        re-export it from the barrel
+        (<code>export { $open as $isOpen, setIsOpen } from "./store.aktion"</code>);
+        a setter written in the barrel with <code>$isOpen = value</code> links and
+        writes nothing. The name the warning suggests follows the name the imported
+        module exports (<code>setIsOpen</code>).
+      </p>
+      <p>
+        The lint does not track scope, because <code>$</code> names have none: a
+        <code>$</code>-prefixed parameter or loop binding is a parse error, and a
+        <code>let $x = …</code> or <code>const $x = …</code> inside a function or a
+        handler does not shadow the import (measured on the runtime: it writes the
+        shared atom). A declaration below the top level is therefore flagged like an
+        assignment. <code>delete $o.key</code> on an imported atom changes nothing at
+        run time and is not flagged.
       </p>
 
       <h2 id="languages">Modules in TypeScript and JavaScript</h2>

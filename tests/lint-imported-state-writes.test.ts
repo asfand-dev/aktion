@@ -35,14 +35,25 @@ describe("imported-state-write", () => {
   it("names the setter after the atom and the module that owns it", () => {
     const [warning] = lint('import { $mockClusters } from "../lib/api.aktion"\nfunction f(v) { $mockClusters = v }');
     expect(warning!.message).toContain("`$mockClusters` is imported from \"../lib/api.aktion\"");
-    expect(warning!.message).toContain("export const setMockClusters = (value) => { $mockClusters = value }");
+    expect(warning!.message).toContain("`export const setMockClusters = (value) => { $… = value }`");
+    expect(warning!.message).toContain("(`$mockClusters` when \"../lib/api.aktion\" is that module)");
     expect(warning!.message).toContain("`setMockClusters(…)`");
+  });
+
+  it("says the setter belongs in the module that declares the atom, and what to do for a re-export", () => {
+    const [warning] = lint(`${IMPORT}function f() { $open = true }`);
+    expect(warning!.message).toContain("Keep the write in the module that declares the atom (`export let $…`)");
+    expect(warning!.message).toContain("assigning the atom under the name that module declares it with");
+    expect(warning!.message).toContain(
+      'If "./ui.aktion" only re-exports the atom (`export { … } from`), add the setter to the declaring module and re-export it from "./ui.aktion".',
+    );
   });
 
   it("names the setter after the name the owner exports when the import is aliased", () => {
     const [warning] = lint('import { $open as $isOpen } from "./ui.aktion"\nfunction f() { $isOpen = true }');
     expect(warning!.message).toContain("`$isOpen` is imported from \"./ui.aktion\"");
-    expect(warning!.message).toContain("export const setOpen = (value) => { $open = value }");
+    expect(warning!.message).toContain("`export const setOpen = (value) => { $… = value }`");
+    expect(warning!.message).toContain("`$open` when \"./ui.aktion\" is that module");
     expect(warning!.message).not.toContain("setIsOpen");
     const [topLevel] = lint('import { $open as $isOpen } from "./ui.aktion"\n$isOpen = true');
     expect(topLevel!.message).toContain("`setOpen(…)`");
@@ -52,6 +63,19 @@ describe("imported-state-write", () => {
     const [warning] = lint(`${IMPORT}function f() { $open = true }`);
     expect(warning!.message).toMatch(/private copy/);
     expect(warning!.message).toMatch(/does nothing/);
+  });
+
+  /**
+   * `$` names are not scoped: a `$` parameter or loop binding is a parse error and a nested `let` / `const`
+   * of an imported name writes the shared atom (measured, see tests/cross-module-state.test.ts), so each is flagged.
+   */
+  it.each([
+    ["let in a function", "function f() { let $open = 1\n $open = 2 }", [2, 3]],
+    ["let in a handler", 'Button("t", () => { let $open = 1\n $open = 2 })', [2, 3]],
+    ["const in a handler", 'Button("t", () => { const $open = 1 })', [2]],
+    ["let in an inner block, with a write before and after it", "function f() { $open = 0\n if (true) { let $open = 1\n $open = 2 }\n $open = 3 }", [2, 3, 4, 5]],
+  ])("flags a nested declaration of an imported name as a write: %s", (_label, body, lines) => {
+    expect(lint(IMPORT + body).map((w) => w.line)).toEqual(lines);
   });
 
   it("reports every write, each at its own position", () => {
@@ -77,7 +101,8 @@ describe("imported-state-write", () => {
     ["a read", '$app(Text(`${$open} ${$n}`))'],
     ["a method call", '$app(Button("t", () => { $o.items.push(1) }))'],
     ["a write to the module's own atom", 'let $mine = 0\n$app(Button("t", () => { $mine = 1 }))'],
-    ["a local declaration of the same name", "function f() { let $open = 1\n return $open }"],
+    ["a top-level declaration of the same name, which declares nothing new", "let $open = 1"],
+    ["delete on a property, which changes nothing at run time", "function f() { delete $o.k }"],
     ["a call to an imported setter", 'import { setOpen } from "./ui.aktion"\n$app(Button("t", () => setOpen(true)))'],
     ["a property write on an imported store", 'import { ui } from "./store.aktion"\n$app(Button("t", () => { ui.open = true }))'],
     ["a write to an imported plain name", 'import { cache } from "./c.aktion"\n$app(Button("t", () => { cache = 1 }))'],
@@ -136,7 +161,7 @@ describe("imported-state-write — atoms imported through a re-export", () => {
   it("names the setter after the name the barrel exports, not the name the store declares", () => {
     // index.aktion: `export { $open as $isOpen } from "./store.aktion"`
     const [aliased] = lint('import { $isOpen } from "./index.aktion"\nfunction f() { $isOpen = true }');
-    expect(aliased!.message).toContain("export const setIsOpen = (value) => { $isOpen = value }");
+    expect(aliased!.message).toContain("`export const setIsOpen = (value) => { $… = value }`");
     expect(aliased!.message).not.toContain("setOpen");
     // the importer renames it again: still the name the barrel exports
     const [renamed] = lint('import { $isOpen as $o } from "./index.aktion"\nfunction f() { $o = true }');
