@@ -14,7 +14,8 @@ import { parse } from "../src/parser/index.js";
 import { formatProgram } from "../src/tooling/formatter.js";
 import { applyAdvice, moduleProblems, runAsModule } from "./fixtures/bare-advice.js";
 
-const ON = { bareDeclarations: true };
+// Only the bare-declaration lint is under test here, so the default-on `imported-state-write` is switched off.
+const ON = { bareDeclarations: true, importedStateWrites: false };
 
 /** `line:message-subject` for each bare-declaration warning, e.g. `1:export B`. */
 function bare(src: string): string[] {

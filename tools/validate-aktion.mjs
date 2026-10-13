@@ -20,7 +20,9 @@
  * as nothing rather than breaking the program, so it should not block a commit.
  * That includes `bare-declaration`, the warning for a top-level binding written
  * without `let` / `const` (`export B = 1`, a first `y = 4`); pass
- * `--no-bare-declarations` to leave it out of the report.
+ * `--no-bare-declarations` to leave it out of the report. So is
+ * `imported-state-write`, the warning for a write to a `$` atom the file imports
+ * (`$open = true`); pass `--no-imported-state-writes` to leave it out.
  *
  * Reads the built DOM-free surface (`dist/language.js`), which bundles the
  * parser, the schema validator, AND the lint pass in a single `getDiagnostics`
@@ -76,10 +78,11 @@ function diagnoseCompiled(frontend, source, file, lintOptions) {
 
 const argv = process.argv.slice(2);
 const bareDeclarations = !argv.includes("--no-bare-declarations");
-const args = argv.filter((arg) => arg !== "--no-bare-declarations");
-const lintOptions = { bareDeclarations };
+const importedStateWrites = !argv.includes("--no-imported-state-writes");
+const args = argv.filter((arg) => arg !== "--no-bare-declarations" && arg !== "--no-imported-state-writes");
+const lintOptions = { bareDeclarations, importedStateWrites };
 if (args.length === 0) {
-  console.error("usage: node tools/validate-aktion.mjs [--no-bare-declarations] <file.aktion> [...]  (or - for stdin)");
+  console.error("usage: node tools/validate-aktion.mjs [--no-bare-declarations] [--no-imported-state-writes] <file.aktion> [...]  (or - for stdin)");
   process.exit(2);
 }
 

@@ -486,6 +486,60 @@ describe("tools/validate-aktion*.mjs — bare declarations", () => {
 });
 
 /**
+ * `imported-state-write` is on by default on the CLIs too: a program that writes
+ * an imported atom gets a WARNING (exit code 0) naming the file that holds it,
+ * and `--no-imported-state-writes` leaves it out.
+ */
+describe("tools/validate-aktion*.mjs — imported state writes", () => {
+  let dir: string;
+  const file = (name: string): string => join(dir, name);
+  const tools: Array<[string, string]> = [
+    ["validate-aktion.mjs", fileTool],
+    ["validate-aktion-app.mjs", appTool],
+  ];
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "aktion-validate-imported-writes-"));
+    const put = (name: string, lines: string[]): void => writeFileSync(file(name), `${lines.join("\n")}\n`, "utf8");
+    put("ui.aktion", ["export let $open = false", "export const setOpen = (value) => { $open = value }"]);
+    put("writes.aktion", [
+      'import { $open } from "./ui.aktion"',
+      '$app(Button("t", () => { $open = !$open }))',
+    ]);
+    put("setter.aktion", [
+      'import { $open, setOpen } from "./ui.aktion"',
+      '$app(Button("t", () => setOpen(!$open)))',
+    ]);
+  });
+
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  it.each(tools)("%s warns about the write by default, and still exits 0", (_name, tool) => {
+    const { status, output } = run(tool, [file("writes.aktion")]);
+    expect(output).toMatch(/L2: warning: .*`\$open` is imported from "\.\/ui\.aktion" and written here/);
+    expect(output).toMatch(/0 error\(s\), 1 warning\(s\)/);
+    expect(output).not.toMatch(/writes\.aktion: OK$/m);
+    expect(status).toBe(0);
+  });
+
+  // `/OK/` alone could match a random temp-path suffix; the tools print the all-clear as a `<file>: OK` line.
+  it.each(tools)("%s leaves the warning out with --no-imported-state-writes", (_name, tool) => {
+    const { status, output } = run(tool, ["--no-imported-state-writes", file("writes.aktion")]);
+    expect(output).toMatch(/writes\.aktion: OK$/m);
+    expect(output).not.toMatch(/warning/);
+    expect(output).not.toContain("is imported from");
+    expect(status).toBe(0);
+  });
+
+  it.each(tools)("%s passes the setter pattern", (_name, tool) => {
+    const { status, output } = run(tool, [file("setter.aktion")]);
+    expect(output).toMatch(/setter\.aktion: OK$/m);
+    expect(output).not.toMatch(/warning/);
+    expect(status).toBe(0);
+  });
+});
+
+/**
  * Advice that touches `export` must not change what a module exports. The first
  * version of the warning for an `export` of an already declared name said to drop
  * the `export`, and an importer of that name then failed to link
