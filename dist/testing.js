@@ -73327,7 +73327,7 @@ function analyzeProgramSecurity(program, policy) {
   });
   return profile;
 }
-const VERSION = "0.10.0";
+const VERSION = "0.11.0";
 const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
 const ATTRIBUTE_RESPONSE = "response";
