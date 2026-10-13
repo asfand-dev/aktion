@@ -5,6 +5,14 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## [0.11.0](https://github.com/asfand-dev/aktion/compare/v0.10.0...v0.11.0) (2026-10-13)
+
+
+### Features
+
+* **parser:** support export lists and re-exports ([#42](https://github.com/asfand-dev/aktion/issues/42)) ([582ef3a](https://github.com/asfand-dev/aktion/commit/582ef3a5c92ed11a097a41462a7d0bc6ce5bd44f))
+* **validator:** report writes to imported state by default and suggest setter actions ([278a941](https://github.com/asfand-dev/aktion/commit/278a941f0bdaf0b03be505dfc960a078e5dd2641))
+
 ## 2026-10-10
 
 ### Export Lists and Re-exports
