@@ -37486,7 +37486,8 @@ function lintProgram(program, source, library, options = {}) {
     ...lintAwaitedValue(program),
     ...lintInvalidRegExp(program),
     ...lintContinuationLine(program, source),
-    ...options.bareDeclarations === true ? lintBareDeclarations(program, source) : []
+    ...options.bareDeclarations === true ? lintBareDeclarations(program, source) : [],
+    ...options.importedStateWrites !== false ? lintImportedStateWrites(program) : []
   ];
 }
 const REGEXP_WARNING_PREFIX = "This engine rejects this regular expression";
@@ -37625,7 +37626,7 @@ function bindingKey(name, isState) {
   return isState === true ? `$${name}` : name;
 }
 function isWrittenElsewhere(program, declaration, key) {
-  const WRITE_BUILTINS = /* @__PURE__ */ new Set(["__rui_assign__", "__rui_postfix__", "__rui_prefix__"]);
+  const WRITE_BUILTINS2 = /* @__PURE__ */ new Set(["__rui_assign__", "__rui_postfix__", "__rui_prefix__"]);
   const visit = (node) => {
     if (!node || typeof node !== "object") return false;
     if (Array.isArray(node)) return node.some(visit);
@@ -37639,7 +37640,7 @@ function isWrittenElsewhere(program, declaration, key) {
       const names = pattern ? collectPatternNames(pattern) : [String(rec["item"])];
       if (names.includes(key)) return true;
     }
-    if (rec["kind"] === "BuiltinCall" && WRITE_BUILTINS.has(String(rec["name"]))) {
+    if (rec["kind"] === "BuiltinCall" && WRITE_BUILTINS2.has(String(rec["name"]))) {
       const target = rec["arguments"]?.[0];
       if (target && (target["kind"] === "Identifier" || target["kind"] === "StateRef")) {
         if (bindingKey(String(target["name"]), target["kind"] === "StateRef") === key) return true;
@@ -37690,6 +37691,45 @@ function lintBareDeclarations(program, source) {
     }
     warnings.push({ line, column, severity: "warning", message });
   }
+  return warnings;
+}
+const WRITE_BUILTINS = /* @__PURE__ */ new Set(["__rui_assign__", "__rui_prefix__", "__rui_postfix__"]);
+function lintImportedStateWrites(program) {
+  const importedFrom = /* @__PURE__ */ new Map();
+  for (const stmt of program.statements) {
+    if (stmt.kind !== "Import") continue;
+    for (const spec of stmt.specifiers) {
+      if (spec.isState === true) importedFrom.set(spec.local, { source: stmt.source, imported: spec.imported });
+    }
+  }
+  if (importedFrom.size === 0) return [];
+  const warnings = [];
+  const report = (name, loc, topLevel) => {
+    const { source: from, imported } = importedFrom.get(name);
+    const setter = `set${imported.charAt(0).toUpperCase()}${imported.slice(1)}`;
+    const advice = `Keep the write in the module that declares the atom (\`export let $…\`): add \`export const ${setter} = (value) => { $… = value }\` there, assigning the atom under the name that module declares it with (\`$${imported}\` when "${from}" is that module), and call \`${setter}(…)\` here. If "${from}" only re-exports the atom (\`export { … } from\`), add the setter to the declaring module and re-export it from "${from}".`;
+    const message = topLevel ? `\`$${name}\` is imported from "${from}" and assigned at the top level, where \`$${name} = …\` is a set-once declaration: the imported atom already exists, so this statement does nothing. JavaScript does not allow assigning to an import either. ${advice}` : `\`$${name}\` is imported from "${from}" and written here. JavaScript does not allow assigning to an import (ESLint \`no-import-assign\`), and what the runtime does with it depends on where it runs: a handler or effect writes the shared atom, a component body writes a private copy, and a lowercase function called while rendering does nothing. ${advice}`;
+    warnings.push({ line: loc?.line ?? 0, column: loc?.column ?? 0, severity: "warning", message });
+  };
+  const rootOf = (node) => {
+    let cur = node;
+    while (cur?.kind === "Member") cur = cur.object;
+    return cur;
+  };
+  walk(program, ({ node, parent }) => {
+    if (node.kind === "Assignment") {
+      if (node.isState && (node.declaration === void 0 || parent !== null) && importedFrom.has(node.identifier)) {
+        report(node.identifier, node.loc, parent === null);
+      }
+      return;
+    }
+    if (node.kind === "BuiltinCall" && WRITE_BUILTINS.has(node.name)) {
+      const root = rootOf(node.arguments[0]);
+      if (root?.kind === "StateRef" && root.name !== void 0 && importedFrom.has(root.name)) {
+        report(root.name, node.loc ?? node.arguments[0].loc, false);
+      }
+    }
+  });
   return warnings;
 }
 const UNTERMINATED_STATEMENT_KINDS = /* @__PURE__ */ new Set([
