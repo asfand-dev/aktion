@@ -1,0 +1,68 @@
+// CSS Gradient Generator — pick two colours, an angle and a type, preview the
+// result live and copy the ready-to-paste CSS. Starting point for: any visual
+// design / theming tool that produces copyable code.
+// Uses: ColorPicker, Slider, SegmentedControl, sx background, CodeBlock, CopyButton, presets.
+$app(Column([header, Grid([controls, preview], { columns: { base: 1, md: 2 }, gap: "lg", alignItems: "start" }), output, presetRow], { gap: "lg", padding: "md" }))
+
+$type = "linear"
+$angle = 135
+$c1 = "#6366f1"
+$c2 = "#ec4899"
+
+gradient = $type == "linear"
+  ? `linear-gradient(${$angle}deg, ${$c1}, ${$c2})`
+  : `radial-gradient(circle at 50% 40%, ${$c1}, ${$c2})`
+
+cssRule = `.gradient {\n  background: ${gradient};\n}`
+
+header = PageHeader("Gradient Generator", {
+  subtitle: "Design a CSS gradient and copy the code",
+  badge: Badge($type, { tone: "primary", icon: "fill-drip" })
+})
+
+controls = Card([
+  SectionHeader("Controls", { eyebrow: "DESIGN" }),
+  Row([Text("Type", { variant: "small-heavy", tone: "muted" }), Spacer(), SegmentedControl(["linear", "radial"], { value: $type, onChange: (v) => { $type = v } })], { align: "center" }),
+  Grid([
+    FormControl("Start colour", { field: ColorPicker("c1", { value: $c1 }) }),
+    FormControl("End colour", { field: ColorPicker("c2", { value: $c2 }) })
+  ], { columns: 2, gap: "md" }),
+  Show($type == "linear", {
+    children: FormControl(`Angle — ${$angle}°`, { field: Slider("angle", { min: 0, max: 360, step: 5, value: $angle, showValue: true }) })
+  }),
+  Row([
+    Button("Swap colours", { variant: "secondary", icon: "right-left", size: "sm", onClick: () => { const t = $c1; $c1 = $c2; $c2 = t } }),
+    Button("Randomise", { variant: "ghost", icon: "shuffle", size: "sm", onClick: () => {
+      const rnd = () => "#" + Math.floor($util.random() * 16777215).toString(16).padStart(6, "0")
+      $c1 = rnd(); $c2 = rnd()
+    } })
+  ], { gap: "sm" })
+], { animate: "fade-up" })
+
+preview = Card([
+  SectionHeader("Preview"),
+  Box([], { sx: { background: gradient, minHeight: "220px", borderRadius: "var(--rui-radius-lg)" } }),
+  Row([Swatch("Start", { background: $c1, foreground: "#fff" }), Swatch("End", { background: $c2, foreground: "#fff" })], { gap: "sm" })
+], { animate: { preset: "fade-up", delay: 80 } })
+
+output = Card([
+  Row([SectionHeader("CSS", { eyebrow: "OUTPUT" }), Spacer(), CopyButton(cssRule, { label: "Copy CSS", copiedLabel: "Copied!" })], { align: "center" }),
+  CodeBlock(cssRule, { language: "css" })
+])
+
+presets = [
+  { name: "Sunset", a: "#ff7e5f", b: "#feb47b", angle: 120 },
+  { name: "Ocean", a: "#2193b0", b: "#6dd5ed", angle: 135 },
+  { name: "Purple haze", a: "#6366f1", b: "#ec4899", angle: 135 },
+  { name: "Lime", a: "#a8e063", b: "#56ab2f", angle: 90 },
+  { name: "Midnight", a: "#0f2027", b: "#2c5364", angle: 160 },
+  { name: "Candy", a: "#f7971e", b: "#ffd200", angle: 45 }
+]
+
+presetRow = Card([
+  SectionHeader("Presets"),
+  Grid(presets.map(p => OnClick(
+    Box([Text(p.name, { variant: "small-heavy" })], { sx: { background: `linear-gradient(${p.angle}deg, ${p.a}, ${p.b})`, minHeight: "70px", borderRadius: "var(--rui-radius-md)", padding: "8px", color: "#fff" } }),
+    { onClick: () => { $type = "linear"; $c1 = p.a; $c2 = p.b; $angle = p.angle } }
+  )), { columns: { base: 2, md: 3 }, gap: "sm" })
+])

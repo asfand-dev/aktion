@@ -1,0 +1,1573 @@
+// =============================================================================
+// Aktion component showcase — every built-in component on one page.
+//
+// Grouped the way the catalogue groups them (components.html), each component
+// is rendered with realistic content from one fictional workspace: Acme Cloud
+// and its edge platform, Atlas. Nothing here is real — names, numbers and
+// companies are made up.
+//
+// This page is also the pull-request screenshot: CI captures it in full on
+// every PR (.github/workflows/_screenshots.yml), so a change to any component
+// is visible in review. tests/showcase-page.test.ts fails when a registered
+// component is missing from this file or a group count below drifts from the
+// library — adding a component means adding a specimen here.
+//
+// Host contract (docs/showcase.html): the footer emits `showcase:ready` once
+// it has mounted, and the theme picker emits `showcase:theme`. The host page
+// owns the <aktion-app> theme attribute; it applies the picked theme, and
+// writes $activeTheme back when the ThemeToggle flips it instead.
+//
+// `?capture=1` (what the screenshot job loads) pre-opens the dropdown menu and
+// pre-runs the form validation, so states a visitor would trigger by hand are
+// in the picture. Without it, nothing opens, focuses or scrolls on load.
+// =============================================================================
+
+$app(Column([
+  SkipLink("showcase-main", { label: "Skip to the components" }),
+  ReadingProgress({ gradient: true, height: "3px" }),
+  topNav,
+  hero,
+  Box([layoutGroup, contentGroup, formsGroup, dataGroup, chartsGroup, mediaGroup, navigationGroup, chatGroup, patternsGroup, overlaysGroup, shellGroup, advancedGroup, routingGroup, helpersGroup, wrappersGroup, interopGroup, escapeGroup], { id: "showcase-main", padding: "none" }),
+  footer,
+  BackToTop({ label: "Back to top", position: "bottom-center" })
+], { gap: "none" }))
+
+// ---- Groups -----------------------------------------------------------------
+// One source of truth for the section headers, the hero index and the totals.
+// The test compares every `count` with the library's componentGroups.
+groups = [
+  { id: "layout", name: "Layout", count: 34, blurb: "Containers that arrange everything else: stacks, grids, cards, panels, dialogs and dividers. This page is itself one Section per group around a MasonryGrid of cards." },
+  { id: "content", name: "Content", count: 27, blurb: "Text, headings, badges, code, icons and loading placeholders, the everyday building blocks of a page." },
+  { id: "forms", name: "Forms", count: 44, blurb: "Inputs, pickers, toggles and buttons for collecting, validating and submitting what people enter." },
+  { id: "data", name: "Data", count: 24, blurb: "Tables, lists, trees, KPI tiles and calendars for showing records, metrics and orders." },
+  { id: "charts", name: "Charts", count: 9, blurb: "Bars, lines, pies, scatter plots, heatmaps and gauges that turn numbers into a picture." },
+  { id: "media", name: "Feedback & Media", count: 22, blurb: "People, hints, notices and rich media: avatars, tooltips, toasts, players, maps and animation." },
+  { id: "navigation", name: "Navigation", count: 16, blurb: "Breadcrumbs, top bars, menus, tab bars, footers and in-page outlines. This page's own header and footer are a NavBar and a Footer." },
+  { id: "chat", name: "Chat", count: 6, blurb: "Message bubbles, titled blocks and suggestion chips for conversational replies." },
+  { id: "patterns", name: "Patterns", count: 43, blurb: "Opinionated composites that pack a whole UI idiom into one call: page headers, boards, pricing, states and more. The hero above is a Hero." },
+  { id: "overlays", name: "Editors & overlays", count: 8, blurb: "Rich-text and code editors, plus the surfaces that float over a page: sheets, confirmations, menus and floating buttons." },
+  { id: "app-shell", name: "App shell", count: 5, blurb: "Complete product surfaces: sidebar navigation, a top bar and master/detail panes in one statement." },
+  { id: "advanced", name: "Advanced UI", count: 22, blurb: "Power-user widgets and motion: command palettes, filters, diffs, virtual lists and drag and drop." },
+  { id: "routing", name: "Routing", count: 2, blurb: "Path-aware links and animated route views that wire a multi-page app to the router." },
+  { id: "helpers", name: "Helpers", count: 8, blurb: "Control-flow and accessibility utilities that wrap a subtree: async states, conditionals, portals and focus." },
+  { id: "wrappers", name: "Behaviour wrappers", count: 8, blurb: "Wrap any component to add clicks, hover, keys, focus, visibility, lifecycle, links or raw styling." },
+  { id: "interop", name: "Interop", count: 2, blurb: "Bridges to imperative code and to custom elements that own their own DOM." },
+  { id: "escape-hatches", name: "Escape hatches", count: 2, blurb: "Last-resort primitives for raw markup and scoped CSS when no component fits." }
+]
+
+totalComponents = groups.reduce((sum, g) => sum + g.count, 0)
+
+function groupById(id) {
+  return groups.find(g => g.id === id)
+}
+
+// A full-width page band per group, tinted on alternate rows.
+function Group(id, children, background) {
+  const group = groupById(id)
+  const number = String(groups.indexOf(group) + 1).padStart(2, "0")
+  return Section([Column(children, { gap: "lg" })], {
+    id: id,
+    eyebrow: `${number} · ${group.count} components`,
+    title: group.name,
+    subtitle: group.blurb,
+    background: background,
+    width: "xl",
+    padding: "lg"
+  })
+}
+
+// Mixed-height specimen cards packed into columns.
+function Wall(cards) {
+  return MasonryGrid(cards, { columns: { base: 1, md: 2, xl: 3 }, gap: "lg" })
+}
+
+// For a group with only a few cards: CSS columns balance by height and can
+// leave a whole column empty, so these sit in top-aligned grid rows instead.
+function Rows(cards) {
+  return Grid(cards, { columns: { base: 1, md: 2, xl: 3 }, gap: "lg", alignItems: "start" })
+}
+
+// One specimen: the component names it demonstrates, a title, the live render.
+function Specimen(names, title, body) {
+  return Card([
+    Column([
+      Text(names.join(" · "), { variant: "small-heavy", tone: "primary" }),
+      Text(title, { variant: "large-heavy", as: "h3" })
+    ], { gap: "3xs" }),
+    Column(body, { gap: "md" })
+  ])
+}
+
+// ---- Shared fictional data --------------------------------------------------
+team = [
+  { name: "Priya Raman", role: "Engineering manager", status: "online" },
+  { name: "Diego Alvarez", role: "Product designer", status: "busy" },
+  { name: "Mei Chen", role: "Product manager", status: "online" },
+  { name: "Amara Okafor", role: "Site reliability lead", status: "away" },
+  { name: "Lukas Becker", role: "Frontend engineer", status: "offline" },
+  { name: "Sofia Rossi", role: "Data scientist", status: "online" },
+  { name: "Noah Williams", role: "Backend engineer", status: "online" }
+]
+
+regionItems = [
+  SelectItem("eu-central-1", { label: "Frankfurt · eu-central-1" }),
+  SelectItem("eu-west-1", { label: "Dublin · eu-west-1" }),
+  SelectItem("us-east-1", { label: "N. Virginia · us-east-1" }),
+  SelectItem("ap-southeast-2", { label: "Sydney · ap-southeast-2" })
+]
+
+lastDeployAt = new Date(Date.now() - 3 * 3600000).toISOString()
+launchAt = new Date(Date.now() + ((4 * 24 + 6) * 60 + 30) * 60000).toISOString()
+
+// ---- Header -----------------------------------------------------------------
+$captureMode = $util.url.query.capture === "1"
+
+themeChoices = [
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+  { id: "shadcn", label: "shadcn/ui" },
+  { id: "shadcn-dark", label: "shadcn/ui dark" },
+  { id: "mui", label: "Material UI" },
+  { id: "mui-dark", label: "Material UI dark" },
+  { id: "heroui", label: "HeroUI" },
+  { id: "heroui-dark", label: "HeroUI dark" },
+  { id: "signal", label: "Signal" },
+  { id: "signal-dark", label: "Signal dark" },
+  { id: "soft", label: "Soft" }
+]
+
+themeItems = themeChoices.map(t => SelectItem(t.id, { label: t.label }))
+
+// Same rule as the host page: an unknown ?theme= falls back to light.
+$activeTheme = themeChoices.some(t => t.id === $util.url.query.theme) ? $util.url.query.theme : "light"
+
+function pickTheme(value) {
+  $activeTheme = value
+  $emit("showcase:theme", { theme: value })
+}
+
+topNav = NavBar({
+  brand: Brand("Aktion", { logoSrc: "assets/logo.png", version: "Showcase", href: "index.html" }),
+  links: [
+    Link("Docs", { href: "get-started.html" }),
+    Link("Components", { href: "components.html" }),
+    Link("Themes", { href: "themes.html" }),
+    Link("Playground", { href: "playground.html" })
+  ],
+  actions: [
+    Select("showcase-theme", { items: themeItems, value: $activeTheme, label: "Theme", labelHidden: true, onChange: (value) => pickTheme(value) }),
+    IconButton("brands:github", { label: "Aktion on GitHub", variant: "ghost", href: "https://github.com/asfand-dev/aktion" })
+  ],
+  sticky: true,
+  blur: true
+})
+
+indexColumns = [
+  { title: "Building blocks", ids: ["layout", "content", "forms", "data", "charts", "media"] },
+  { title: "Product surfaces", ids: ["navigation", "chat", "patterns", "overlays", "app-shell", "advanced"] },
+  { title: "Behaviour and plumbing", ids: ["routing", "helpers", "wrappers", "interop", "escape-hatches"] }
+]
+
+function IndexCard(column) {
+  const items = column.ids.map(id => groupById(id)).map(g => ({ label: `${g.name} · ${g.count}`, href: `#${g.id}` }))
+  return Card([TableOfContents(items, { title: column.title })], { variant: "outlined" })
+}
+
+hero = Box([
+  Backdrop({ grid: true, blobs: ["#6366f1", "#ec4899", "#22d3ee"], particles: 40, type: "network", speed: 0.5 }),
+  Container([
+    Hero("Every component, one page.", {
+      eyebrow: "aktion-runtime · component showcase",
+      subtitle: `All ${totalComponents} built-in components, rendered live with realistic content and grouped the way the catalogue groups them. Every pull request screenshots this page, so a review shows what a change does to the whole library at once.`,
+      primary: Button("Browse the catalogue", { variant: "primary", icon: "shapes", href: "components.html" }),
+      secondary: Button("Try the playground", { variant: "secondary", icon: "play", href: "playground.html" }),
+      highlights: [`${groups.length} groups`, "11 themes, switchable above", "Fictional data, real components"],
+      align: "center"
+    }),
+    MetricStrip([
+      Metric(String(totalComponents), { label: "Components", gradient: true }),
+      Metric(String(groups.length), { label: "Groups" }),
+      Metric("11", { label: "Themes" }),
+      Metric("1", { label: "Custom element" })
+    ], { columns: 4 }),
+    Grid(indexColumns.map(c => IndexCard(c)), { columns: { base: 1, md: 3 }, gap: "md" })
+  ], { size: "xl", padding: "lg" })
+], { padding: "none", style: "position: relative; overflow: hidden" })
+
+// =============================================================================
+// 01 · Layout
+// =============================================================================
+$modalOpen = false
+$drawerOpen = false
+$drawerStatus = "failed"
+
+logLines = [
+  "14:02:11  build started for commit 8f2a1c9",
+  "14:02:40  412 unit tests passed",
+  "14:03:02  bundled 38 assets (1.2 MB)",
+  "14:03:31  uploaded to 34 edge regions",
+  "14:03:52  canary at 5% — error rate 0.08%",
+  "14:04:30  canary at 25% — error rate 0.11%",
+  "14:05:07  promoted to 100%",
+  "14:05:09  release v3.2.1 is live"
+]
+
+layoutGroup = Group("layout", [
+  Wall([
+    Specimen(["Card", "CardHeader", "CardSection", "CardFooter"], "Service card", [
+      Card([
+        CardHeader("Atlas API", { eyebrow: "Production service", subtitle: "v3.2.1 · eu-central-1", actions: [Badge("Healthy", { tone: "success", icon: "circle-check" })] }),
+        Text("Serves 1.2M requests a day across three regions at a 184 ms p95."),
+        CardSection([Text("Rolling update in progress: 3 of 8 nodes drained.")], { tone: "activating" }),
+        CardSection([Text("TLS certificate renews in 6 days.")], { tone: "warning" }),
+        CardFooter([Button("View logs", { variant: "ghost", size: "sm" }), Button("Open service", { variant: "primary", size: "sm" })])
+      ], { variant: "outlined" })
+    ]),
+    Specimen(["Row", "Column", "Stack", "StackItem", "Spacer", "Center"], "Flex layout", [
+      Row([Text("Inbox", { variant: "large-heavy" }), Badge("12", { tone: "primary" }), Spacer(), Button("Filter", { variant: "ghost", size: "sm", icon: "filter" }), Button("Compose", { variant: "primary", size: "sm", icon: "pen" })], { gap: "sm" }),
+      Row([StackItem(Input("invite-email", { placeholder: "teammate@acme.dev", label: "Invite by email", labelHidden: true }), { grow: 1 }), Button("Invite", { variant: "secondary", size: "sm" })], { gap: "sm" }),
+      Stack([
+        Box([Column([Text("Requests", { variant: "small", tone: "muted" }), Text("1.24M", { variant: "large-heavy" })], { gap: "3xs" })], { padding: "sm", border: "subtle", radius: "md" }),
+        Box([Column([Text("Error rate", { variant: "small", tone: "muted" }), Text("0.12%", { variant: "large-heavy" })], { gap: "3xs" })], { padding: "sm", border: "subtle", radius: "md" }),
+        Box([Column([Text("Cache hits", { variant: "small", tone: "muted" }), Text("93.4%", { variant: "large-heavy" })], { gap: "3xs" })], { padding: "sm", border: "subtle", radius: "md" })
+      ], { direction: { base: "column", md: "row" }, gap: "sm", uniform: true }),
+      Center([Column([Spinner("sm"), Text("Centred on both axes", { variant: "small", tone: "muted" })], { gap: "xs", align: "center" })], { minHeight: "80px" })
+    ]),
+    Specimen(["Grid", "GridItem"], "Twelve-column grid", [
+      Grid([
+        GridItem(Box([Text("Sidebar · 4 of 12", { variant: "small-heavy" })], { padding: "sm", background: "primary", radius: "md" }), { span: 4 }),
+        GridItem(Box([Text("Main · 8 of 12", { variant: "small-heavy" })], { padding: "sm", background: "muted", radius: "md" }), { span: 8 }),
+        GridItem(Box([Text("Full width · 12 of 12", { variant: "small-heavy" })], { padding: "sm", background: "info", radius: "md" }), { span: 12 })
+      ], { gap: "sm" }),
+      Grid([
+        Box([Column([Text("Frankfurt", { variant: "small-heavy" }), Text("41% of traffic", { variant: "small", tone: "muted" })], { gap: "3xs" })], { padding: "sm", border: "subtle", radius: "md" }),
+        Box([Column([Text("Virginia", { variant: "small-heavy" }), Text("37% of traffic", { variant: "small", tone: "muted" })], { gap: "3xs" })], { padding: "sm", border: "subtle", radius: "md" }),
+        Box([Column([Text("Sydney", { variant: "small-heavy" }), Text("22% of traffic", { variant: "small", tone: "muted" })], { gap: "3xs" })], { padding: "sm", border: "subtle", radius: "md" })
+      ], { minChildWidth: "96px", gap: "sm" })
+    ]),
+    Specimen(["Box"], "Surfaces", [
+      Box([Text("Maintenance window: Thursday 02:00–04:00 UTC.")], { padding: "sm", background: "info", radius: "md" }),
+      Box([Text("Quota at 82% — consider raising the monthly cap.")], { padding: "sm", background: "warning", radius: "md" }),
+      Box([Text("Draft — not yet reviewed by legal.")], { padding: "sm", background: "muted", border: "default", radius: "md" })
+    ]),
+    Specimen(["Tabs", "TabItem"], "Tabbed panel", [
+      Tabs([
+        TabItem("overview", { label: "Overview", icon: "chart-simple", children: [Text("Atlas served 1.2M requests today; 99.98% of them succeeded.")] }),
+        TabItem("deploys", { label: "Deploys", icon: "rocket", badge: "3", children: [Text("Three deploys shipped since Monday.")] }),
+        TabItem("settings", { label: "Settings", icon: "gear", children: [Text("Region, scaling and alerting.")] }),
+        TabItem("audit", { label: "Audit", icon: "lock", disabled: true, children: [Text("Available on the Business plan.")] })
+      ])
+    ]),
+    Specimen(["Accordion", "AccordionItem"], "Disclosure", [
+      Accordion([
+        AccordionItem("Domain verified", { subtitle: "atlas.acme.dev · DNS confirmed", variant: "success", open: true, children: [Text("TXT and CNAME records matched on 28 Sep 2026.")] }),
+        AccordionItem("Billing address missing", { subtitle: "Needed before the next invoice", variant: "warning", children: [Text("Add a VAT ID to avoid the default surcharge.")] }),
+        AccordionItem("Single sign-on", { subtitle: "Business plan", variant: "neutral", disabled: true, children: [Text("Upgrade to connect your identity provider.")] })
+      ], { showArrow: true })
+    ]),
+    Specimen(["Steps"], "Setup progress", [
+      Steps([
+        { title: "Create the workspace", details: "acme-cloud", status: "complete" },
+        { title: "Connect the repository", details: "github.com/acme/atlas", status: "complete" },
+        { title: "Configure deploys", details: "In progress", status: "active", active: true },
+        { title: "Invite the team", details: "6 people waiting", status: "pending" }
+      ])
+    ]),
+    Specimen(["Separator"], "Dividers", [
+      Button("Continue with GitHub", { variant: "secondary", icon: "brands:github", fullWidth: true }),
+      Separator({ label: "OR" }),
+      Input("sso-email", { label: "Work email", placeholder: "you@acme.dev", type: "email" }),
+      Row([Text("Docs", { variant: "small" }), Separator({ orientation: "vertical" }), Text("Status", { variant: "small" }), Separator({ orientation: "vertical" }), Text("Changelog", { variant: "small" })], { gap: "sm", align: "center" })
+    ]),
+    Specimen(["AspectRatio", "Overlay", "OverlayItem"], "Media frame", [
+      Overlay(AspectRatio("16:9", { children: [Image("https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=960&q=80", { alt: "The Atlas team planning a release around a table", fit: "cover", loading: "eager" })] }), {
+        items: [
+          OverlayItem(Badge("Live", { tone: "danger", icon: "circle" }), { anchor: "top-left", offset: "12px" }),
+          OverlayItem(Badge("12:48", { tone: "neutral" }), { anchor: "bottom-right", offset: "12px" }),
+          OverlayItem(IconButton("play", { label: "Play the release recap", variant: "primary", size: "lg" }), { anchor: "center" })
+        ]
+      })
+    ]),
+    Specimen(["ScrollArea", "Sticky"], "Bounded scrolling", [
+      ScrollArea([
+        Sticky([Box([Row([Icon("terminal", { size: "sm" }), Text("deploy #482 · atlas-api", { variant: "small-heavy" }), Spacer(), StatusDot("Live", { tone: "success" })], { gap: "xs", align: "center" })], { padding: "xs", background: "surface", border: "subtle", radius: "sm" })], { side: "top" }),
+        Column(logLines.map(line => Text(line, { variant: "small" })), { gap: "3xs", padding: "xs" })
+      ], { height: "176px" })
+    ]),
+    Specimen(["Split"], "Text beside media", [
+      Split(
+        Column([Eyebrow("Case study"), Heading("Atlas cut p95 latency by 41%", { size: "md", level: 4 }), Text("Moving rendering to the edge took one sprint.", { tone: "muted" })], { gap: "xs" }),
+        Image("https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=640&q=80", { alt: "Laptop showing the Atlas codebase", ratio: "4:3", fit: "cover", loading: "eager" }),
+        { ratio: "3/2", gap: "md", align: "center", stackAt: "sm" }
+      )
+    ]),
+    Specimen(["ResizablePanels"], "Resizable panes", [
+      ResizablePanels(
+        [List([ListItem("app.aktion", { icon: "file-code", description: "Edited 2m ago", active: true }), ListItem("theme.json", { icon: "file", description: "Edited 1h ago" }), ListItem("README.md", { icon: "file-lines", description: "Edited 3d ago" })])],
+        { secondary: [CodeBlock("$count = 0\n$app(Button(\"Clicked \" + $count, {\n  onClick: () => { $count += 1 }\n}))", { language: "aktion", header: false })], initialPrimaryWidth: "45%", minPrimaryWidth: "140px", minSecondaryWidth: "140px" }
+      )
+    ]),
+    Specimen(["Fragment"], "Grouped siblings", [
+      Text("The first two regions come from one Fragment, yet all three are items of the same row.", { variant: "small", tone: "muted" }),
+      Row([
+        Fragment([
+          Pill("Frankfurt", { tone: "primary", icon: "location-dot" }),
+          Pill("Dublin", { tone: "primary", icon: "location-dot" })
+        ]),
+        Pill("Sydney", { tone: "neutral", icon: "location-dot" })
+      ], { gap: "xs", wrap: true })
+    ]),
+    Specimen(["Modal", "Drawer"], "Dialogs", [
+      Text("Both open over the page; Escape closes them.", { variant: "small", tone: "muted" }),
+      Row([
+        Button("Delete staging…", { variant: "danger", icon: "trash", onClick: () => { $modalOpen = true } }),
+        Button("Filter deploys", { variant: "secondary", icon: "sliders", onClick: () => { $drawerOpen = true } })
+      ], { gap: "sm", wrap: true }),
+      Modal("Delete Atlas staging?", {
+        open: $modalOpen,
+        size: "sm",
+        children: [Text("The environment and its three preview deploys are removed permanently.")],
+        footer: [Button("Cancel", { variant: "ghost", onClick: () => { $modalOpen = false } }), Button("Delete", { variant: "danger", onClick: () => { $modalOpen = false } })]
+      }),
+      Drawer("Filter deploys", {
+        open: $drawerOpen,
+        side: "right",
+        width: "380px",
+        children: [
+          Radio("drawer-status", { label: "Status", value: $drawerStatus, items: [SelectItem("all", { label: "All deploys" }), SelectItem("failed", { label: "Failed only" }), SelectItem("rolled-back", { label: "Rolled back" })] }),
+          Select("drawer-region", { label: "Region", items: regionItems, value: "eu-central-1" })
+        ],
+        footer: [Button("Apply", { variant: "primary", onClick: () => { $drawerOpen = false } })]
+      })
+    ])
+  ]),
+  Specimen(["Bento", "BentoCell"], "Feature mosaic", [
+    Bento([
+      BentoCell(Card([Column([Badge("New in 3.2", { tone: "primary" }), Heading("Edge rendering", { size: "lg", level: 4 }), Text("Pages render at 34 points of presence, so the first byte reaches most users in under 50 ms.", { tone: "muted" }), Row([Badge("34 regions", { tone: "info" }), Badge("TTFB < 50 ms", { tone: "success" })], { gap: "xs", wrap: true })], { gap: "sm" })]), { span: "hero" }),
+      BentoCell(Card([Column([Icon("shield-halved", { size: "lg" }), Text("SOC 2 Type II", { variant: "body-heavy" }), Text("Audited every year", { variant: "small", tone: "muted" })], { gap: "2xs" })])),
+      BentoCell(Card([Column([Icon("code-pull-request", { size: "lg" }), Text("Preview deploys", { variant: "body-heavy" }), Text("A URL for every pull request", { variant: "small", tone: "muted" })], { gap: "2xs" })])),
+      BentoCell(Card([Row([Icon("chart-line", { size: "lg" }), Column([Text("Usage analytics", { variant: "body-heavy" }), Text("Per-route cost and latency, updated every minute", { variant: "small", tone: "muted" })], { gap: "3xs" })], { gap: "md", align: "center" })]), { span: "wide" }),
+      BentoCell(Card([Column([Icon("rotate-left", { size: "lg" }), Text("Instant rollback", { variant: "body-heavy" }), Text("One click, any release", { variant: "small", tone: "muted" })], { gap: "2xs" })])),
+      BentoCell(Card([Column([Icon("wallet", { size: "lg" }), Text("Budgets", { variant: "body-heavy" }), Text("Alerts before the invoice", { variant: "small", tone: "muted" })], { gap: "2xs" })])),
+      BentoCell(Card([Row([Icon("users", { size: "lg" }), Column([Text("Roles and audit log", { variant: "body-heavy" }), Text("Every change signed, searchable and exportable", { variant: "small", tone: "muted" })], { gap: "3xs" })], { gap: "md", align: "center" })]), { span: "wide" })
+    ], { columns: 4, gap: "md", rowHeight: { base: "minmax(110px, auto)", md: "132px" } })
+  ])
+], "base")
+
+// =============================================================================
+// 02 · Content
+// =============================================================================
+contentGroup = Group("content", [
+  Wall([
+    Specimen(["Display", "GradientText", "Eyebrow", "Heading", "Text", "TextContent"], "Type scale", [
+      Eyebrow("Release notes · October"),
+      Display(["Ship ", GradientText("faster", { gradient: "brand" }), " with Atlas"], { size: "lg" }),
+      Heading("Edge rendering is generally available", { size: "md", level: 4 }),
+      Text("Pages now render at the point of presence nearest to your users.", { variant: "body" }),
+      Text("Rolled out to every workspace on 30 Sep 2026.", { variant: "small", tone: "muted" }),
+      Row([Text("Success", { variant: "small-heavy", tone: "success" }), Text("Warning", { variant: "small-heavy", tone: "warning" }), Text("Danger", { variant: "small-heavy", tone: "danger" }), TextContent("TextContent is Text's legacy alias", { variant: "small", tone: "muted" })], { gap: "sm", wrap: true })
+    ]),
+    Specimen(["Badge", "BadgeList", "Pill"], "Status labels", [
+      Row([Badge("Neutral"), Badge("Primary", { tone: "primary" }), Badge("Shipped", { tone: "success", icon: "check" }), Badge("At risk", { tone: "warning", icon: "triangle-exclamation" }), Badge("Failed", { tone: "danger", icon: "xmark" }), Badge("Beta", { tone: "info" })], { gap: "xs", wrap: true }),
+      BadgeList(["TypeScript", "Edge", "GraphQL", "Postgres", "Redis", "gRPC", "Kafka"], { tone: "primary", size: "sm", max: 5 }),
+      Row([Pill("SSL active", { tone: "success", icon: "lock" }), Pill("Deploying", { tone: "activating", icon: "arrows-rotate" }), Pill("Quota 82%", { tone: "warning" }), Pill("Build failed", { tone: "critical" }), Pill("Draft", { tone: "neutral" })], { gap: "xs", wrap: true })
+    ]),
+    Specimen(["Callout"], "Inline notices", [
+      Callout("info", { title: "Scheduled maintenance", description: "eu-central-1 restarts on Thursday at 02:00 UTC." }),
+      Callout("success", { title: "Backup complete", description: "A 42.6 GB snapshot is stored in two regions.", compact: true }),
+      Callout("warning", { title: "Certificate expiring", description: "Renew atlas.acme.dev within 6 days.", compact: true }),
+      Callout("danger", { title: "Deploy failed", description: "The health check timed out after 30 seconds.", actions: [Button("View logs", { variant: "secondary", size: "sm" })] })
+    ]),
+    Specimen(["Quote"], "Pull quote", [
+      Quote("We replaced four thousand lines of dashboard glue with forty lines of Aktion, and the on-call rotation noticed.", { cite: "Amara Okafor, SRE lead at Acme Cloud", tone: "primary" })
+    ]),
+    Specimen(["CodeBlock", "Kbd", "KbdShortcut"], "Code and keys", [
+      CodeBlock("$count = 0\n\n$app(Card([\n  CardHeader(\"Counter\"),\n  Button(\"Clicked \" + $count + \" times\", {\n    variant: \"primary\",\n    onClick: () => { $count += 1 }\n  })\n]))", { language: "aktion", filename: "counter.aktion", showLineNumbers: true, highlightLines: "5-8" }),
+      Row([Text("Search", { variant: "small", tone: "muted" }), Kbd(["Cmd", "K"]), Text("Save", { variant: "small", tone: "muted" }), KbdShortcut("Ctrl+S"), Text("Palette", { variant: "small", tone: "muted" }), KbdShortcut(["Shift", "Cmd", "P"])], { gap: "xs", align: "center", wrap: true })
+    ]),
+    Specimen(["Skeleton", "Spinner", "LoadingDots"], "Loading placeholders", [
+      Row([Skeleton("avatar"), StackItem(Skeleton("paragraph", { lines: 2 }), { grow: 1 })], { gap: "md", align: "center" }),
+      Skeleton("table-row", { lines: 2 }),
+      Row([Spinner("sm"), Spinner("md", { label: "Syncing" }), Spinner("md", { label: "Importing rows", tone: "success" })], { gap: "md", align: "center", wrap: true }),
+      Row([Text("Summarising the incident"), LoadingDots("Thinking", { size: "sm", tone: "primary" })], { gap: "sm", align: "center" })
+    ]),
+    Specimen(["Prose", "Markdown"], "Long-form text", [
+      Prose([Markdown("### Atlas 3.2\n\nAtlas now **streams** responses from the edge. Highlights:\n\n- 41% lower p95 latency\n- Zero-downtime deploys with `atlas deploy --canary`\n- A [migration guide](https://example.com/atlas/3.2) for older projects\n\n> Most workspaces upgrade in about ten minutes.")], { size: "sm" })
+    ]),
+    Specimen(["Icon", "Svg", "VisuallyHidden"], "Icons and inline SVG", [
+      Row([Icon("house", { size: "lg", label: "Home" }), Icon("chart-line", { size: "lg", label: "Analytics" }), Icon("bell", { size: "lg", variant: "regular", label: "Alerts" }), Icon("github", { size: "lg", variant: "brands", label: "GitHub" }), Icon("figma", { size: "lg", variant: "brands", label: "Figma" }), Icon("shield-halved", { size: "lg", label: "Security" })], { gap: "md", align: "center", wrap: true }),
+      Row([
+        Svg("<rect x='2' y='14' width='4' height='8' rx='1'/><rect x='10' y='8' width='4' height='14' rx='1'/><rect x='18' y='3' width='4' height='19' rx='1'/>", { viewBox: "0 0 24 24", width: "40px", height: "40px", fill: "var(--rui-color-primary)", label: "Usage rising" }),
+        Column([
+          Text("Usage up three weeks running", { variant: "body-heavy" }),
+          Row([Icon("circle-check", { color: "var(--rui-color-success)" }), VisuallyHidden([Text("Verified:")]), Text("Billing details verified", { variant: "small", tone: "muted" })], { gap: "xs", align: "center" })
+        ], { gap: "3xs" })
+      ], { gap: "md", align: "center" })
+    ]),
+    Specimen(["Image"], "Responsive image", [
+      Image("https://images.unsplash.com/photo-1551434678-e076c223a692?w=960&q=80", { alt: "Two engineers working at their desks", caption: "The Atlas platform team at work", ratio: "16:9", fit: "cover", loading: "eager" })
+    ]),
+    Specimen(["CountUp", "CountdownTimer", "RelativeTime"], "Live numbers and time", [
+      Row([
+        Column([Heading([CountUp(12480, { suffix: "+" })], { size: "md", level: 4 }), Text("Workspaces", { variant: "small", tone: "muted" })], { gap: "3xs", align: "center" }),
+        Column([Heading([CountUp(99.98, { suffix: "%", decimals: 2 })], { size: "md", level: 4 }), Text("Uptime", { variant: "small", tone: "muted" })], { gap: "3xs", align: "center" }),
+        Column([Heading([CountUp(34)], { size: "md", level: 4 }), Text("Edge regions", { variant: "small", tone: "muted" })], { gap: "3xs", align: "center" })
+      ], { gap: "lg", justify: "between" }),
+      Column([Text("Atlas 4.0 launches in", { variant: "small-heavy" }), CountdownTimer(launchAt, { endLabel: "Atlas 4.0 is live" })], { gap: "xs" }),
+      Row([Icon("clock-rotate-left", { size: "sm" }), Text("Last deploy", { variant: "small", tone: "muted" }), RelativeTime(lastDeployAt)], { gap: "xs", align: "center" })
+    ])
+  ])
+], "soft")
+
+// =============================================================================
+// 03 · Forms
+// =============================================================================
+$projectName = "atlas-search"
+$projectRegion = "eu-central-1"
+$projectDescription = "Full-text search for the docs and the dashboard."
+$password = "Correct-horse-9"
+$phone = "4155550134"
+$otp = "4821"
+$agreed = true
+$alertPrefs = { deploys: true, budget: true, digest: false }
+$cycle = "yearly"
+$autoscale = true
+$owner = "mei"
+$runtimes = ["node", "bun"]
+$labels = ["edge", "search", "q4"]
+$reviewNote = "Looks good to me. @priya can you approve the deploy?"
+$launchDate = "2026-10-20"
+$reportFrom = "2026-09-01"
+$reportTo = "2026-09-30"
+$standup = "09:30"
+$freezeAt = "2026-10-16T18:00"
+$cpuCap = 8
+$replicas = 3
+$seats = 12
+$brandColor = "#4f46e5"
+$view = "board"
+$granularity = "Daily"
+$docsQuery = ""
+$size = "M"
+$colorway = "indigo"
+$wizStep = 1
+$wizPlan = "team"
+$escalate = "15"
+$wsChecked = false
+$reactions = [
+  { emoji: "👍", count: 12, active: true },
+  { emoji: "🎉", count: 7 },
+  { emoji: "🚀", count: 5 },
+  { emoji: "👀", count: 2 }
+]
+
+function passwordRules(value) {
+  return [
+    { label: "At least 12 characters", met: value.length >= 12 },
+    { label: "An uppercase letter", met: value !== value.toLowerCase() },
+    { label: "A digit", met: /[0-9]/.test(value) },
+    { label: "No spaces", met: !value.includes(" ") }
+  ]
+}
+
+workspaceErrors = [
+  { label: "Workspace URL", message: "acme is already taken.", field: "ws-url" },
+  { label: "Billing email", message: "Enter a valid email address.", field: "ws-email" }
+]
+
+teamItems = [
+  SelectItem("priya", { label: "Priya Raman" }),
+  SelectItem("mei", { label: "Mei Chen" }),
+  SelectItem("diego", { label: "Diego Alvarez" }),
+  SelectItem("amara", { label: "Amara Okafor" })
+]
+
+runtimeItems = [
+  SelectItem("node", { label: "Node.js 24" }),
+  SelectItem("bun", { label: "Bun 1.3" }),
+  SelectItem("deno", { label: "Deno 2" }),
+  SelectItem("python", { label: "Python 3.13" })
+]
+
+mentionPeople = [
+  { name: "Priya Raman", handle: "priya", role: "Engineering manager" },
+  { name: "Lukas Becker", handle: "lukas", role: "Frontend engineer" },
+  { name: "Sofia Rossi", handle: "sofia", role: "Data scientist" }
+]
+
+formsGroup = Group("forms", [
+  Wall([
+    Specimen(["Form", "FormControl", "Input", "TextArea", "Select", "SelectItem", "Buttons", "Button"], "Create a project", [
+      Form("create-project", {
+        fields: [
+          FormControl("Name", { control: Input("project-name", { value: $projectName, placeholder: "my-project" }), required: true }),
+          FormControl("Region", { control: Select("project-region", { items: regionItems, value: $projectRegion }), hint: "Data stays in the region you pick." }),
+          FormControl("Description", { control: TextArea("project-description", { value: $projectDescription, rows: 3 }), optional: true })
+        ],
+        buttons: Buttons([Button("Cancel", { variant: "ghost" }), Button("Create project", { variant: "primary", type: "submit", icon: "plus" })])
+      })
+    ]),
+    Specimen(["PasswordInput", "RequirementList", "MaskedInput", "PinInput"], "Account security", [
+      PasswordInput("new-password", { label: "New password", value: $password, strengthMeter: true, autocomplete: "new-password" }),
+      RequirementList(passwordRules($password), { title: "Your password needs" }),
+      MaskedInput("recovery-phone", { mask: "(999) 999-9999", value: $phone, label: "Recovery phone", inputMode: "tel" }),
+      PinInput("otp", { length: 6, value: $otp, label: "Authenticator code", type: "numeric" })
+    ]),
+    // A populated ValidationSummary scrolls itself into view and takes focus
+    // the moment it appears (right after a failed submit), so it only appears
+    // once Save is pressed, or straight away in capture mode.
+    Specimen(["ValidationSummary", "FieldSet"], "Validation", [
+      ValidationSummary($captureMode || $wsChecked ? workspaceErrors : [], { title: "Fix 2 fields before saving" }),
+      FieldSet("Workspace", { helper: "Shown in links and invitations.", children: [
+        Input("ws-url", { label: "Workspace URL", value: "acme", error: $captureMode || $wsChecked ? workspaceErrors[0].message : "" }),
+        Input("ws-email", { label: "Billing email", value: "billing@acme", type: "email", error: $captureMode || $wsChecked ? workspaceErrors[1].message : "" })
+      ] }),
+      Button("Save workspace", { variant: "primary", size: "sm", onClick: () => { $wsChecked = true } })
+    ]),
+    Specimen(["Checkbox", "CheckBoxGroup", "CheckBoxItem", "Radio", "Switch"], "Choices", [
+      Checkbox("terms", { label: "I agree to the Acme Cloud terms", value: $agreed }),
+      CheckBoxGroup("alerts", { label: "Alert me about", value: $alertPrefs, items: [
+        CheckBoxItem("Failed deploys", { name: "deploys", description: "Within a minute of the failure", defaultChecked: true }),
+        CheckBoxItem("Budget thresholds", { name: "budget", description: "At 50%, 80% and 100%", defaultChecked: true }),
+        CheckBoxItem("Weekly digest", { name: "digest", description: "Mondays at 09:00" })
+      ] }),
+      Radio("billing-cycle", { label: "Billing cycle", value: $cycle, direction: "row", items: [SelectItem("monthly", { label: "Monthly" }), SelectItem("yearly", { label: "Yearly, save 20%" })] }),
+      Switch("autoscale", { label: "Autoscaling", description: "Add nodes while CPU stays above 70%", value: $autoscale })
+    ]),
+    Specimen(["Combobox", "MultiSelect", "TagInput", "MentionInput"], "Search and pick", [
+      Combobox("owner", { label: "Owner", items: teamItems, value: $owner, placeholder: "Search people…" }),
+      MultiSelect("runtimes", { label: "Runtimes", items: runtimeItems, value: $runtimes, placeholder: "Add a runtime" }),
+      TagInput("labels", { label: "Labels", value: $labels, placeholder: "Add a label", max: 6 }),
+      MentionInput("review-note", { label: "Review note", people: mentionPeople, value: $reviewNote, rows: 2 })
+    ]),
+    Specimen(["DatePicker", "DateRangePicker", "TimePicker", "DateTimePicker"], "Dates and times", [
+      DatePicker("launch-date", { label: "Launch date", value: $launchDate, min: "2026-10-01" }),
+      DateRangePicker("report-range", { label: "Reporting window", from: $reportFrom, to: $reportTo }),
+      Row([
+        StackItem(TimePicker("standup", { label: "Stand-up", value: $standup }), { grow: 1 }),
+        StackItem(DateTimePicker("code-freeze", { label: "Code freeze", value: $freezeAt }), { grow: 1 })
+      ], { gap: "sm", wrap: true })
+    ]),
+    Specimen(["Slider", "NumberInput", "QuantityStepper", "ColorPicker"], "Numbers and colour", [
+      Slider("cpu-cap", { label: "CPU limit", min: 1, max: 16, step: 1, value: $cpuCap, showValue: true, suffix: " vCPU" }),
+      Row([
+        StackItem(NumberInput("replicas", { label: "Replicas", value: $replicas, min: 1, max: 12 }), { grow: 1 }),
+        Column([Text("Seats", { variant: "small-heavy" }), QuantityStepper($seats, { min: 1, max: 50, label: "Seats", onChange: (n) => { $seats = n } })], { gap: "xs" })
+      ], { gap: "md", align: "end" }),
+      ColorPicker("brand-color", { label: "Brand colour", value: $brandColor, swatches: ["#4f46e5", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"] })
+    ]),
+    Specimen(["Button", "ButtonGroup", "ToggleGroup", "SegmentedControl"], "Actions and toggles", [
+      Row([Button("Primary", { variant: "primary" }), Button("Secondary", { variant: "secondary" }), Button("Outline", { variant: "outline" }), Button("Ghost", { variant: "ghost" }), Button("Delete", { variant: "danger", icon: "trash" }), Button("Link", { variant: "link" })], { gap: "xs", wrap: true }),
+      Row([Button("Saving", { variant: "primary", size: "sm", loading: true }), Button("Disabled", { size: "sm", disabled: true }), Button("Next step", { variant: "secondary", size: "sm", icon: "arrow-right", iconPosition: "trailing" })], { gap: "xs", wrap: true }),
+      ButtonGroup([Button("Day"), Button("Week", { variant: "primary" }), Button("Month")], { size: "sm", ariaLabel: "Chart range" }),
+      ToggleGroup("view-mode", { items: [["list", "List", "list"], ["grid", "Grid", "grip"], ["board", "Board", "table-columns"]], value: $view, variant: "outline", size: "sm", label: "View" }),
+      SegmentedControl(["Hourly", "Daily", "Weekly"], { value: $granularity, size: "sm", label: "Granularity", onChange: (v) => { $granularity = v } })
+    ]),
+    Specimen(["SearchBar", "InputGroup"], "Search and input groups", [
+      SearchBar("docs-search", { placeholder: "Search the Atlas docs…", value: $docsQuery, shortcut: "/" }),
+      InputGroup(Input("custom-domain", { placeholder: "atlas" }), { label: "Custom domain", suffix: ".acme.app", hint: "Lowercase letters, digits and dashes." }),
+      InputGroup(Input("invoice-search", { placeholder: "Invoice number" }), { icon: "magnifying-glass", action: Button("Find", { variant: "primary", size: "sm" }) })
+    ]),
+    Specimen(["VariantSelector", "Swatch"], "Product options", [
+      VariantSelector(["XS", "S", "M", "L", "XL"], { label: "Size", value: $size, kind: "pill", onChange: (v) => { $size = v } }),
+      VariantSelector([{ label: "Graphite", value: "graphite", color: "#334155" }, { label: "Indigo", value: "indigo", color: "#4f46e5" }, { label: "Sand", value: "sand", color: "#d6c4a8" }], { label: "Colour", value: $colorway, kind: "swatch", onChange: (v) => { $colorway = v } }),
+      Grid([
+        Swatch("Light", { background: "#ffffff", foreground: "#0f172a", colors: ["#4f46e5", "#10b981", "#f59e0b"], selected: true }),
+        Swatch("Dark", { background: "#0b1020", foreground: "#e2e8f0", colors: ["#818cf8", "#34d399", "#fbbf24"] }),
+        Swatch("Signal", { background: "#111418", foreground: "#d5dbe3", colors: ["#3ea6ff", "#2fbf71", "#f5a623"] })
+      ], { columns: 3, gap: "sm" })
+    ]),
+    Specimen(["FormSection"], "Grouped settings", [
+      FormSection("Notifications", { helper: "Where Atlas sends deploy and incident alerts.", children: [
+        FormControl("Slack channel", { control: Input("slack-channel", { value: "#atlas-deploys" }) }),
+        FormControl("Escalate after", { control: Select("escalate", { items: [SelectItem("5", { label: "5 minutes" }), SelectItem("15", { label: "15 minutes" }), SelectItem("30", { label: "30 minutes" })], value: $escalate }), description: "Pages the on-call engineer." })
+      ] })
+    ]),
+    Specimen(["FileUpload"], "File upload", [
+      FileUpload("invoice-import", { label: "Drop CSV invoices or click to browse", hint: "Up to 10 MB each", accept: ".csv", multiple: true, icon: "file-csv" }),
+      FileUpload("workspace-logo", { label: "Workspace logo", hint: "Uploading logo.png", accept: "image/*", progress: 64 })
+    ]),
+    Specimen(["MultiStepForm"], "Multi-step form", [
+      MultiStepForm([
+        { title: "Workspace", details: "Name and URL", content: [Input("wizard-name", { label: "Workspace name", value: "Acme Cloud" })] },
+        { title: "Plan", details: "Pick a tier", content: [Radio("wizard-plan", { label: "Plan", value: $wizPlan, items: [SelectItem("team", { label: "Team · $49 a month" }), SelectItem("business", { label: "Business · $199 a month" })] })] },
+        { title: "Invite", details: "Bring the team", content: [TagInput("wizard-invites", { label: "Invite by email", value: ["mei@acme.dev", "lukas@acme.dev"] })] }
+      ], { current: $wizStep, stepsLayout: "row", onStepChange: (i) => { $wizStep = i } })
+    ]),
+    Specimen(["DrawingCanvas", "SignaturePad"], "Freehand input", [
+      DrawingCanvas({ width: 320, height: 110, color: "#4f46e5", lineWidth: 3, label: "Sketch the request flow" }),
+      SignaturePad({ width: 320, height: 100, label: "Sign to approve the data processing agreement" })
+    ]),
+    Specimen(["ReactionPicker"], "Reactions", [
+      Text("Mei shipped the new onboarding flow to every workspace.", { variant: "body" }),
+      ReactionPicker($reactions, { onReact: (emoji) => { $toast.show(`Reacted with ${emoji}`) } })
+    ])
+  ])
+], "base")
+
+// =============================================================================
+// 04 · Data
+// =============================================================================
+$deployPage = 1
+$accountSort = { key: "MRR", direction: "desc" }
+$selectedAccounts = ["acc-2"]
+$accountPage = 1
+$calendarDay = "2026-10-14"
+$pickedDay = "2026-10-20"
+$feedCount = 4
+$cart = [
+  { id: "headphones", name: "Studio headphones", price: 199, qty: 1 },
+  { id: "mug", name: "Everyday mug", price: 18, qty: 2 }
+]
+
+deploys = [
+  { id: "#482", service: "atlas-api", author: "Priya Raman", status: "Live", tone: "success", duration: "2m 58s", cost: 0.42, finished: "2026-10-02" },
+  { id: "#481", service: "billing-service", author: "Noah Williams", status: "Rolled back", tone: "danger", duration: "4m 12s", cost: 0.61, finished: "2026-10-01" },
+  { id: "#480", service: "dashboard", author: "Lukas Becker", status: "Live", tone: "success", duration: "1m 47s", cost: 0.28, finished: "2026-10-01" },
+  { id: "#479", service: "search-indexer", author: "Sofia Rossi", status: "Canary", tone: "info", duration: "3m 05s", cost: 0.39, finished: "2026-09-30" },
+  { id: "#478", service: "atlas-api", author: "Amara Okafor", status: "Live", tone: "success", duration: "2m 41s", cost: 0.40, finished: "2026-09-29" }
+]
+
+accounts = [
+  { id: "acc-1", name: "Fernhill Labs", plan: "Business", seats: 84, mrr: 6960, renews: "2027-01-14", health: "Healthy", healthTone: "success" },
+  { id: "acc-2", name: "Looplog", plan: "Team", seats: 26, mrr: 1274, renews: "2026-11-02", health: "At risk", healthTone: "warning" },
+  { id: "acc-3", name: "Northstar Bank", plan: "Business", seats: 212, mrr: 18440, renews: "2027-03-30", health: "Healthy", healthTone: "success" },
+  { id: "acc-4", name: "Quill & Co", plan: "Starter", seats: 4, mrr: 0, renews: "2026-10-19", health: "Trial", healthTone: "activating" },
+  { id: "acc-5", name: "Orbital Freight", plan: "Team", seats: 38, mrr: 1862, renews: "2026-12-08", health: "Churn risk", healthTone: "critical" },
+  { id: "acc-6", name: "Heliotrope Health", plan: "Business", seats: 120, mrr: 9800, renews: "2027-02-21", health: "Healthy", healthTone: "success" }
+]
+
+releaseEvents = [
+  { date: "2026-10-06", title: "Sprint planning", time: "10:00", tone: "info" },
+  { date: "2026-10-08", title: "v3.2.2 hotfix", time: "16:00", tone: "warning" },
+  { date: "2026-10-14", title: "v3.3 release", time: "14:00", tone: "success" },
+  { date: "2026-10-16", title: "Code freeze", time: "18:00", tone: "danger" },
+  { date: "2026-10-21", title: "Customer summit", time: "09:00", tone: "primary" },
+  { date: "2026-10-27", title: "Retro", time: "15:30", tone: "info" }
+]
+
+feedItems = [
+  ListItem("Priya approved deploy #482", { description: "atlas-api · 2 minutes ago", icon: "circle-check", tone: "success" }),
+  ListItem("Budget alert at 80%", { description: "Data pipeline · 1 hour ago", icon: "wallet", tone: "warning" }),
+  ListItem("Lukas merged PR #1342", { description: "Edge cache purge UI · 3 hours ago", icon: "code-merge", tone: "primary" }),
+  ListItem("Sofia exported the audit log", { description: "CSV, 18,204 rows · yesterday", icon: "file-export" }),
+  ListItem("Amara rotated the database password", { description: "Production · yesterday", icon: "key", tone: "warning" }),
+  ListItem("Mei invited 3 people", { description: "Design team · 2 days ago", icon: "user-plus" }),
+  ListItem("Noah opened incident #77", { description: "Billing webhooks · 3 days ago", icon: "triangle-exclamation", tone: "danger" })
+]
+
+assetIcons = ["rocket", "server", "database", "cloud", "shield-halved", "bolt", "globe", "gauge-high", "code-branch", "box", "key", "bell", "chart-line", "users", "wallet", "lock", "network-wired", "microchip", "terminal", "cube"]
+
+dataGroup = Group("data", [
+  Specimen(["Stats", "StatCard", "Sparkline"], "Key metrics", [
+    Stats([
+      StatCard("Monthly revenue", { value: "$84.2k", trend: "up", delta: "+12.4%", spark: [52, 58, 61, 66, 70, 78, 84], hint: "vs. September" }),
+      StatCard("Active workspaces", { value: "12,480", trend: "up", delta: "+318", icon: "users", spark: [109, 112, 114, 118, 121, 123, 125] }),
+      StatCard("p95 latency", { value: "184 ms", trend: "down", delta: "-41%", icon: "gauge-high", tone: "success", spark: [312, 290, 264, 240, 221, 199, 184] }),
+      StatCard("Open incidents", { value: "2", trend: "flat", delta: "±0", icon: "triangle-exclamation", tone: "warning" })
+    ]),
+    Stats([
+      { label: "Requests", value: "1.24M", hint: "today" },
+      { label: "Error rate", value: "0.12%", hint: "-0.03 pts", tone: "success" },
+      { label: "Cache hits", value: "93.4%", hint: "+1.2 pts" },
+      { label: "Bandwidth", value: "18.2 TB", hint: "this month" }
+    ], { layout: "strip" }),
+    Row([Text("Signups this week", { variant: "small", tone: "muted" }), Sparkline([12, 18, 15, 22, 28, 26, 34], { tone: "primary", width: 180, height: 32, label: "Signups trending up" })], { gap: "md", align: "center" })
+  ]),
+  Specimen(["Table", "Col", "Pagination"], "Recent deploys", [
+    Table([
+      Col("Deploy", deploys.map(d => d.id), { width: "90px" }),
+      Col("Service", deploys.map(d => d.service)),
+      Col("Author", deploys.map(d => PersonChip(d.author, { size: "sm" }))),
+      Col("Status", deploys.map(d => Badge(d.status, { tone: d.tone }))),
+      Col("Duration", deploys.map(d => d.duration), { align: "right" }),
+      Col("Cost", deploys.map(d => d.cost), { format: "currency", currency: "USD", align: "right" }),
+      Col("Finished", deploys.map(d => d.finished), { format: "date" })
+    ], { caption: "The last five production deploys", density: "compact", striped: true }),
+    Pagination($deployPage, { totalPages: 12, total: 58, perPage: 5, siblings: 1, onChange: (p) => { $deployPage = p } })
+  ]),
+  Specimen(["DataGrid"], "Customer accounts", [
+    DataGrid([
+      Col("Account", accounts.map(a => a.name), { sortable: true, filterable: true }),
+      Col("Plan", accounts.map(a => a.plan), { sortable: true, filterable: true }),
+      Col("Seats", accounts.map(a => a.seats), { format: "number", align: "right", sortable: true }),
+      Col("MRR", accounts.map(a => a.mrr), { format: "currency", currency: "USD", align: "right", sortable: true }),
+      Col("Renews", accounts.map(a => a.renews), { format: "date", sortable: true }),
+      Col("Health", accounts.map(a => Pill(a.health, { tone: a.healthTone })))
+    ], { rowIds: accounts.map(a => a.id), caption: "Accounts", sort: $accountSort, selectable: true, selectedIds: $selectedAccounts, page: $accountPage, perPage: 5, striped: true, density: "compact", exportable: true, highlightOnHover: true })
+  ]),
+  Wall([
+    Specimen(["List", "ListItem"], "Services", [
+      List([
+        ListItem("Atlas API", { description: "3 deploys today", icon: "server", trailing: [Badge("Healthy", { tone: "success", size: "sm" })] }),
+        ListItem("Billing service", { description: "Canary at 25%", icon: "credit-card", active: true, trailing: [Badge("Canary", { tone: "info", size: "sm" })] }),
+        ListItem("Search indexer", { description: "Rebuilding shards", icon: "magnifying-glass", tone: "warning", trailing: [Badge("Degraded", { tone: "warning", size: "sm" })] }),
+        ListItem("Data pipeline", { description: "Paused by Sofia", icon: "diagram-project", tone: "danger" })
+      ], { divided: true })
+    ]),
+    Specimen(["Tile"], "Quick-stat tiles", [
+      Grid([
+        Tile("Projects", { icon: "folder-open", value: "24", description: "4 archived", tone: "primary" }),
+        Tile("Deploys", { icon: "rocket", value: "318", description: "this month", tone: "success" }),
+        Tile("Alerts", { icon: "bell", value: "7", description: "2 unacknowledged", tone: "warning" }),
+        Tile("Spend", { icon: "wallet", value: "$9.4k", description: "62% of budget", tone: "info" })
+      ], { columns: 2, gap: "sm" })
+    ]),
+    Specimen(["Progress", "ProgressRing"], "Progress", [
+      Progress(68, { label: "Storage · 68 of 100 GB", tone: "primary", showValue: true }),
+      Progress(3, { max: 5, label: "Onboarding · step 3 of 5", segments: 5, tone: "success" }),
+      Progress(40, { label: "Upload · buffering", buffered: 72, tone: "info", showValue: true }),
+      Row([ProgressRing(92, { caption: "SLA", tone: "success" }), ProgressRing(64, { caption: "Budget", tone: "warning" }), ProgressRing(100, { caption: "Backups", icon: "circle-check", tone: "primary" })], { gap: "lg", justify: "around" })
+    ]),
+    Specimen(["Tree", "TreeNode"], "File tree", [
+      Tree([
+        TreeNode("atlas", { icon: "folder-open", expanded: true, children: [
+          TreeNode("src", { icon: "folder-open", expanded: true, badge: "3", children: [
+            TreeNode("app.aktion", { icon: "file-code", active: true }),
+            TreeNode("routes.aktion", { icon: "file-code" }),
+            TreeNode("theme.json", { icon: "file" })
+          ] }),
+          TreeNode("tests", { icon: "folder", children: [TreeNode("app.test.ts", { icon: "file-code" })] }),
+          TreeNode("README.md", { icon: "file-lines" })
+        ] })
+      ], { ariaLabel: "Atlas repository" })
+    ]),
+    Specimen(["ComparisonTable"], "Plan comparison", [
+      ComparisonTable(["Starter", "Team", "Business"], { rows: [
+        { label: "Projects", values: ["3", "25", "Unlimited"] },
+        { label: "Edge regions", values: ["1", "12", "34"] },
+        { label: "Single sign-on", values: [false, false, true] },
+        { label: "Audit log", values: [false, true, true] },
+        { label: "Support", values: ["Community", "Business hours", "24/7"] }
+      ], highlightColumn: 1 })
+    ]),
+    Specimen(["InfiniteList"], "Activity feed", [
+      InfiniteList(feedItems.slice(0, $feedCount), { hasMore: $feedCount < feedItems.length, onLoadMore: () => { $feedCount = Math.min($feedCount + 3, feedItems.length) }, loaderLabel: "Loading older activity…" })
+    ]),
+    Specimen(["VirtualGrid"], "Virtualised grid", [
+      Text("120 assets, only the visible rows exist in the DOM.", { variant: "small", tone: "muted" }),
+      VirtualGrid($util.range(0, 120).map(i => Card([Column([Icon(assetIcons[i % assetIcons.length]), Text(`asset-${String(i + 1).padStart(3, "0")}`, { variant: "small" })], { gap: "3xs", align: "center" })], { padding: "xs" })), { columns: 4, itemHeight: 72, gap: 8, height: 232 })
+    ]),
+    Specimen(["Metric", "MetricStrip"], "Headline metrics", [
+      MetricStrip([Metric("84k", { label: "MRR, USD", gradient: true }), Metric("12k", { label: "Workspaces", trend: "+3.1%" })], { columns: 2 })
+    ]),
+    Specimen(["Cart", "OrderSummary", "PriceTag"], "Team store checkout", [
+      Cart($cart, { currency: "USD", onQty: (id, qty) => { $cart = $cart.map(i => i.id === id ? { ...i, qty: qty } : i) }, onRemove: (id) => { $cart = $cart.filter(i => i.id !== id) } }),
+      OrderSummary([{ label: "Studio headphones", amount: "199.00" }, { label: "Everyday mug × 2", amount: "36.00" }], { subtotal: "235.00", discount: "23.50", shipping: "0.00", tax: "40.18", total: "251.68", currency: "$", note: "Free shipping on orders over $150" }),
+      Row([PriceTag(199, { compareAt: 249, currency: "USD", size: "lg" }), PriceTag(49, { currency: "USD", period: "/ seat / month" })], { gap: "lg", align: "center", wrap: true })
+    ])
+  ]),
+  Split(
+    Specimen(["CalendarView"], "Release calendar", [
+      CalendarView($calendarDay, { month: "2026-10", events: releaseEvents, view: "month", maxEventsPerDay: 2, onSelect: (iso) => { $calendarDay = iso } })
+    ]),
+    Specimen(["Calendar"], "Pick a day", [
+      Calendar({ month: 9, year: 2026, selected: $pickedDay, events: [{ date: "2026-10-14", label: "v3.3 release", color: "success" }, { date: "2026-10-16", label: "Code freeze", color: "danger" }, "2026-10-21"], onSelect: (iso) => { $pickedDay = iso } }),
+      Text(`Selected: ${$pickedDay}`, { variant: "small", tone: "muted" })
+    ]),
+    { ratio: "2/1", gap: "lg", stackAt: "lg", align: "start" }
+  )
+], "soft")
+
+// =============================================================================
+// 05 · Charts
+// =============================================================================
+responseTimes = [42, 48, 51, 55, 57, 61, 63, 64, 66, 68, 70, 71, 73, 74, 75, 77, 78, 80, 82, 83, 85, 88, 90, 93, 97, 101, 108, 116, 128, 141, 163, 190, 240]
+
+chartsGroup = Group("charts", [
+  Wall([
+    Specimen(["LineChart", "Series"], "Weekly traffic", [
+      LineChart(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], { series: [Series("Visits", { values: [4200, 4800, 5100, 4900, 6200, 3900, 3600] }), Series("Signups", { values: [820, 910, 1040, 980, 1260, 640, 590] })], filled: true, height: 220, yAxisLabel: "Sessions" })
+    ]),
+    Specimen(["BarChart"], "Revenue by quarter", [
+      BarChart(["Q1", "Q2", "Q3", "Q4"], { series: [Series("Subscriptions", { values: [182, 214, 239, 268] }), Series("Usage", { values: [41, 52, 63, 77] })], stacked: true, height: 220, yAxisLabel: "$ thousands" })
+    ]),
+    Specimen(["PieChart"], "Plan mix", [
+      PieChart(["Starter", "Team", "Business", "Enterprise"], { values: [5120, 4210, 2380, 770], donut: true, valueFormat: "percent", legendPosition: "right", size: 180, title: "Workspaces by plan" })
+    ]),
+    Specimen(["RadarChart"], "Vendor scorecard", [
+      RadarChart(["Latency", "Cost", "Support", "Coverage", "Security"], { series: [Series("Atlas", { values: [92, 74, 88, 81, 95] }), Series("Incumbent", { values: [70, 82, 64, 77, 80] })], max: 100, size: 240 })
+    ]),
+    Specimen(["ScatterChart"], "Latency against payload", [
+      ScatterChart([
+        Series("eu-central-1", { points: [{ x: 4, y: 38 }, { x: 12, y: 52 }, { x: 18, y: 61 }, { x: 26, y: 70 }, { x: 33, y: 84 }, { x: 41, y: 92 }, { x: 52, y: 118 }] }),
+        Series("us-east-1", { points: [{ x: 6, y: 55 }, { x: 10, y: 63 }, { x: 21, y: 79 }, { x: 29, y: 96 }, { x: 37, y: 104 }, { x: 46, y: 131 }, { x: 58, y: 149 }] })
+      ], { xLabel: "Payload (KB)", yLabel: "Latency (ms)", height: 220 })
+    ]),
+    Specimen(["Histogram"], "Response times", [
+      Histogram(responseTimes, { binCount: 10, xLabel: "Milliseconds", yLabel: "Requests", tone: "info", height: 200 })
+    ]),
+    Specimen(["Heatmap"], "Deploys by hour", [
+      Heatmap(["Mon", "Tue", "Wed", "Thu", "Fri"], { yLabels: ["09:00", "12:00", "15:00", "18:00"], values: [[3, 5, 4, 6, 2], [7, 9, 8, 11, 5], [6, 8, 10, 7, 3], [1, 2, 2, 3, 0]], tone: "primary", showValues: true })
+    ]),
+    Specimen(["Gauge"], "Cluster health", [
+      Row([
+        Gauge(72, { caption: "CPU", unit: "%", size: "sm", thresholds: [{ value: 60, tone: "warning" }, { value: 85, tone: "danger" }] }),
+        Gauge(41, { caption: "Memory", unit: "%", tone: "success", size: "sm" })
+      ], { gap: "md", justify: "around", wrap: true }),
+      Gauge(18, { caption: "Disk used of 2 TB", unit: "%", tone: "info", showRange: true })
+    ])
+  ])
+], "base")
+
+// =============================================================================
+// 06 · Feedback & Media
+// =============================================================================
+$popFailed = true
+$myRating = 4
+$lightboxOpen = false
+$lightboxIndex = 0
+$celebrate = false
+
+galleryPhotos = [
+  { src: "https://picsum.photos/seed/acme-berlin/320/320", full: "https://picsum.photos/seed/acme-berlin/1200/1200", alt: "Berlin office", caption: "Berlin office" },
+  { src: "https://picsum.photos/seed/acme-launch/320/320", full: "https://picsum.photos/seed/acme-launch/1200/1200", alt: "Launch day", caption: "Launch day" },
+  { src: "https://picsum.photos/seed/acme-offsite/320/320", full: "https://picsum.photos/seed/acme-offsite/1200/1200", alt: "Team offsite", caption: "Team offsite" },
+  { src: "https://picsum.photos/seed/acme-summit/320/320", full: "https://picsum.photos/seed/acme-summit/1200/1200", alt: "Customer summit", caption: "Customer summit" }
+]
+
+avatarSizes = ["xs", "sm", "md", "lg", "xl"]
+
+mediaGroup = Group("media", [
+  Wall([
+    Specimen(["Avatar", "AvatarGroup", "PersonChip", "PresenceAvatars"], "People", [
+      Row(team.slice(0, 5).map((p, i) => Avatar(p.name, { size: avatarSizes[i], status: p.status, fallback: "initials" })), { gap: "sm", align: "end" }),
+      Row([AvatarGroup(team.map(p => ({ name: p.name })), { max: 4, size: "md", total: 18, fallback: "initials" }), Spacer(), PresenceAvatars(team.map(p => ({ name: p.name, online: p.status === "online" })), { max: 4, size: "md" })], { gap: "sm", align: "center" }),
+      Column(team.slice(0, 3).map(p => PersonChip(p.name, { role: p.role, status: p.status })), { gap: "xs" })
+    ]),
+    Specimen(["Tooltip", "HoverCard", "Popover"], "Hints and popovers", [
+      Text("Hover, focus or click the triggers.", { variant: "small", tone: "muted" }),
+      Row([
+        Tooltip("Copies the deploy URL", { trigger: Button("Share", { variant: "secondary", size: "sm", icon: "link" }), side: "top" }),
+        HoverCard(Button("Mei Chen", { variant: "link", size: "sm" }), { content: [PersonChip("Mei Chen", { role: "Product manager · Atlas" }), Text("Owns onboarding and billing flows.", { variant: "small" })], width: "260px" }),
+        Popover(Button("Filters", { variant: "secondary", size: "sm", icon: "filter" }), { title: "Filter deploys", content: [Checkbox("popover-failed", { label: "Failed deploys only", value: $popFailed }), Button("Apply", { variant: "primary", size: "sm" })] })
+      ], { gap: "sm", align: "center", wrap: true })
+    ]),
+    Specimen(["Rating"], "Ratings", [
+      Rating(4.5, { max: 5, count: 218, readonly: true, halfStep: true, label: "4.5 out of 5" }),
+      Rating($myRating, { interactive: true, label: "Rate this release", tone: "warning", onChange: (v) => { $myRating = v } })
+    ]),
+    Specimen(["Toast", "Toasts"], "Toasts", [
+      Toast("Changes saved", { message: "Your workspace settings were updated.", tone: "success", icon: "circle-check" }),
+      Box([
+        Text("A Toasts stack, contained in this box:", { variant: "small", tone: "muted" }),
+        Toasts([
+          Toast("Deploy finished", { message: "v3.2.1 is live in eu-central-1.", tone: "success" }),
+          Toast("Certificate expiring", { message: "Renew atlas.acme.dev within 6 days.", tone: "warning" })
+        ], { position: "bottom-right", max: 3 })
+      ], { padding: "sm", radius: "md", background: "muted", style: "position: relative; transform: translateZ(0); min-height: 200px" })
+    ]),
+    Specimen(["VideoPlayer", "AudioPlayer"], "Media players", [
+      VideoPlayer("https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4", { poster: "https://picsum.photos/seed/acme-video/960/540", caption: "Sample clip: Big Buck Bunny, Blender Foundation (CC BY 3.0)", controls: true, ratio: "16:9" }),
+      AudioPlayer("https://upload.wikimedia.org/wikipedia/commons/b/b4/Bach_-_Cello_Suite_No._5_-_1._Prelude.ogg", { title: "Cello Suite No. 5, Prelude", artist: "J. S. Bach · focus playlist", controls: true })
+    ]),
+    Specimen(["Carousel", "Gallery", "Lightbox"], "Photos", [
+      Carousel(galleryPhotos.map(p => ({ src: p.full, alt: p.alt, caption: p.caption })), { activeIndex: 0, ratio: "16:9", showDots: true, showArrows: true, label: "Team photos" }),
+      Gallery(galleryPhotos, { columns: 4, ratio: "1:1", label: "Photo grid", onSelect: (i) => { $lightboxIndex = i; $lightboxOpen = true } }),
+      Lightbox(galleryPhotos.map(p => ({ src: p.full, caption: p.caption })), { open: $lightboxOpen, index: $lightboxIndex, onClose: () => { $lightboxOpen = false } })
+    ]),
+    Specimen(["Map"], "Office map", [
+      Map(52.52, { lng: 13.405, zoom: 13, markers: [{ lat: 52.5208, lng: 13.4094, label: "Acme Berlin office" }, { lat: 52.5163, lng: 13.3777, label: "Edge point of presence" }], height: "220px", caption: "Acme Cloud, Berlin" })
+    ]),
+    Specimen(["LiveCursor", "TypingIndicator"], "Live collaboration", [
+      Box([
+        Column([
+          Text("Q4 launch plan", { variant: "body-heavy" }),
+          Text("Diego and Mei are editing this document.", { variant: "small", tone: "muted" })
+        ], { gap: "3xs" }),
+        LiveCursor({ x: 210, y: 46, label: "Diego", color: "#ec4899" }),
+        LiveCursor({ x: 90, y: 74, label: "Mei", color: "#0ea5e9", typing: true })
+      ], { padding: "md", border: "subtle", radius: "md", style: "position: relative; min-height: 112px" }),
+      TypingIndicator("Mei")
+    ]),
+    Specimen(["Lottie", "Confetti"], "Animation", [
+      Center([Lottie({ src: "https://assets9.lottiefiles.com/packages/lf20_x62chJ.json", width: "200px", height: "150px", loop: true, label: "Animated illustration" })]),
+      Button("Celebrate the launch", { variant: "primary", icon: "champagne-glasses", onClick: () => { $celebrate = true } }),
+      Confetti({ fire: $celebrate, count: 120, onDone: () => { $celebrate = false } })
+    ]),
+    Specimen(["QRCode"], "QR code", [
+      Row([
+        QRCode("https://asfand-dev.github.io/aktion/showcase.html", { size: 112, ecc: "M", label: "QR code linking to this showcase" }),
+        Column([Text("Open on your phone", { variant: "body-heavy" }), Text("Encoded in the browser; no image service involved.", { variant: "small", tone: "muted" })], { gap: "3xs" })
+      ], { gap: "md", align: "center" })
+    ]),
+    Specimen(["Backdrop"], "Animated backdrop", [
+      Text("The hero at the top of this page sits on a Backdrop: a grid, colour blobs and a particle network.", { variant: "small", tone: "muted" }),
+      Box([
+        Backdrop({ blobs: ["#0ea5e9", "#8b5cf6"], particles: 24, type: "stars", speed: 0.4 }),
+        Center([Text("Stars, drifting slowly", { variant: "body-heavy" })], { minHeight: "120px" })
+      ], { padding: "none", radius: "md", style: "position: relative; overflow: hidden" })
+    ])
+  ])
+], "soft")
+
+// =============================================================================
+// 07 · Navigation
+// =============================================================================
+$menuOpen = $captureMode
+$mobileTab = "deploys"
+
+navigationGroup = Group("navigation", [
+  Specimen(["Navbar", "NavbarItem"], "Product navbar", [
+    Navbar("Atlas", {
+      items: [
+        NavbarItem("Overview", { icon: "gauge", active: true }),
+        NavbarItem("Deploys", { icon: "rocket" }),
+        NavbarItem("Logs", { icon: "file-lines" }),
+        NavbarItem("Settings", { icon: "gear" }),
+        NavbarItem("Status page", { icon: "signal", href: "https://example.com/status", external: true })
+      ],
+      actions: [Button("Deploy", { variant: "primary", size: "sm", icon: "rocket" })]
+    })
+  ]),
+  Wall([
+    Specimen(["Breadcrumb", "BreadcrumbItem"], "Breadcrumbs", [
+      Breadcrumb(["Acme Cloud", "Projects", "Atlas", "Deploys"], { autoLink: false }),
+      Breadcrumb([BreadcrumbItem("Workspace", { icon: "house" }), BreadcrumbItem("Billing"), BreadcrumbItem("Invoice INV-2026-0142")], { separator: "/" })
+    ]),
+    // Opens upward over the list: in capture mode it is open from the start,
+    // and an upward menu keeps its place in a full-page screenshot.
+    Specimen(["DropdownMenu", "MenuItem", "MenuLabel", "MenuSeparator"], "Menus", [
+      List([
+        ListItem("Atlas API", { description: "Production · 3 deploys today", icon: "server", active: true }),
+        ListItem("Billing service", { description: "Canary at 25%", icon: "credit-card" }),
+        ListItem("Search indexer", { description: "Rebuilding shards", icon: "magnifying-glass" }),
+        ListItem("Data pipeline", { description: "Paused by Sofia", icon: "diagram-project" })
+      ], { divided: true }),
+      Row([
+        Text("Actions for the selected project", { variant: "small", tone: "muted" }),
+        Spacer(),
+        DropdownMenu(Button("Project actions", { variant: "secondary", size: "sm", icon: "ellipsis" }), {
+          items: [
+            MenuLabel("Atlas API"),
+            MenuItem("Rename", { icon: "pen", shortcut: "R" }),
+            MenuItem("Duplicate", { icon: "copy", shortcut: "D" }),
+            MenuItem("Pin to sidebar", { icon: "thumbtack", checked: true, role: "menuitemcheckbox" }),
+            MenuSeparator(),
+            MenuItem("Archive", { icon: "box-archive", disabled: true }),
+            MenuItem("Delete project", { icon: "trash", variant: "danger" })
+          ],
+          side: "top",
+          align: "end",
+          open: $menuOpen,
+          onOpenChange: (v) => { $menuOpen = v }
+        })
+      ], { gap: "sm", align: "center" })
+    ]),
+    Specimen(["TabBar"], "Mobile tab bar", [
+      TabBar([
+        { id: "home", label: "Home", icon: "house" },
+        { id: "deploys", label: "Deploys", icon: "rocket", badge: "3" },
+        { id: "alerts", label: "Alerts", icon: "bell" },
+        { id: "profile", label: "Profile", icon: "user" }
+      ], { active: $mobileTab, onChange: (id) => { $mobileTab = id } })
+    ]),
+    Specimen(["Brand"], "Brand marks", [
+      Brand("Aktion", { logoSrc: "assets/logo.png", version: "v0.8" }),
+      Brand("Acme Cloud", { version: "Atlas 3.2" })
+    ]),
+    Specimen(["NavBar", "Footer", "FooterColumn", "SkipLink", "BackToTop"], "This page's chrome", [
+      Text("The sticky header at the top of this page is a NavBar and the closing band is a Footer with three FooterColumns.", { variant: "small" }),
+      Text("Press Tab on load to reveal the SkipLink; scroll down and a BackToTop button appears at the bottom centre.", { variant: "small", tone: "muted" })
+    ]),
+    Specimen(["ScrollSpy"], "Scroll spy", [
+      Text("Highlights the group of this page you are reading.", { variant: "small", tone: "muted" }),
+      ScrollSpy(groups.map(g => ({ label: g.name, id: g.id })), { title: "On this page", offset: 72 })
+    ])
+  ])
+], "base")
+
+// =============================================================================
+// 08 · Chat
+// =============================================================================
+chatGroup = Group("chat", [
+  Grid([
+    Specimen(["ChatBubble", "SectionBlock", "ListBlock", "ActionLink"], "Assistant reply", [
+      ChatBubble("Mei Chen", { body: "Why did yesterday's billing-service deploy fail?", time: "09:12", from: "me", status: "read" }),
+      ChatBubble("Atlas assistant", { body: "The canary failed its health check. Here is what happened:", time: "09:12", from: "agent", content: [
+        SectionBlock("Deploy #481 · billing-service", {
+          icon: "rocket",
+          description: "Rolled back automatically after four minutes.",
+          children: [ListBlock(["The /ready health check timed out after 30 seconds", "Error rate peaked at 4.2% on 25% of traffic", "The rollback restored v3.1.9 at 18:42 UTC"], { marker: "check" })],
+          actions: [ActionLink("Open the deploy logs", { icon: "arrow-up-right-from-square", onClick: () => { $toast.show("Opening logs for #481") } })]
+        })
+      ] }),
+      ChatBubble("System", { body: "Amara joined the conversation", from: "system" })
+    ]),
+    Specimen(["FollowUpBlock", "FollowUpItem"], "Suggested follow-ups", [
+      FollowUpBlock([FollowUpItem("Show the error spike"), FollowUpItem("Compare with deploy #480"), FollowUpItem("Retry the deploy"), FollowUpItem("Page the on-call engineer")], { title: "Ask next", onSelect: (label) => { $toast.show(label) } }),
+      ListBlock(["Check the canary dashboard", "Read the rollback runbook", "File a post-incident review"], { ordered: true })
+    ])
+  ], { columns: { base: 1, lg: 2 }, gap: "lg" })
+], "soft")
+
+// =============================================================================
+// 09 · Patterns
+// =============================================================================
+$tourStep = 0
+$tourOpen = false
+$spotlightOpen = false
+
+counterSource = "$count = 0\n\n$app(Card([\n  CardHeader(\"Deploy counter\"),\n  Text(\"Deploys today: \" + $count),\n  Button(\"Ship one\", {\n    variant: \"primary\",\n    onClick: () => { $count += 1 }\n  })\n]))"
+
+patternsGroup = Group("patterns", [
+  Specimen(["TopBar", "PageHeader", "Toolbar"], "Page chrome", [
+    TopBar("Atlas", { subtitle: "Production · eu-central-1", left: [Badge("v3.2.1", { tone: "info" })], center: [SearchBar("topbar-search", { placeholder: "Search deploys, logs and people…", shortcut: "Cmd+K" })], right: [IconButton("bell", { label: "Notifications", variant: "ghost" }), Button("Deploy", { variant: "primary", size: "sm", icon: "rocket" })] }),
+    PageHeader("Deploys", { subtitle: "318 this month · 2 failed", breadcrumbs: ["Acme Cloud", "Atlas"], status: Badge("Healthy", { tone: "success" }), actions: [Button("Export CSV", { variant: "secondary", icon: "download" }), Button("New deploy", { variant: "primary", icon: "plus" })] }),
+    Toolbar({ left: [FilterPill("Production", { active: true, count: 12 }), FilterPill("Preview", { count: 41 })], right: [ToggleGroup("toolbar-view", { items: [{ value: "list", label: "List" }, { value: "board", label: "Board" }], value: "list", size: "sm", label: "Layout" })], searchable: true, searchPlaceholder: "Filter deploys…" })
+  ]),
+  Specimen(["KanbanBoard", "KanbanColumn", "KanbanCard"], "Sprint board", [
+    KanbanBoard([
+      KanbanColumn("Backlog", { items: [
+        KanbanCard("Usage-based billing", { description: "Meter API calls per workspace.", tags: ["billing"], assignee: "Noah Williams", icon: "receipt" }),
+        KanbanCard("Dark mode for emails", { tags: ["design"], assignee: "Diego Alvarez" })
+      ] }),
+      KanbanColumn("In progress", { tone: "primary", limit: 3, items: [
+        KanbanCard("Edge cache purge UI", { description: "Purge by tag from the dashboard.", tags: ["frontend"], assignee: "Lukas Becker", tone: "primary" }),
+        KanbanCard("Postgres 17 upgrade", { tags: ["infra"], assignee: "Amara Okafor", tone: "warning" })
+      ] }),
+      KanbanColumn("Review", { tone: "warning", items: [KanbanCard("SAML for the Business plan", { description: "Works with any SAML 2.0 provider.", tags: ["auth"], assignee: "Priya Raman", tone: "warning" })] }),
+      KanbanColumn("Done", { tone: "success", items: [
+        KanbanCard("Status page v2", { tags: ["shipped"], assignee: "Mei Chen", tone: "success", icon: "check" }),
+        KanbanCard("Audit log export", { tags: ["shipped"], assignee: "Sofia Rossi", tone: "success" })
+      ] })
+    ])
+  ]),
+  Specimen(["PricingTable", "PricingCard"], "Pricing", [
+    PricingTable([
+      PricingCard("Starter", { price: "$0", period: "/mo", description: "For side projects and prototypes.", features: ["3 projects", "1 edge region", "Community support"], action: Button("Start free", { variant: "secondary", fullWidth: true }) }),
+      PricingCard("Team", { price: "$49", period: "/mo", description: "For teams that ship every day.", features: ["25 projects", "12 edge regions", "Preview deploys", { label: "Single sign-on", included: false }], action: Button("Start a 14-day trial", { variant: "primary", fullWidth: true }), featured: true, ribbon: "Most popular" }),
+      PricingCard("Business", { price: "$199", period: "/mo", description: "For regulated workloads.", features: ["Unlimited projects", "34 edge regions", "SSO and SCIM", "99.99% uptime SLA"], action: Button("Talk to sales", { variant: "ghost", fullWidth: true }) })
+    ])
+  ]),
+  Specimen(["EmptyState", "LoadingState", "ErrorState", "SuccessState"], "Page states", [
+    Grid([
+      EmptyState("No incidents", { description: "Nothing has paged in 21 days.", icon: "mug-hot" }),
+      LoadingState("Fetching usage…", { description: "Crunching 30 days of metrics." }),
+      ErrorState("Couldn't load invoices", { description: "The billing API timed out.", actions: [Button("Retry", { variant: "primary", size: "sm", icon: "rotate-right" })] }),
+      SuccessState("Domain verified", { description: "atlas.acme.dev now serves over HTTPS." })
+    ], { columns: { base: 1, md: 2, xl: 4 }, gap: "md" })
+  ]),
+  Wall([
+    Specimen(["FeatureGrid", "FeatureItem"], "Feature grid", [
+      FeatureGrid([
+        FeatureItem("Edge rendering", { description: "34 regions and a sub-50 ms first byte.", icon: "bolt", tone: "primary" }),
+        FeatureItem("Preview deploys", { description: "A URL for every pull request.", icon: "code-pull-request", tone: "success" }),
+        FeatureItem("Audit log", { description: "Every change signed and exportable.", icon: "shield-halved", tone: "info" }),
+        FeatureItem("Budgets", { description: "Alerts before the invoice does.", icon: "wallet", tone: "warning" })
+      ], { columns: 2 })
+    ]),
+    Specimen(["Timeline", "TimelineItem"], "Release timeline", [
+      Timeline([
+        TimelineItem("v3.2.1 shipped to production", { time: "Today, 14:05", description: "Rolled out to all 34 regions.", icon: "rocket", tone: "success" }),
+        TimelineItem("Canary at 25%", { time: "Today, 11:40", description: "The error rate held at 0.11%.", icon: "dove", tone: "primary", content: [BadgeList(["billing", "edge"], { size: "xs" })] }),
+        TimelineItem("Regression caught in QA", { time: "Yesterday", description: "The quota page double-counted usage.", icon: "triangle-exclamation", tone: "warning" }),
+        TimelineItem("Release branch cut", { time: "Mon, 09:00", icon: "code-branch" })
+      ])
+    ]),
+    Specimen(["ActivityLog"], "Audit trail", [
+      ActivityLog([
+        { actor: "Priya Raman", title: "approved deploy #482", description: "atlas-api to production", time: "2m", icon: "circle-check", tone: "success" },
+        { actor: "Amara Okafor", title: "rotated the database password", time: "1h", icon: "key", tone: "warning" },
+        { actor: "Lukas Becker", title: "merged PR #1342", description: "Edge cache purge UI", time: "3h", icon: "code-merge", tone: "primary" },
+        { actor: "Sofia Rossi", title: "exported the audit log", time: "yesterday", icon: "file-export" }
+      ], { variant: "audit" })
+    ]),
+    Specimen(["ProfileCard"], "Profile card", [
+      ProfileCard("Priya Raman", { role: "Engineering manager · Platform", bio: "Leads the team that keeps Atlas fast, cheap and boring to operate.", tags: ["platform", "on-call", "mentoring"], actions: [Button("Message", { variant: "primary", size: "sm", icon: "comment" }), Button("View team", { variant: "ghost", size: "sm" })] })
+    ]),
+    Specimen(["Testimonial"], "Testimonial", [
+      Testimonial("Atlas turned our deploys from a nervous afternoon into a non-event. We ship forty times a day now.", { author: "Jonas Lindqvist", role: "Head of Platform, Fernhill Labs", rating: 5 })
+    ]),
+    Specimen(["AuthorByline", "Comment"], "Discussion", [
+      AuthorByline("Diego Alvarez", { role: "Product designer", date: "Oct 1, 2026", readingTime: "4 min read" }),
+      Comment("Mei Chen", { body: "Can we keep the empty-state illustration for the first-run view?", time: "2h ago", actions: [Button("Reply", { variant: "ghost", size: "sm" }), Button("Resolve", { variant: "ghost", size: "sm", icon: "check" })] }),
+      Comment("Diego Alvarez", { body: "Yes. I'll export it as SVG so it follows the dark theme too.", time: "1h ago" })
+    ]),
+    Specimen(["Banner", "Notification"], "Announcements", [
+      Banner("Atlas 3.2 is here", { message: "Edge rendering and canary deploys on every plan.", icon: "wand-magic-sparkles", tone: "primary", action: Button("What's new", { variant: "primary", size: "sm" }), dismissible: true }),
+      Notification("Invoice paid", { message: "INV-2026-0142 · $1,240.00 charged to the card on file.", time: "10:24", icon: "receipt", tone: "success", unread: true }),
+      Notification("Deploy needs approval", { message: "Lukas requested a production deploy of atlas-api.", time: "09:58", author: "Lukas Becker", unread: true, actions: [Button("Review", { variant: "primary", size: "sm" })] })
+    ]),
+    Specimen(["InboxPanel"], "Inbox", [
+      InboxPanel([
+        { title: "New comment on PR #1342", message: "Priya: two small nits, otherwise good to go.", time: "2m", icon: "comment", unread: true },
+        { title: "Build #482 passed", message: "412 tests in 2m 31s.", time: "12m", icon: "circle-check", tone: "success", unread: true },
+        { title: "Weekly usage report", message: "Spend is 62% of the monthly budget.", time: "1d", icon: "chart-pie" },
+        { title: "Plan renewed", message: "Team plan, billed $49.", time: "1w", icon: "credit-card" }
+      ], { onMarkAllRead: () => { $toast.show("All caught up") } })
+    ]),
+    Specimen(["OnboardingChecklist"], "Onboarding", [
+      OnboardingChecklist([
+        { title: "Create a workspace", description: "acme-cloud", done: true },
+        { title: "Connect GitHub", description: "github.com/acme", done: true },
+        { title: "Ship your first deploy", description: "Push to main to trigger one.", done: false, cta: "Deploy now" },
+        { title: "Invite your team", description: "Projects are better together.", done: false }
+      ], { title: "Get Atlas running", subtitle: "Most teams finish in about ten minutes." })
+    ]),
+    Specimen(["MediaCard"], "Media card", [
+      MediaCard("Designing calm dashboards", { imageSrc: "https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=800&q=80", description: "How the Atlas team halved alert fatigue.", tags: ["design", "observability"], meta: "Blog · 6 min read", badge: "New", ratio: "16:9", actions: [Button("Read the post", { variant: "primary", size: "sm" })] })
+    ]),
+    Specimen(["ProductCard"], "Product cards", [
+      Grid([
+        ProductCard("Studio headphones", { image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=480&q=80", price: 199, compareAt: 249, currency: "USD", rating: 4.5, reviewCount: 218, badge: "Sale" }),
+        ProductCard("Everyday mug", { image: "https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=480&q=80", price: 18, currency: "USD", rating: 4.8, reviewCount: 96, soldOut: true })
+      ], { columns: 2, gap: "sm" })
+    ]),
+    Specimen(["SectionHeader", "DescriptionList", "DescriptionItem", "StatusDot"], "Detail panel", [
+      SectionHeader("atlas-api", { eyebrow: "Service", subtitle: "Owned by the Platform team", status: Badge("Healthy", { tone: "success", size: "sm" }), actions: [Button("Edit", { variant: "ghost", size: "sm", icon: "pen" })] }),
+      DescriptionList([
+        DescriptionItem("Region", { value: "eu-central-1", icon: "location-dot" }),
+        DescriptionItem("Runtime", { value: "Node.js 24", icon: "server" }),
+        DescriptionItem("Owner", { value: PersonChip("Priya Raman", { size: "sm" }) }),
+        DescriptionItem("Created", { value: "Mar 14, 2024", icon: "calendar" })
+      ], { columns: 2 }),
+      Row([StatusDot("API", { tone: "success" }), StatusDot("Database", { tone: "success" }), StatusDot("Queue", { tone: "warning" }), StatusDot("Streaming", { tone: "success", pulse: true })], { gap: "md", wrap: true })
+    ]),
+    Specimen(["ActionStripe"], "Settings rows", [
+      ActionStripe("Profile", { description: "Name, avatar and contact details", icon: "user", value: "Priya Raman" }),
+      ActionStripe("Notifications", { description: "Email, Slack and push", icon: "bell", trailing: Switch("stripe-notifications", { label: "Notifications", labelHidden: true, value: true }) }),
+      ActionStripe("Billing", { description: "Plan, invoices and payment method", icon: "credit-card", value: "Team · $49/mo" }),
+      ActionStripe("Delete workspace", { description: "Only an owner can do this", icon: "triangle-exclamation", disabled: true })
+    ]),
+    Specimen(["Tour", "Spotlight"], "Product tours", [
+      Text("Walk new people through the dashboard.", { variant: "small", tone: "muted" }),
+      Row([
+        Button("Start the tour", { variant: "primary", icon: "route", onClick: () => { $tourStep = 0; $tourOpen = true } }),
+        Button("Spotlight a feature", { variant: "secondary", icon: "lightbulb", onClick: () => { $spotlightOpen = true } })
+      ], { gap: "sm", wrap: true }),
+      Tour([
+        { title: "Welcome to Atlas", description: "A thirty-second tour of your workspace." },
+        { title: "Deploys", description: "Every push to main lands here." },
+        { title: "Budgets", description: "Set alerts before the invoice arrives." }
+      ], { current: $tourStep, open: $tourOpen, onOpenChange: (v) => { $tourOpen = v } }),
+      Spotlight("New: purge the cache by tag", { open: $spotlightOpen, description: "Purge one product's pages without touching the rest.", actions: [Button("Got it", { variant: "primary", size: "sm", onClick: () => { $spotlightOpen = false } })], onClose: () => { $spotlightOpen = false } })
+    ]),
+    Specimen(["LogoCloud", "LogoChip", "ShareButtons"], "Social proof", [
+      LogoCloud([LogoChip("Fernhill Labs", { icon: "leaf" }), LogoChip("Looplog", { icon: "infinity" }), LogoChip("Northstar Bank", { icon: "star" }), LogoChip("Quill & Co", { icon: "feather" }), LogoChip("Orbital Freight", { icon: "truck-fast" })], { label: "Teams shipping on Atlas" }),
+      ShareButtons("https://asfand-dev.github.io/aktion/showcase.html", { title: "Every Aktion component on one page", networks: ["twitter", "linkedin", "mastodon", "email", "copy"] })
+    ]),
+    Specimen(["CodeWindow"], "Code with a live preview", [
+      CodeWindow(counterSource, { file: "counter.aktion", language: "aktion", preview: true, height: "240px" })
+    ]),
+    Specimen(["BrowserFrame", "Terminal"], "Browser and terminal", [
+      BrowserFrame(Column([Text("All systems operational", { variant: "large-heavy" }), Row([StatusDot("API", { tone: "success" }), StatusDot("Dashboard", { tone: "success" }), StatusDot("Webhooks", { tone: "warning" })], { gap: "md", wrap: true })], { gap: "sm", padding: "md" }), { url: "https://status.acme.dev", height: "130px" }),
+      Terminal(["$ npm create aktion@latest atlas-status", "Scaffolded a Vite + Aktion project in ./atlas-status", "$ cd atlas-status && npm run dev", "  VITE ready in 312 ms", "  Local: http://localhost:5173/"], { file: "zsh · atlas-status" })
+    ]),
+    Specimen(["CopyButton", "ThemeToggle"], "Utility buttons", [
+      Row([CodeBlock("npm i aktion-runtime", { language: "bash", header: false, copy: false }), CopyButton("npm i aktion-runtime", { label: "Copy" })], { gap: "sm", align: "center" }),
+      Row([Text("Flip this page between light and dark:", { variant: "small", tone: "muted" }), ThemeToggle()], { gap: "sm", align: "center" })
+    ])
+  ])
+], "base")
+
+// =============================================================================
+// 10 · Editors & overlays
+// =============================================================================
+$sheetOpen = false
+$bottomSheetOpen = false
+$confirmOpen = false
+$fabLast = "Nothing yet"
+
+releaseNotesHtml = "<h3>Atlas 3.2.1</h3><p>Edge rendering is now <b>generally available</b> in all 34 regions.</p><ul><li>41% lower p95 latency</li><li>Canary deploys on every plan</li></ul>"
+
+handlerSource = "export async function handler(request: Request) {\n  const region = request.headers.get(\"x-atlas-region\") ?? \"eu-central-1\"\n  const started = performance.now()\n  const page = await render(request.url, { region })\n  return new Response(page, {\n    headers: { \"server-timing\": `render;dur=${performance.now() - started}` }\n  })\n}\n"
+
+overlaysGroup = Group("overlays", [
+  Rows([
+    Specimen(["RichTextEditor"], "Rich text", [
+      RichTextEditor("release-notes", { value: releaseNotesHtml, label: "Release notes", minHeight: "150px" })
+    ]),
+    Specimen(["CodeEditor"], "Code editor", [
+      CodeEditor("edge-handler", { value: handlerSource, language: "typescript", filename: "handler.ts", minHeight: "170px", copyable: true })
+    ]),
+    Specimen(["ContextMenu"], "Context menu", [
+      ContextMenu(Card([Column([Row([Icon("file-pdf"), Text("Q4-roadmap.pdf", { variant: "body-heavy" })], { gap: "xs", align: "center" }), Text("Right-click, or long-press on touch, for actions.", { variant: "small", tone: "muted" })], { gap: "xs" })], { variant: "outlined" }), {
+        items: [
+          { label: "Open", icon: "arrow-up-right-from-square" },
+          { label: "Rename", icon: "pen" },
+          { label: "Share", icon: "share-nodes" },
+          MenuSeparator(),
+          { label: "Delete", icon: "trash", variant: "danger" }
+        ]
+      })
+    ]),
+    Specimen(["Sheet", "BottomSheet", "ConfirmDialog"], "Sheets and confirmations", [
+      Row([
+        Button("Deploy details", { variant: "secondary", icon: "table-columns", onClick: () => { $sheetOpen = true } }),
+        Button("Share", { variant: "secondary", icon: "share-nodes", onClick: () => { $bottomSheetOpen = true } }),
+        Button("Revoke key…", { variant: "danger", icon: "key", onClick: () => { $confirmOpen = true } })
+      ], { gap: "sm", wrap: true }),
+      Sheet([
+        DescriptionList([DescriptionItem("Deploy", { value: "#482" }), DescriptionItem("Service", { value: "atlas-api" }), DescriptionItem("Author", { value: "Priya Raman" }), DescriptionItem("Duration", { value: "2m 58s" })], { columns: 1 })
+      ], { open: $sheetOpen, side: "right", title: "Deploy #482", onClose: () => { $sheetOpen = false } }),
+      BottomSheet([
+        Text("Anyone with the link can view this deploy."),
+        Input("share-link", { label: "Link", value: "https://app.acme.dev/d/482", readOnly: true })
+      ], { open: $bottomSheetOpen, title: "Share deploy #482", onClose: () => { $bottomSheetOpen = false } }),
+      ConfirmDialog("Revoke this API key?", { open: $confirmOpen, message: "Integrations that use it stop working immediately.", confirmLabel: "Revoke", cancelLabel: "Keep the key", tone: "danger", onConfirm: () => { $confirmOpen = false; $toast.success("Key revoked") }, onCancel: () => { $confirmOpen = false } })
+    ]),
+    Specimen(["SpeedDial", "FloatingActionButton"], "Floating actions", [
+      Text("Both are pinned to the viewport: the speed dial bottom-right, the help button bottom-left. The PR screenshot is taken with a page-tall viewport, so there they sit at the very bottom of the page.", { variant: "small" }),
+      Row([Text("Last quick action:", { variant: "small", tone: "muted" }), Badge($fabLast, { tone: "primary" })], { gap: "sm", align: "center" }),
+      SpeedDial([
+        { label: "New deploy", icon: "rocket", onClick: () => { $fabLast = "New deploy" } },
+        { label: "Invite someone", icon: "user-plus", onClick: () => { $fabLast = "Invite someone" } },
+        { label: "Report an issue", icon: "bug", onClick: () => { $fabLast = "Report an issue" } }
+      ], { icon: "plus", position: "bottom-right", label: "Quick actions" }),
+      FloatingActionButton("headset", { label: "Help", position: "bottom-left", onClick: () => { $fabLast = "Help" } })
+    ])
+  ])
+], "soft")
+
+// =============================================================================
+// 11 · App shell
+// =============================================================================
+shellGroup = Group("app-shell", [
+  Specimen(["AppShell", "Sidebar", "SidebarSection", "SidebarItem", "SplitView"], "Application shell", [
+    BrowserFrame(AppShell(
+      Sidebar([
+        SidebarSection("Workspace", { items: [
+          SidebarItem("Overview", { icon: "gauge" }),
+          SidebarItem("Inbox", { icon: "inbox", active: true, badge: "3" }),
+          SidebarItem("Deploys", { icon: "rocket" }),
+          SidebarItem("Incidents", { icon: "triangle-exclamation", badge: "2" })
+        ] }),
+        SidebarSection("Settings", { items: [
+          SidebarItem("Billing", { icon: "credit-card" }),
+          SidebarItem("Members", { icon: "users" }),
+          SidebarItem("Audit log", { icon: "shield-halved", disabled: true })
+        ] })
+      ], { brand: "Acme Cloud", tagline: "Atlas · production" }),
+      { content: [
+        PageHeader("Inbox", { subtitle: "3 unread · 12 this week", breadcrumbs: false }),
+        SplitView(
+          [List([
+            ListItem("Deploy #482 needs approval", { description: "Lukas Becker · 09:58", icon: "rocket", active: true }),
+            ListItem("Budget alert at 80%", { description: "Data pipeline · 08:41", icon: "wallet", tone: "warning" }),
+            ListItem("Incident #77 resolved", { description: "Amara Okafor · yesterday", icon: "circle-check", tone: "success" })
+          ], { divided: true })],
+          { detail: [Card([
+            CardHeader("Deploy #482 needs approval", { subtitle: "Lukas Becker · today at 09:58" }),
+            Text("atlas-api is ready for production: 412 tests passed and the canary held a 0.11% error rate."),
+            CardFooter([Button("Decline", { variant: "ghost", size: "sm" }), Button("Approve deploy", { variant: "primary", size: "sm", icon: "check" })])
+          ])], primaryWidth: "300px" }
+        )
+      ], topbar: [SearchBar("shell-search", { placeholder: "Search the workspace…" }), IconButton("bell", { label: "Notifications", variant: "ghost" })] }
+    ), { url: "https://app.acme.dev/atlas/inbox", height: "460px" })
+  ])
+], "base")
+
+// =============================================================================
+// 12 · Advanced UI
+// =============================================================================
+$filterChips = ["status:failed", "service:billing", "region:eu-central-1"]
+$failedOnly = true
+$mineOnly = false
+$queryRules = [{ field: "service", op: "contains", value: "atlas" }, { field: "duration", op: "gt", value: "120" }]
+$paletteOpen = false
+$envVars = [{ key: "ATLAS_REGION", value: "eu-central-1" }, { key: "CACHE_TTL", value: "300" }]
+$docTitle = "Q4 launch plan"
+$panelShown = true
+$priorities = ["Latency", "Cost", "Reliability", "Security"]
+$releaseOrder = ["Freeze the release branch", "Run the canary", "Promote to 100%", "Announce in #releases"]
+$dropped = ""
+$gesture = "none yet"
+
+function moveRelease(from, to) {
+  const next = [...$releaseOrder]
+  const item = next.splice(from, 1)[0]
+  next.splice(to, 0, item)
+  $releaseOrder = next
+}
+
+paletteItems = [
+  { label: "New deploy", value: "deploy", group: "Actions", shortcut: "Cmd+D" },
+  { label: "Invite a teammate", value: "invite", group: "Actions" },
+  { label: "Open the billing page", value: "billing", group: "Navigation" },
+  { label: "Search the docs", value: "docs", group: "Navigation", shortcut: "/" },
+  { label: "Toggle the theme", value: "theme", group: "Settings" }
+]
+
+bellItems = [
+  { title: "Deploy #482 is live", message: "atlas-api · eu-central-1", time: "2m ago", unread: true },
+  { title: "Budget at 80%", message: "Data pipeline", time: "1h ago", unread: true },
+  { title: "Weekly digest", time: "Monday" }
+]
+
+logRows = $util.range(0, 400).map(i => ({
+  time: `14:${String(Math.floor(i / 60) % 60).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}`,
+  level: i % 17 === 0 ? "ERROR" : (i % 5 === 0 ? "WARN" : "INFO"),
+  tone: i % 17 === 0 ? "danger" : (i % 5 === 0 ? "warning" : "neutral"),
+  message: i % 17 === 0 ? `upstream timeout on /v1/usage (request ${1000 + i})` : `GET /v1/projects/${i % 9} 200 in ${18 + (i * 7) % 90} ms`
+}))
+
+oldConfig = "[deploy]\nregion = \"eu-central-1\"\nstrategy = \"rolling\"\nreplicas = 3\n\n[cache]\nttl = 60\n"
+newConfig = "[deploy]\nregion = \"eu-central-1\"\nstrategy = \"canary\"\ncanary_steps = [5, 25, 100]\nreplicas = 3\n\n[cache]\nttl = 300\n"
+
+advancedGroup = Group("advanced", [
+  Wall([
+    Specimen(["FilterPill", "FilterChips", "QueryBuilder"], "Filtering", [
+      Row([FilterPill("Failed", { active: $failedOnly, count: 2, icon: "circle-xmark", onToggle: () => { $failedOnly = !$failedOnly } }), FilterPill("Mine", { active: $mineOnly, count: 7, onToggle: () => { $mineOnly = !$mineOnly } }), FilterPill("Archived", { count: 0, disabled: true })], { gap: "xs", wrap: true }),
+      FilterChips($filterChips, { onRemove: (value) => { $filterChips = $filterChips.filter(c => c !== value) }, onClear: () => { $filterChips = [] } }),
+      QueryBuilder([{ name: "service", label: "Service" }, { name: "duration", label: "Duration (s)", type: "number" }, { name: "author", label: "Author" }], { value: $queryRules, onChange: (rules) => { $queryRules = rules } })
+    ]),
+    Specimen(["IconButton", "NotificationBell", "CommandPalette"], "Quick actions", [
+      Row([
+        IconButton("pen", { label: "Edit", variant: "secondary" }),
+        IconButton("copy", { label: "Duplicate", variant: "ghost" }),
+        IconButton("star", { label: "Starred", variant: "ghost", active: true }),
+        IconButton("trash", { label: "Delete", variant: "danger" }),
+        IconButton("arrows-rotate", { label: "Refreshing", loading: true }),
+        Spacer(),
+        NotificationBell({ count: 2, items: bellItems, align: "right", onMarkAllRead: () => { $toast.show("All caught up") } })
+      ], { gap: "xs", align: "center" }),
+      Row([Button("Search everything", { variant: "secondary", icon: "magnifying-glass", onClick: () => { $paletteOpen = true } }), KbdShortcut(["Cmd", "K"])], { gap: "sm", align: "center" }),
+      CommandPalette(paletteItems, { open: $paletteOpen, placeholder: "Type a command or search…", shortcut: "Cmd+K", onSelect: (v) => { $paletteOpen = false; $toast.show(`Ran ${v}`) }, onClose: () => { $paletteOpen = false } })
+    ]),
+    Specimen(["FieldRepeater"], "Environment variables", [
+      FieldRepeater($envVars, { fields: [{ name: "key", label: "Key" }, { name: "value", label: "Value" }], addLabel: "Add a variable", max: 6, onChange: (rows) => { $envVars = rows } })
+    ]),
+    Specimen(["VirtualList"], "Virtualised log", [
+      Text("400 log lines; only the visible ones are rendered.", { variant: "small", tone: "muted" }),
+      VirtualList(logRows, { itemHeight: 32, height: 192, renderItem: (row) => Row([Badge(row.level, { tone: row.tone, size: "xs" }), Text(row.time, { variant: "small", tone: "muted" }), StackItem(Text(row.message, { variant: "small", truncate: true }), { grow: 1, minWidth: "0" })], { gap: "sm", align: "center" }) })
+    ]),
+    Specimen(["JsonTree"], "JSON inspector", [
+      JsonTree({ deploy: 482, service: "atlas-api", region: "eu-central-1", canary: { steps: [5, 25, 100], errorRate: 0.0011, passed: true }, author: { name: "Priya Raman", team: "platform" } }, { expandedDepth: 2, maxHeight: 260 })
+    ]),
+    Specimen(["Truncate", "InlineEdit"], "Editable text", [
+      InlineEdit($docTitle, { label: "Document title", hint: "Click the title to rename it", onSave: (v) => { $docTitle = v } }),
+      Truncate("Atlas is Acme Cloud's edge platform for teams that ship every day. It renders pages at 34 points of presence, gives every pull request its own preview URL and signs each change into an exportable audit log, so the boring parts of production stay boring and the interesting parts get the attention.", { maxLines: 2, expandLabel: "Read more", collapseLabel: "Show less" })
+    ]),
+    Specimen(["Reveal", "Transition", "FlipList", "Parallax"], "Motion", [
+      Reveal(Callout("info", { title: "Revealed on scroll", description: "Fades up the first time it enters the viewport.", compact: true }), { animation: "fade-up", once: true }),
+      Switch("motion-panel", { label: "Show the release panel", value: $panelShown }),
+      Transition(Box([Text("v3.2.1 is live in 34 regions.")], { padding: "sm", background: "success", radius: "md" }), { show: $panelShown, preset: "slide-down" }),
+      Row([
+        Button("Shuffle", { variant: "secondary", size: "sm", icon: "shuffle", onClick: () => { $priorities = [$priorities[2], $priorities[0], $priorities[3], $priorities[1]] } }),
+        FlipList($priorities.map(p => Badge(p, { tone: "primary", key: p })), { horizontal: true })
+      ], { gap: "sm", align: "center", wrap: true }),
+      Parallax(Image("https://picsum.photos/seed/acme-ridge/640/240", { alt: "A mountain ridge at dusk", ratio: "8:3", fit: "cover", loading: "eager" }), { speed: 0.15 })
+    ]),
+    Specimen(["Sortable", "Draggable", "DropZone", "OnGesture"], "Drag, drop and gestures", [
+      Sortable($releaseOrder.map(t => Card([Text(t, { variant: "body-heavy" })], { padding: "sm", key: t })), { handle: true, ariaLabel: "Release checklist order", onReorder: (from, to) => moveRelease(from, to) }),
+      Row([
+        Draggable(Badge("hotfix-482", { tone: "warning", icon: "code-branch" }), { data: "hotfix-482", ariaLabel: "Drag the hotfix branch" }),
+        DropZone(Text($dropped ? `Queued ${$dropped} for deploy` : "Drop a branch here to deploy it", { variant: "small", tone: "muted" }), { label: "Deploy target", onDrop: (data) => { $dropped = data } })
+      ], { gap: "md", align: "center", wrap: true }),
+      OnGesture(Box([Text(`Swipe, long-press or double-tap. Last gesture: ${$gesture}`, { variant: "small" })], { padding: "sm", border: "subtle", radius: "md" }), { swipe: (dir) => { $gesture = `swipe ${dir}` }, longPress: () => { $gesture = "long press" }, doubleTap: () => { $gesture = "double tap" } })
+    ]),
+    Specimen(["ReadingProgress"], "Reading progress", [
+      Text("The thin gradient bar pinned to the top edge of this page fills as you scroll.", { variant: "small" })
+    ])
+  ]),
+  Specimen(["DiffViewer"], "Config diff", [
+    DiffViewer(oldConfig, { right: newConfig, mode: "split", leftTitle: "atlas.toml · main", rightTitle: "atlas.toml · this branch", maxHeight: 260 })
+  ]),
+  Specimen(["Gantt"], "Q4 roadmap", [
+    Gantt([
+      { id: "canary", label: "Canary deploys", start: "2026-10-01", end: "2026-10-12", progress: 100 },
+      { id: "purge", label: "Cache purge by tag", start: "2026-10-06", end: "2026-10-24", progress: 55 },
+      { id: "saml", label: "SAML for Business", start: "2026-10-13", end: "2026-11-06", progress: 30 },
+      { id: "billing", label: "Usage-based billing", start: "2026-10-27", end: "2026-11-27", progress: 0 },
+      { id: "summit", label: "Customer summit", start: "2026-11-16", end: "2026-11-18", progress: 0 }
+    ], { startDate: "2026-10-01", endDate: "2026-11-30", today: "2026-10-02", ticks: 9 })
+  ])
+], "base")
+
+// =============================================================================
+// 13 · Routing
+// =============================================================================
+function RouterDemo() {
+  return Column([
+    Row([
+      NavLink("Overview", { to: "/", exact: true, icon: "gauge", variant: "pill" }),
+      NavLink("Deploys", { to: "/deploys", icon: "rocket", variant: "pill" }),
+      NavLink("Settings", { to: "/settings", icon: "gear", variant: "pill" }),
+      NavLink("Old settings URL", { to: "/old-settings", icon: "arrow-turn-up", variant: "pill" })
+    ], { gap: "xs", wrap: true }),
+    RouteView($router({
+      "/": Callout("info", { title: "Overview", description: "This panel follows the URL hash. Pick a link above.", compact: true }),
+      "/deploys": Callout("success", { title: "Deploys", description: "Three deploys today, all green.", compact: true }),
+      "/settings": Callout("neutral", { title: "Settings", description: "Region eu-central-1, autoscaling on.", compact: true }),
+      "/old-settings": Redirect("/settings"),
+      default: Callout("warning", { title: "Not found", description: `Nothing lives at ${route.path}.`, compact: true })
+    }), { routeKey: route.path, animation: "fade-up", duration: 200 })
+  ], { gap: "md" })
+}
+
+routingGroup = Group("routing", [
+  Grid([
+    Specimen(["NavLink", "RouteView"], "Client-side routes", [RouterDemo()]),
+    Specimen(["Redirect"], "Redirects", [
+      Text("The Old settings URL link lands on a route that renders Redirect(\"/settings\"), so the router moves straight on to Settings.", { variant: "small" }),
+      CodeBlock("\"/old-settings\": Redirect(\"/settings\")", { language: "aktion", header: false })
+    ])
+  ], { columns: { base: 1, lg: 2 }, gap: "lg" })
+], "soft")
+
+// =============================================================================
+// 14 · Helpers
+// =============================================================================
+$showAdvanced = true
+$saveStatus = "No changes yet"
+$trapFocus = false
+
+helpersGroup = Group("helpers", [
+  Rows([
+    Specimen(["Async"], "Every async state", [
+      Text("One Async per resource state: loading, error, empty and loaded.", { variant: "small", tone: "muted" }),
+      Async({ loading: true }, { loading: Skeleton("paragraph", { lines: 2 }) }),
+      Async({ error: "timeout" }, { error: Callout("danger", { title: "Couldn't load usage", description: "The usage API timed out.", compact: true }) }),
+      Async({ data: [] }, { empty: Text("No invoices yet.", { tone: "muted" }) }),
+      Async({ data: [3720] }, { data: Text("3 invoices · $3,720 paid", { variant: "body-heavy" }) })
+    ]),
+    Specimen(["Show", "Lazy", "ErrorBoundary"], "Conditional rendering", [
+      Switch("show-advanced", { label: "Show advanced settings", value: $showAdvanced }),
+      Show($showAdvanced, { children: [Input("max-connections", { label: "Max connections", value: "200" })], fallback: Text("Advanced settings are hidden.", { variant: "small", tone: "muted" }) }),
+      Lazy(null, { fallback: Skeleton("card"), children: [Callout("success", { title: "Lazy section loaded", description: "Rendered once its loader resolved.", compact: true })] }),
+      ErrorBoundary({ fallback: Callout("danger", { title: "Widget crashed", description: "The rest of the page kept working." }), children: [Callout("info", { title: "Guarded widget", description: "An error in here would show the fallback instead of breaking the page.", compact: true })] })
+    ]),
+    Specimen(["Portal", "LiveRegion", "FocusTrap"], "Accessibility plumbing", [
+      Box([Text("Portal target", { variant: "small", tone: "muted" })], { id: "showcase-portal-target", padding: "sm", border: "default", radius: "md" }),
+      Portal([Badge("Rendered elsewhere, shown here", { tone: "primary", icon: "share" })], { target: "#showcase-portal-target" }),
+      Row([
+        Button("Save draft", { variant: "primary", size: "sm", onClick: () => { $saveStatus = `Draft saved at ${new Date().toLocaleTimeString()}` } }),
+        LiveRegion($saveStatus, { politeness: "polite", visible: true })
+      ], { gap: "sm", align: "center", wrap: true }),
+      Switch("trap-focus", { label: "Trap keyboard focus in the card below", value: $trapFocus }),
+      FocusTrap(Card([Column([Input("trap-email", { label: "Invite by email", placeholder: "you@acme.dev" }), Button("Send invite", { variant: "primary", size: "sm" })], { gap: "sm" })], { variant: "outlined" }), { active: $trapFocus, onEscape: () => { $trapFocus = false } })
+    ])
+  ])
+], "base")
+
+// =============================================================================
+// 15 · Behaviour wrappers
+// =============================================================================
+$clicks = 0
+$hovering = false
+$lastKey = ""
+$focused = false
+$seen = false
+$mountedAt = ""
+
+wrappersGroup = Group("wrappers", [
+  Grid([
+    Specimen(["OnClick", "OnMouse", "OnKeyboard", "OnFocus"], "Event wrappers", [
+      OnClick(Box([Text(`Clicked ${$clicks} times. Click me.`, { variant: "body-heavy" })], { padding: "sm", border: "subtle", radius: "md" }), { onClick: () => { $clicks += 1 } }),
+      OnMouse(Box([Text($hovering ? "The pointer is over this box" : "Hover this box", { variant: "body-heavy" })], { padding: "sm", background: $hovering ? "primary" : "muted", radius: "md" }), { enter: () => { $hovering = true }, leave: () => { $hovering = false } }),
+      OnKeyboard(Box([Text($lastKey ? `Last key: ${$lastKey}` : "Focus this box and press a key", { variant: "body-heavy" })], { padding: "sm", border: "default", radius: "md" }), { onKeyDown: (e) => { $lastKey = e.key }, focusable: true }),
+      OnFocus(Input("focus-demo", { label: $focused ? "Focused. Tab away to blur." : "Tab into this field", placeholder: "Focus me" }), { onFocus: () => { $focused = true }, onBlur: () => { $focused = false } })
+    ]),
+    Specimen(["OnIntersect", "OnMount", "Css", "Link"], "Lifecycle, styling and links", [
+      OnIntersect(Callout($seen ? "success" : "neutral", { title: $seen ? "Seen on screen" : "Waiting to be seen", description: "OnIntersect flips this the first time it scrolls into view.", compact: true }), { onEnter: () => { $seen = true }, once: true }),
+      OnMount(Text($mountedAt ? `Mounted at ${$mountedAt}` : "Mounting…", { variant: "small", tone: "muted" }), { onMount: () => { $mountedAt = new Date().toLocaleTimeString() } }),
+      Css(Card([Text("Restyled with Css(child, { style }) using theme tokens", { variant: "body-heavy" })]), { style: "border: 1px dashed var(--rui-color-primary); background: var(--rui-color-bg-subtle);" }),
+      Row([Link("Read the docs", { href: "get-started.html" }), Link("Changelog", { href: "https://github.com/asfand-dev/aktion/blob/main/CHANGELOG.md", external: true }), Link("A subtle link", { href: "components.html", variant: "subtle" })], { gap: "md", wrap: true })
+    ])
+  ], { columns: { base: 1, lg: 2 }, gap: "lg" })
+], "soft")
+
+// =============================================================================
+// 16 · Interop
+// =============================================================================
+weeklyDeploys = [14, 22, 18, 27, 31, 12, 9]
+weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+// Imperative drawing, the kind of code a third-party chart library runs.
+// Colours come from the theme tokens, so it repaints correctly per theme.
+function drawDeploys(canvas, values) {
+  const width = 320
+  const height = 120
+  const ratio = window.devicePixelRatio || 1
+  canvas.width = width * ratio
+  canvas.height = height * ratio
+  canvas.style.width = "100%"
+  canvas.style.maxWidth = `${width}px`
+  canvas.style.height = `${height}px`
+  const ctx = canvas.getContext("2d")
+  // No 2D context (canvas disabled, or a DOM without one): leave it blank.
+  if (!ctx) {
+    return
+  }
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+  ctx.clearRect(0, 0, width, height)
+  const styles = getComputedStyle(canvas)
+  const bar = styles.getPropertyValue("--rui-color-primary").trim() || "#4f46e5"
+  const ink = styles.getPropertyValue("--rui-color-text-muted").trim() || "#64748b"
+  const top = Math.max(...values)
+  const step = width / values.length
+  ctx.font = "11px sans-serif"
+  values.forEach((v, i) => {
+    const h = Math.round((v / top) * (height - 30))
+    ctx.fillStyle = bar
+    ctx.fillRect(i * step + 8, height - 18 - h, step - 16, h)
+    ctx.fillStyle = ink
+    ctx.fillText(weekdays[i], i * step + 8, height - 4)
+  })
+}
+
+nestedProgram = `$app(Card([
+  CardHeader("A nested <aktion-app>", { subtitle: "Its own program, state and theme" }),
+  Row([Badge("theme: dark", { tone: "info" }), Badge("isolated", { tone: "success" })], { gap: "xs" })
+]))`
+
+interopGroup = Group("interop", [
+  Grid([
+    Specimen(["Mount"], "Imperative widget", [
+      Text("A canvas drawn by plain DOM code that Aktion never re-renders.", { variant: "small", tone: "muted" }),
+      Mount({ tag: "canvas", props: { values: weeklyDeploys }, setup: (node, p) => { drawDeploys(node, p.values); return node }, update: (node, p) => { drawDeploys(node, p.values) } })
+    ]),
+    Specimen(["WebComponent"], "Custom elements", [
+      Text("Any custom element works. This one is another <aktion-app>, running its own program in the dark theme.", { variant: "small", tone: "muted" }),
+      WebComponent("aktion-app", { attributes: { theme: "dark", margin: "0", response: nestedProgram } })
+    ])
+  ], { columns: { base: 1, lg: 2 }, gap: "lg" })
+], "base")
+
+// =============================================================================
+// 17 · Escape hatches
+// =============================================================================
+ticketStyles = `
+  .showcase-ticket {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+    border: 1px dashed var(--rui-color-border-control);
+    border-radius: 12px;
+    background: var(--rui-color-bg-subtle);
+  }
+  .showcase-ticket strong { color: var(--rui-color-primary); }
+  .showcase-ticket code { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--rui-color-surface-muted); }
+`
+
+escapeGroup = Group("escape-hatches", [
+  Specimen(["Styles", "HTMLTag"], "Scoped CSS and raw markup", [
+    Styles(ticketStyles),
+    HTMLTag("div", { attributes: { class: "showcase-ticket", role: "group", "aria-label": "Support ticket" }, children: [
+      Icon("ticket", { size: "lg" }),
+      HTMLTag("div", { children: [
+        HTMLTag("strong", { children: [Text("Ticket #2049")] }),
+        HTMLTag("div", { children: [Text("Webhook retries exhausted for billing-service", { variant: "small" })] })
+      ] }),
+      HTMLTag("code", { children: [Text("P2")] })
+    ] })
+  ])
+], "soft")
+
+// =============================================================================
+// Footer — its OnMount tells the host page the whole tree is in the DOM.
+// =============================================================================
+footer = OnMount(Footer({
+  brand: Brand("Aktion", { logoSrc: "assets/logo.png" }),
+  tagline: `One custom element, ${totalComponents} components, any framework.`,
+  columns: [
+    FooterColumn("Learn", [Link("Get started", { href: "get-started.html" }), Link("Language", { href: "language.html" }), Link("Tutorial", { href: "tutorial.html" })]),
+    FooterColumn("Reference", [Link("Components", { href: "components.html" }), Link("Themes", { href: "themes.html" }), Link("Live demos", { href: "live-demos.html" })]),
+    FooterColumn("Project", [Link("GitHub", { href: "https://github.com/asfand-dev/aktion", external: true }), Link("Changelog", { href: "https://github.com/asfand-dev/aktion/blob/main/CHANGELOG.md", external: true }), Link("npm", { href: "https://www.npmjs.com/package/aktion-runtime", external: true })])
+  ],
+  legal: "MIT licensed. Every name, company and number on this page is fictional.",
+  social: [IconButton("brands:github", { label: "Aktion on GitHub", variant: "ghost", href: "https://github.com/asfand-dev/aktion" })]
+}), { onMount: () => { $emit("showcase:ready", { components: totalComponents }) } })
