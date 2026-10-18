@@ -1,0 +1,320 @@
+// Agent Run Inspector — a debugging console for autonomous agent runs: a filterable runs rail, the
+// selected run's span trace, per-span Input/Output/Logs, latency + token charts, a tool inventory and
+// a replay scrubber. MOCK — every run, span and payload is canned local data; no model is called and
+// no request is made, and latency is simulated with setTimeout.
+// Starting point for: LLM tracing, agent observability, eval and debugging consoles.
+// Uses: SplitView, Timeline, Tabs + JsonTree + CodeBlock, charts, $store, $effect "every(N)" replay.
+$app(Column([header, controls, kpis, workspace, charts, toolCard, issueCard, toolDrawer, editorSheet], { gap: "lg", padding: "md" }))
+
+db = $store({
+  persist: "agent-inspector.v2",
+  runId: "run_8f21c4",
+  pinned: ["run_8f21c4"],
+  select: (s, id) => { s.runId = id },
+  togglePin: (s, id) => { s.pinned = s.pinned.includes(id) ? s.pinned.filter(p => p != id) : [...s.pinned, id] }
+})
+
+$search = ""
+$statusFilter = "all"
+$cursor = 0
+$playing = false
+$loading = false
+$rerunning = false
+$onlyTools = false
+$tab = "input"
+$promptOpen = false
+$toolOpen = null
+$editorOpen = false
+$patch = "{\n  \"tool\": \"erp.match_invoice\",\n  \"batch_size\": 10,\n  \"retry\": { \"attempts\": 3, \"backoff_ms\": 800 }\n}"
+$replays = []
+
+prices = { "helix-4-turbo": { in: 3, out: 15 }, "helix-3-mini": { in: 0.35, out: 1.4 } }
+systemPrompt = "You are Atlas, an operations agent with read-only ledger access.\nAlways call a tool before asserting a number.\nStop and escalate when a batch exceeds the tool's window or the token guard fires.\nReturn JSON matching the declared output schema."
+
+runs = [
+  { id: "run_8f21c4", agent: "Atlas Ops Agent", model: "helix-4-turbo", task: "Reconcile 42 unmatched June invoices", status: "failed", started: "14:02:11", steps: [
+    { id: "s1", kind: "plan", title: "Draft the reconciliation plan", ms: 1840, tin: 1180, tout: 412, tone: "primary", at: "14:02:11", rationale: "Read the task, loaded three memory hits from earlier June closes and committed to a four-phase plan that never writes before a human confirms.", input: { goal: "Reconcile 42 unmatched June invoices", constraints: ["read-only until confirmed", "max 8 tool calls"], memory_hits: 3 }, output: { plan: ["pull unmatched", "match in ERP", "flag residuals", "write summary"], confidence: 0.82 } },
+    { id: "s2", kind: "tool", tool: "ledger.search", title: "ledger.search — unmatched invoices", ms: 312, tin: 96, tout: 0, tone: "success", at: "14:02:13", rationale: "Queried the ledger for June invoices carrying no matching ERP document id.", input: { period: "2026-06", status: "unmatched", limit: 100 }, output: { rows: 42, aggregate_eur: 318204, sample: [{ invoice: "INV-2026-06-0184", amount: 4820.5, vendor: "Northwind Logistics" }] } },
+    { id: "s3", kind: "observation", title: "42 unmatched invoices returned", ms: 90, tin: 640, tout: 118, tone: "default", at: "14:02:14", rationale: "Summarised the result set — 42 rows worth EUR 318,204, with six vendors accounting for 71 percent of the value.", input: { rows: 42, aggregate_eur: 318204 }, output: { top_vendors: ["Northwind Logistics", "Kestrel Freight", "Meridian Parts"], concentration: 0.71 } },
+    { id: "s4", kind: "tool", tool: "erp.match_invoice", title: "erp.match_invoice — batch of 42", ms: 1980, tin: 210, tout: 0, tone: "danger", at: "14:02:16", error: "429 rate_limited — the batch exceeded the tool's 25-row window", logs: ["14:02:17 erp.client retry_after=2s attempt=1", "14:02:18 erp.client abandoned batch, surfacing to planner"], rationale: "Sent all 42 invoices in one call. The ERP connector rejected the batch before matching anything.", input: { invoices: 42, mode: "strict", dry_run: true }, output: { error: "rate_limited", retry_after_s: 2, matched: 0 } },
+    { id: "s5", kind: "reflection", title: "Shrink to 10-row batches and back off", ms: 1420, tin: 2140, tout: 604, tone: "warning", at: "14:02:19", retry: true, rationale: "Re-read the tool contract, found the 25-row window it had ignored, shrank the batch to ten rows and inserted an 800 ms backoff before the next attempt.", input: { failure: "rate_limited", contract_window: 25 }, output: { revised_batch_size: 10, backoff_ms: 800, attempts_planned: 5 } },
+    { id: "s6", kind: "tool", tool: "erp.match_invoice", title: "erp.match_invoice — batch 1 of 5", ms: 1240, tin: 205, tout: 0, tone: "warning", at: "14:02:21", rationale: "The first ten-row batch matched seven invoices; three fell through on a vendor-name mismatch.", input: { invoices: 10, mode: "fuzzy", dry_run: true }, output: { matched: 7, unmatched: 3, reasons: { vendor_name_mismatch: 3 } } },
+    { id: "s7", kind: "answer", title: "Run aborted — token guard tripped", ms: 640, tin: 3180, tout: 96, tone: "danger", at: "14:02:23", error: "budget_exceeded — the 8,800 token ceiling was reached at step 7 of an estimated 11", rationale: "The guard fired before the remaining four batches could run. Nothing was written and the partial match set was discarded.", input: { budget_tokens: 8800, aborted_at: "s7" }, output: { status: "aborted", matched_discarded: 7, escalated_to: "ops-oncall" } }
+  ] },
+  { id: "run_8f19a0", agent: "Atlas Ops Agent", model: "helix-4-turbo", task: "Summarise Q3 support escalations for the Monday review", status: "succeeded", started: "09:14:02", steps: [
+    { id: "s1", kind: "plan", title: "Scope the escalation summary", ms: 1180, tin: 940, tout: 288, tone: "primary", at: "09:14:02", rationale: "Decided to pull the escalation set and its CSAT scores separately so a slow CSAT query could not block the main read.", input: { window: "2026-Q3", audience: "ops leadership" }, output: { sections: ["volume", "themes", "CSAT", "asks"], target_words: 400 } },
+    { id: "s2", kind: "tool", tool: "zendesk.search", title: "zendesk.search — Q3 escalations", ms: 420, tin: 88, tout: 0, tone: "success", at: "09:14:04", rationale: "Fetched every ticket escalated past tier two between July and September.", input: { query: "tier>2", from: "2026-07-01", to: "2026-09-30" }, output: { tickets: 212, median_age_h: 31.4 } },
+    { id: "s3", kind: "tool", tool: "zendesk.search", title: "zendesk.search — CSAT for the same set", ms: 386, tin: 74, tout: 0, tone: "success", at: "09:14:05", rationale: "Re-queried the same ticket ids for satisfaction scores rather than joining locally.", input: { ids: "212 ticket ids", fields: ["csat", "resolved_at"] }, output: { scored: 168, csat_mean: 4.1, detractors: 22 } },
+    { id: "s4", kind: "observation", title: "212 escalations across 9 themes", ms: 110, tin: 1480, tout: 402, tone: "default", at: "09:14:06", rationale: "Clustered the tickets into nine themes; billing proration and SSO onboarding together explain 46 percent of the volume.", input: { tickets: 212, scored: 168 }, output: { themes: 9, top: [{ theme: "billing proration", n: 61 }, { theme: "SSO onboarding", n: 37 }] } },
+    { id: "s5", kind: "tool", tool: "doc.write", title: "doc.write — publish the summary", ms: 690, tin: 132, tout: 0, tone: "success", at: "09:14:08", rationale: "Wrote the rendered markdown into the shared ops space and returned the permalink.", input: { space: "ops", title: "Q3 escalations", format: "markdown" }, output: { url: "ops/q3-escalations", revision: 4 } },
+    { id: "s6", kind: "answer", title: "Summary published to the ops space", ms: 1520, tin: 2260, tout: 918, tone: "success", at: "09:14:09", rationale: "Returned the permalink plus the two asks that need a decision before the Monday review.", input: { revision: 4 }, output: { url: "ops/q3-escalations", asks: ["fund proration fix", "staff SSO onboarding"] } }
+  ] },
+  { id: "run_8f17b8", agent: "Catalog Agent", model: "helix-3-mini", task: "Backfill product taxonomy for 1,204 SKUs", status: "running", started: "14:31:40", steps: [
+    { id: "s1", kind: "plan", title: "Segment the SKU backlog", ms: 760, tin: 620, tout: 214, tone: "primary", at: "14:31:40", rationale: "Split 1,204 SKUs into thirteen batches of roughly a hundred so a failure costs one batch, not the run.", input: { skus: 1204, batch_size: 96 }, output: { batches: 13, order: "by supplier" } },
+    { id: "s2", kind: "tool", tool: "catalog.scan", title: "catalog.scan — untagged SKUs", ms: 2410, tin: 96, tout: 0, tone: "success", at: "14:31:41", rationale: "Scanned the catalog for SKUs with an empty taxonomy path.", input: { filter: "taxonomy IS NULL" }, output: { rows: 1204, suppliers: 38 } },
+    { id: "s3", kind: "tool", tool: "catalog.classify", title: "catalog.classify — batch 3 of 13", ms: 1870, tin: 1840, tout: 1260, tone: "info", at: "14:31:44", rationale: "Classifying the third batch. Two batches are committed, ten are still queued behind this call.", input: { batch: 3, skus: 96, taxonomy: "gs1-v12" }, output: { classified: 61, in_flight: 35, mean_confidence: 0.88 } }
+  ] },
+  { id: "run_8f12d5", agent: "Compliance Agent", model: "helix-3-mini", task: "Draft the SOC 2 evidence checklist for the October audit", status: "succeeded", started: "07:48:19", steps: [
+    { id: "s1", kind: "plan", title: "Map controls to evidence owners", ms: 980, tin: 720, tout: 265, tone: "primary", at: "07:48:19", rationale: "Chose to walk the trust-services criteria first and only then look for artefacts, so an empty control still appears in the checklist.", input: { framework: "SOC 2 Type II", period: "2026-10" }, output: { controls: 64, owners: 11 } },
+    { id: "s2", kind: "tool", tool: "vault.list", title: "vault.list — evidence artefacts", ms: 540, tin: 84, tout: 0, tone: "success", at: "07:48:21", rationale: "Listed everything filed under the current audit period.", input: { path: "audits/2026-10", recursive: true }, output: { artefacts: 148, stale: 12 } },
+    { id: "s3", kind: "tool", tool: "vault.fetch", title: "vault.fetch — 12 stale artefacts", ms: 1310, tin: 118, tout: 0, tone: "warning", at: "07:48:22", rationale: "Fetched the twelve artefacts whose last review date fell outside the audit window.", input: { ids: 12, reason: "stale" }, output: { fetched: 12, oldest_days: 214 } },
+    { id: "s4", kind: "reflection", title: "Flag 12 controls as unevidenced", ms: 1120, tin: 1960, tout: 540, tone: "warning", at: "07:48:24", rationale: "Marked the twelve stale artefacts as unevidenced rather than counting them, and attached the owner for each one.", input: { stale: 12, controls: 64 }, output: { unevidenced: 12, coverage: 0.81 } },
+    { id: "s5", kind: "answer", title: "Checklist drafted — 81% coverage", ms: 1340, tin: 2080, tout: 742, tone: "success", at: "07:48:26", rationale: "Returned the checklist with 52 of 64 controls evidenced and a named owner on every gap.", input: { coverage: 0.81 }, output: { evidenced: 52, gaps: 12, owners_notified: 11 } }
+  ] }
+]
+
+fmtMs = ms => ms >= 1000 ? `${$util.round(ms / 1000, 2)}s` : `${ms}ms`
+usd = v => `$${$util.round(v, 4)}`
+tokensIn = r => $util.sum(r.steps.map(s => s.tin))
+tokensOut = r => $util.sum(r.steps.map(s => s.tout))
+runMs = r => $util.sum(r.steps.map(s => s.ms))
+costOf = (model, tin, tout) => tin / 1000000 * prices[model].in + tout / 1000000 * prices[model].out
+runCost = r => costOf(r.model, tokensIn(r), tokensOut(r))
+stepCost = (r, s) => costOf(r.model, s.tin, s.tout)
+runTone = s => s == "succeeded" ? "success" : s == "failed" ? "danger" : "info"
+runIcon = s => s == "succeeded" ? "circle-check" : s == "failed" ? "circle-xmark" : "spinner"
+kindIcon = k => k == "plan" ? "list-check" : k == "tool" ? "screwdriver-wrench" : k == "observation" ? "eye" : k == "reflection" ? "lightbulb" : "flag-checkered"
+kindTone = k => k == "tool" ? "info" : k == "answer" ? "primary" : "neutral"
+
+allSpans = $util.flatten(runs.map(r => r.steps.map(s => ({ run: r, step: s }))))
+toolSpans = allSpans.filter(x => x.step.kind == "tool")
+toolNames = $util.unique(toolSpans.map(x => x.step.tool))
+currentRun = runs.find(r => r.id == db.runId) ?? runs[0]
+stepCount = currentRun.steps.length
+cursorIndex = $util.clamp($cursor, 0, stepCount - 1)
+currentStep = currentRun.steps[cursorIndex]
+toolCalls = currentRun.steps.filter(s => s.kind == "tool").length
+failedCalls = currentRun.steps.filter(s => s.kind == "tool" && s.tone == "danger").length
+retries = currentRun.steps.filter(s => s.retry).length
+
+// Selecting a run swaps the trace after a visible pending beat — the timeout always clears it.
+function selectRun(id) {
+  if (id == db.runId) return
+  $playing = false
+  $loading = true
+  setTimeout(() => { db.select(id); $cursor = 0; $tab = "input"; $loading = false }, 260)
+}
+
+function selectStep(i) { $cursor = i; $playing = false }
+function stepPrev() { $cursor = cursorIndex > 0 ? cursorIndex - 1 : 0 }
+function stepNext() { $cursor = cursorIndex < stepCount - 1 ? cursorIndex + 1 : cursorIndex }
+function togglePlay() { $playing = !$playing; if ($playing && cursorIndex >= stepCount - 1) { $cursor = 0 } }
+function jumpToFailure() {
+  const i = currentRun.steps.findIndex(s => s.tone == "danger" || s.tone == "warning")
+  $playing = false
+  $cursor = i >= 0 ? i : cursorIndex
+  if (i < 0) { $toast.info("No failing or retried span in this run") }
+}
+
+$effect(() => {
+  if (!$playing) return
+  const last = currentRun.steps.length - 1
+  const next = $util.clamp($cursor, 0, last) + 1
+  $cursor = next
+  if (next >= last) { $playing = false }
+}, ["every(1100)"])
+
+function rerun() {
+  $rerunning = true
+  $toast.info(`Queued ${currentRun.id} for replay on ${currentRun.model}`)
+  setTimeout(() => {
+    $rerunning = false
+    $replays = [{ actor: currentRun.agent, title: `Replay queued for ${currentRun.id}`, description: `Same prompt, same tool contracts, ${currentRun.model}.`, time: "just now", icon: "rotate-right", tone: "info", meta: `run=${currentRun.id} spans=${stepCount} budget=${tokensIn(currentRun) + tokensOut(currentRun)}` }, ...$replays]
+    $toast.success("Replay queued — it will appear in the runs rail shortly")
+  }, 900)
+}
+
+function turnFor(r, s) {
+  const contract = s.tool ? `${s.tool}(${JSON.stringify(s.input)})` : "none — this is a reasoning turn"
+  return ["## Run", `${r.id} · ${r.task}`, "", `## Span ${s.id} (${s.kind}) at ${s.at}`, s.rationale, "", "## Tool contract", contract].join("\n")
+}
+
+function logsFor(r, s) {
+  const head = `${s.at} ${r.id} span=${s.id} kind=${s.kind} model=${r.model} start`
+  const tail = `${s.at} ${r.id} span=${s.id} elapsed=${s.ms}ms tokens=${s.tin + s.tout} status=${s.tone == "danger" ? "error" : "ok"}`
+  return [head, ...(s.logs ?? []), tail].join("\n")
+}
+
+// ---- Runs rail --------------------------------------------------------------
+statuses = ["all", "succeeded", "failed", "running"]
+countFor = s => s == "all" ? runs.length : runs.filter(r => r.status == s).length
+matches = r => $search == "" || (r.id + r.task + r.agent).toLowerCase().includes($search.toLowerCase())
+visibleRuns = runs.filter(r => ($statusFilter == "all" || r.status == $statusFilter) && matches(r))
+function runRow(r) {
+  const active = r.id == db.runId
+  return OnClick(Box([Column([
+    Row([Text(r.id, { variant: "body-heavy" }), db.pinned.includes(r.id) ? Icon("star", { size: "xs", label: "Pinned" }) : null, Spacer(), Badge(r.status, { tone: runTone(r.status), size: "xs" })], { gap: "2xs", align: "center" }),
+    Text(r.task, { variant: "small", tone: "muted", lines: 2 }),
+    Row([Icon("stopwatch", { size: "xs" }), Text(fmtMs(runMs(r)), { variant: "small" }), Icon("coins", { size: "xs" }), Text(usd(runCost(r)), { variant: "small" }), Spacer(), Text(`${r.steps.length} spans`, { variant: "small", tone: "muted" })], { gap: "2xs", align: "center", wrap: true })
+  ], { gap: "2xs" })], { key: r.id, padding: "sm", radius: "md", border: active ? "default" : "subtle", background: active ? "muted" : "surface" }), { onClick: () => selectRun(r.id) })
+}
+
+rail = Column([
+  SectionHeader("Runs", { eyebrow: "LAST 24 HOURS", status: Pill(`${visibleRuns.length} shown`, { tone: "neutral" }) }),
+  SearchBar("run-search", { placeholder: "Search run id, task or agent…", value: $search, ariaLabel: "Search agent runs" }),
+  Row(statuses.map(s => FilterPill($util.capitalize(s), { active: $statusFilter == s, count: countFor(s), onToggle: () => { $statusFilter = s }, key: s })), { gap: "2xs", wrap: true }),
+  Show(visibleRuns.length > 0, { fallback: EmptyState("No runs match", { icon: "filter-circle-xmark", description: "Clear the search or pick another status." }), children: Column(visibleRuns.map(r => runRow(r)), { gap: "xs" }) })
+], { gap: "sm" })
+
+// ---- Trace ------------------------------------------------------------------
+function traceRow(s, i) {
+  const chips = Row([
+    Badge(s.kind, { tone: kindTone(s.kind), size: "xs" }),
+    Pill(`${s.tin + s.tout} tok`, { tone: "neutral", icon: "hashtag" }),
+    Pill(usd(stepCost(currentRun, s)), { tone: "corporate", icon: "coins" }),
+    s.retry ? Badge("retried", { tone: "warning", size: "xs", icon: "rotate-right" }) : null,
+    i == cursorIndex ? Badge("current", { tone: "primary", size: "xs", icon: "location-crosshairs" }) : null
+  ], { gap: "2xs", wrap: true })
+  return TimelineItem(s.title, { key: s.id, time: `${s.at} · ${fmtMs(s.ms)}`, description: s.rationale, icon: kindIcon(s.kind), tone: s.tone, onClick: () => selectStep(i), content: [chips] })
+}
+
+shownSteps = currentRun.steps.map((s, i) => ({ s, i })).filter(x => !$onlyTools || x.s.kind == "tool")
+
+tracePane = Card([
+  SectionHeader("Trace", { eyebrow: currentRun.id, subtitle: `${stepCount} spans · ${currentRun.model} · started ${currentRun.started}`, actions: [Switch("only-tools", { label: "Tool calls only", value: $onlyTools })] }),
+  Progress(cursorIndex + 1, { max: stepCount, label: `Replay position — span ${cursorIndex + 1} of ${stepCount}`, tone: "primary", showValue: false }),
+  $loading
+    ? LoadingState("Loading trace…", { description: "Reading spans from the run store." })
+    : Timeline(shownSteps.map(x => traceRow(x.s, x.i)))
+])
+
+detailPane = Card([
+  SectionHeader(currentStep.title, { eyebrow: `SPAN ${cursorIndex + 1} OF ${stepCount} · ${currentStep.id}`, status: Badge(currentStep.kind, { tone: kindTone(currentStep.kind), icon: kindIcon(currentStep.kind) }) }),
+  currentStep.error ? Callout("Span failed", { tone: "danger", description: currentStep.error, icon: "triangle-exclamation" }) : null,
+  DescriptionList([
+    DescriptionItem("Duration", { value: fmtMs(currentStep.ms), icon: "stopwatch" }),
+    DescriptionItem("Tokens", { value: `${currentStep.tin} in · ${currentStep.tout} out`, icon: "hashtag" }),
+    DescriptionItem("Span cost", { value: usd(stepCost(currentRun, currentStep)), icon: "coins" }),
+    DescriptionItem("Tool", { value: currentStep.tool ?? "reasoning turn", icon: "screwdriver-wrench" })
+  ], { columns: 2 }),
+  Truncate(currentStep.rationale, { maxLines: 2, expandLabel: "Show full rationale" }),
+  Tabs([
+    TabItem("input", { label: "Input", icon: "arrow-right-to-bracket", children: [Column([
+      JsonTree(currentStep.input, { expandedDepth: 2, maxHeight: 200 }),
+      Separator("horizontal", { label: "System policy (shared by every span)" }),
+      Truncate(systemPrompt, { maxLines: 2, expanded: $promptOpen, expandLabel: "Show the full policy", onToggle: v => { $promptOpen = v } }),
+      CodeWindow(turnFor(currentRun, currentStep), { file: `prompts/${currentRun.id}.${currentStep.id}.txt`, language: "text", maxHeight: "180px", copy: true })
+    ], { gap: "sm" })] }),
+    TabItem("output", { label: "Output", icon: "arrow-right-from-bracket", children: [Column([
+      JsonTree(currentStep.output, { expandedDepth: 2, maxHeight: 200 }),
+      CodeBlock(JSON.stringify(currentStep.output, null, 2), { language: "json", showLineNumbers: true, wrap: true, filename: `${currentStep.id}.output.json` })
+    ], { gap: "sm" })] }),
+    TabItem("logs", { label: "Logs", icon: "terminal", children: [
+      CodeBlock(logsFor(currentRun, currentStep), { language: "bash", wrap: true, filename: `${currentRun.id}.log` })
+    ] })
+  ], { value: $tab })
+])
+
+workspace = SplitView([rail], [Column([tracePane, detailPane], { gap: "lg" })], { primaryWidth: "300px" })
+
+// ---- Header, controls, KPIs -------------------------------------------------
+pinned = db.pinned.includes(currentRun.id)
+
+header = PageHeader(currentRun.id, {
+  subtitle: `${currentRun.agent} · ${currentRun.model} · ${currentRun.task}`,
+  breadcrumbs: ["Observability", "Agent runs", currentRun.id],
+  status: Badge(currentRun.status, { tone: runTone(currentRun.status), icon: runIcon(currentRun.status) }),
+  actions: [
+    IconButton(pinned ? "star" : "regular:star", { label: pinned ? "Unpin this run" : "Pin this run", variant: "ghost", active: pinned, onClick: () => db.togglePin(currentRun.id) }),
+    CopyButton(currentRun.id, { label: "Copy run id" }),
+    Button("Rerun", { variant: "primary", size: "sm", icon: "rotate-right", loading: $rerunning, onClick: rerun })
+  ]
+})
+
+controls = Toolbar({
+  left: [
+    Text("Replay", { variant: "small-heavy", tone: "muted" }),
+    IconButton("backward-step", { label: "Previous span", onClick: stepPrev, disabled: cursorIndex == 0 }),
+    IconButton($playing ? "pause" : "play", { label: $playing ? "Pause replay" : "Play replay", variant: "primary", onClick: togglePlay }),
+    IconButton("forward-step", { label: "Next span", onClick: stepNext, disabled: cursorIndex >= stepCount - 1 }),
+    StatusDot($playing ? "Replaying" : "Paused", { tone: $playing ? "success" : "default", pulse: $playing })
+  ],
+  right: [Pill("1 span / 1.1s", { tone: "neutral", icon: "gauge-high" }), Button("Jump to first failure", { variant: "secondary", size: "sm", icon: "bug", onClick: jumpToFailure })]
+})
+
+kpis = Stats([
+  { label: "Duration", value: fmtMs(runMs(currentRun)), hint: `${stepCount} spans` },
+  { label: "Tool calls", value: String(toolCalls), hint: `${failedCalls} failed`, tone: failedCalls > 0 ? "warning" : "success" },
+  { label: "Tokens in", value: $util.format(tokensIn(currentRun), "compact"), hint: `$${prices[currentRun.model].in}/M` },
+  { label: "Tokens out", value: $util.format(tokensOut(currentRun), "compact"), hint: `$${prices[currentRun.model].out}/M` },
+  { label: "Run cost", value: usd(runCost(currentRun)), hint: currentRun.model, tone: "primary" },
+  { label: "Retries", value: String(retries), tone: retries > 0 ? "warning" : "success" }
+], { layout: "strip" })
+
+// ---- Charts -----------------------------------------------------------------
+kinds = ["plan", "tool", "observation", "reflection", "answer"]
+tokensByKind = kinds.map(k => $util.sum(currentRun.steps.filter(s => s.kind == k).map(s => s.tin + s.tout)))
+charts = Grid([
+  Card([
+    SectionHeader("Latency by span", { eyebrow: "MILLISECONDS", subtitle: "Click a bar to open that span" }),
+    BarChart(currentRun.steps.map((s, i) => `S${i + 1}`), { series: [Series("Latency", { values: currentRun.steps.map(s => s.ms) })], height: 220, yAxisLabel: "ms", ariaLabel: `Latency per span for ${currentRun.id}`, onBarClick: label => selectStep(Number(label.substring(1)) - 1) })
+  ]),
+  Card([
+    SectionHeader("Token usage", { eyebrow: "BY SPAN KIND", subtitle: `${tokensIn(currentRun) + tokensOut(currentRun)} tokens across ${stepCount} spans` }),
+    PieChart(kinds, { values: tokensByKind, donut: true, valueFormat: "percent", ariaLabel: `Token usage by span kind for ${currentRun.id}` })
+  ])
+], { columns: { base: 1, lg: 2 }, gap: "lg" })
+
+callsOf = name => toolSpans.filter(x => x.step.tool == name)
+toolRows = toolNames.map(n => ({ name: n, calls: callsOf(n).length, rate: callsOf(n).filter(x => x.step.tone == "danger").length / callsOf(n).length, avg: $util.round($util.avg(callsOf(n).map(x => x.step.ms)), 0) }))
+
+toolCard = Card([
+  SectionHeader("Tool inventory", { eyebrow: "ACROSS ALL RUNS", subtitle: "Select a row to inspect that tool's last calls", status: Pill(`${toolSpans.length} calls`, { tone: "neutral" }) }),
+  Table([
+    Col("Tool", { values: toolRows.map(t => Row([Icon("screwdriver-wrench", { size: "xs" }), Text(t.name, { variant: "body-heavy" })], { gap: "2xs", align: "center" })) }),
+    Col("Calls", { values: toolRows.map(t => String(t.calls)), align: "right" }),
+    Col("Error rate", { values: toolRows.map(t => Badge($util.percent(t.rate, 0), { tone: t.rate > 0 ? "danger" : "success", size: "xs" })) }),
+    Col("Avg latency", { values: toolRows.map(t => fmtMs(t.avg)), align: "right" }),
+    Col("Trend", { values: toolRows.map(t => Sparkline(callsOf(t.name).map(x => x.step.ms), { tone: t.rate > 0 ? "danger" : "primary", label: `${t.name} latency trend` })) })
+  ], { striped: true, density: "compact", ariaLabel: "Tool inventory", onRowClick: i => { $toolOpen = toolRows[i].name } })
+])
+
+openCalls = $toolOpen != null ? toolSpans.filter(x => x.step.tool == $toolOpen) : []
+lastPayload = openCalls.length > 0 ? $util.last(openCalls).step.output : { note: "No calls recorded" }
+
+toolDrawer = Drawer($toolOpen ?? "Tool", {
+  open: $toolOpen != null, side: "right", width: "560px", onClose: () => { $toolOpen = null },
+  children: [Column([
+    Text("Every recorded call to this tool, newest last.", { variant: "small", tone: "muted" }),
+    Table([
+      Col("Run", { values: openCalls.map(x => x.run.id) }),
+      Col("Span", { values: openCalls.map(x => x.step.id) }),
+      Col("Latency", { values: openCalls.map(x => fmtMs(x.step.ms)), align: "right" }),
+      Col("Result", { values: openCalls.map(x => Badge(x.step.tone == "danger" ? "error" : x.step.tone == "warning" ? "partial" : "ok", { tone: x.step.tone, size: "xs" })) })
+    ], { density: "compact", ariaLabel: "Recent calls", emptyLabel: "No calls recorded" }),
+    Separator("horizontal", { label: "Last payload" }),
+    JsonTree(lastPayload, { expandedDepth: 2, maxHeight: 200 })
+  ], { gap: "md" })]
+})
+
+issueSpans = allSpans.filter(x => x.step.tone == "danger" || x.step.retry)
+issues = issueSpans.map(x => ({
+  actor: x.run.agent,
+  title: `${x.step.title} · ${x.run.id}`,
+  description: x.step.error ?? "Recovered by retrying with a smaller batch and a backoff.",
+  time: x.step.at,
+  icon: x.step.error ? "circle-exclamation" : "rotate-right",
+  tone: x.step.error ? "danger" : "warning",
+  meta: `run=${x.run.id} span=${x.step.id} tool=${x.step.tool ?? "-"} tokens=${x.step.tin + x.step.tout}`
+}))
+
+function openEditor(i) {
+  const x = issueSpans[i]
+  $patch = JSON.stringify({ tool: x.step.tool ?? "planner", batch_size: 10, retry: { attempts: 3, backoff_ms: 800 }, guard: { max_tokens: 12000 } }, null, 2)
+  $editorOpen = true
+}
+
+function stagePatch() { $editorOpen = false; $toast.success("Patch staged locally — nothing was written to the run store") }
+
+issueCard = Card([
+  SectionHeader("Errors and retries", { eyebrow: "ALL RUNS", subtitle: "Select an entry to open its tool policy in the editor", status: Badge(String(issues.length), { tone: issues.length > 0 ? "warning" : "success", icon: "triangle-exclamation" }) }),
+  ActivityLog([...$replays, ...issues], { variant: "audit", emptyLabel: "No failures or retries recorded", onItemClick: i => { if (i >= $replays.length) { openEditor(i - $replays.length) } } })
+])
+
+editorSheet = Sheet([Column([
+  Callout("Staged edit", { tone: "info", description: "This console is read-only — the patch is kept in memory for the demo and never sent anywhere.", compact: true }),
+  CodeEditor("patch", { value: $patch, language: "json", filename: "tool-policy.json", minHeight: "200px", copyable: true, onSave: stagePatch, label: "Tool policy patch", hint: "Ctrl/Cmd+S stages the patch" })
+], { gap: "md" })], {
+  open: $editorOpen, side: "right", width: "520px", title: "Open in editor", onClose: () => { $editorOpen = false },
+  footer: [Button("Discard", { variant: "ghost", onClick: () => { $editorOpen = false } }), Button("Stage patch", { variant: "primary", icon: "code-commit", onClick: stagePatch })]
+})

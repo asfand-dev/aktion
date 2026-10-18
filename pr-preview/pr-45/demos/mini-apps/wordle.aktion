@@ -1,0 +1,152 @@
+// Wordle — guess the hidden five-letter word in six tries. Each guess colours
+// its letters green (right spot), amber (wrong spot) or grey (absent), and the
+// on-screen keyboard tracks what you've learned. Type on a physical keyboard
+// too. Starting point for: any word / guessing game with per-letter feedback.
+// Uses: pure scoring helper (duplicate-aware), OnKeyboard for typing, Grid board, $store streak.
+// Physical-keyboard support via OnKeyboard inline at the root (the on-screen
+// keyboard always works too). `onType` is hoisted; the root stays a container.
+$app(Column([OnKeyboard(Column([header, board, keyboard, controls], { gap: "lg" }), { onKeyDown: onType })], { gap: "lg", padding: "md" }))
+
+function onType(e) {
+  const k = e.key
+  if (k == "Enter") submit()
+  else if (k == "Backspace") backspace()
+  else if (k.length == 1 && k.toLowerCase() != k.toUpperCase()) press(k.toUpperCase())
+}
+
+words = ["AUDIO", "BRAVE", "CRANE", "DELTA", "EAGER", "FLAME", "GRADE", "HOUSE", "IVORY", "JOLLY",
+         "KNEEL", "LEMON", "MOUNT", "NOBLE", "OCEAN", "PRIDE", "QUERY", "RIVER", "STORM", "TIGER",
+         "ULTRA", "VIVID", "WHALE", "PLANT", "SHINE", "TRACE", "GLOBE", "MERIT", "PEACH", "ROBOT"]
+
+stats = $store({
+  persist: "wordle.stats",
+  played: 0, won: 0, streak: 0,
+  record: (s, didWin) => {
+    s.played += 1
+    if (didWin) { s.won += 1; s.streak += 1 } else { s.streak = 0 }
+  }
+})
+
+$answer = words[Math.floor($util.random() * words.length)]
+$guesses = []     // submitted words (strings)
+$current = ""
+$phase = "playing" // "playing" | "won" | "lost"
+$shake = 0
+
+MAX = 6
+
+// Standard Wordle scoring with duplicate handling.
+function score(guess) {
+  const res = ["absent", "absent", "absent", "absent", "absent"]
+  const counts = {}
+  for (let c of $answer) counts[c] = (counts[c] ?? 0) + 1
+  for (let i = 0; i < 5; i += 1) {
+    if (guess[i] == $answer[i]) { res[i] = "correct"; counts[guess[i]] -= 1 }
+  }
+  for (let i = 0; i < 5; i += 1) {
+    if (res[i] == "correct") continue
+    if (counts[guess[i]] > 0) { res[i] = "present"; counts[guess[i]] -= 1 }
+  }
+  return res
+}
+
+// Best-known status for each keyboard letter.
+function keyStatus(letter) {
+  let best = ""
+  for (let g of $guesses) {
+    const sc = score(g)
+    for (let i = 0; i < 5; i += 1) {
+      if (g[i] != letter) continue
+      if (sc[i] == "correct") best = "correct"
+      else if (sc[i] == "present" && best != "correct") best = "present"
+      else if (sc[i] == "absent" && best == "") best = "absent"
+    }
+  }
+  return best
+}
+
+function press(c) {
+  if ($phase != "playing" || $current.length >= 5) return
+  $current = $current + c
+}
+function backspace() {
+  if ($phase != "playing") return
+  $current = $current.slice(0, -1)
+}
+function submit() {
+  if ($phase != "playing") return
+  if ($current.length != 5) { $shake = $shake + 1; return }
+  const guess = $current
+  $guesses = [...$guesses, guess]
+  $current = ""
+  if (guess == $answer) { $phase = "won"; stats.record(true) }
+  else if ($guesses.length >= MAX) { $phase = "lost"; stats.record(false) }
+}
+function newGame() {
+  $answer = words[Math.floor($util.random() * words.length)]
+  $guesses = []
+  $current = ""
+  $phase = "playing"
+}
+
+toneFor = st => st == "correct" ? "success" : st == "present" ? "warning" : st == "absent" ? "neutral" : "default"
+
+header = PageHeader("Wordle", {
+  subtitle: "Guess the five-letter word in six tries",
+  badge: Badge(`Streak ${stats.streak}`, { tone: stats.streak > 0 ? "success" : "neutral", icon: "fire" }),
+  actions: [Button("New word", { variant: "primary", icon: "rotate-right", size: "sm", onClick: newGame })]
+})
+
+function tile(letter, st) {
+  return Center([Text(letter, { variant: "large-heavy" })], {
+    minHeight: "54px",
+    sx: {
+      borderRadius: "var(--rui-radius-sm)",
+      border: "2px solid var(--rui-color-border)",
+      background: st == "correct" ? "var(--rui-color-success)" : st == "present" ? "var(--rui-color-warning)" : st == "absent" ? "var(--rui-color-muted)" : "transparent",
+      color: st == "correct" || st == "present" ? "#fff" : "var(--rui-color-text)"
+    }
+  })
+}
+
+function rowFor(i) {
+  if (i < $guesses.length) {
+    const g = $guesses[i]
+    const sc = score(g)
+    return Grid($util.range(0, 4).map(j => tile(g[j], sc[j])), { columns: 5, gap: "xs", key: `done-${i}` })
+  }
+  if (i == $guesses.length && $phase == "playing") {
+    return Grid($util.range(0, 4).map(j => tile($current[j] ?? "", "")), { columns: 5, gap: "xs", key: `cur-${$shake}` })
+  }
+  return Grid($util.range(0, 4).map(j => tile("", "")), { columns: 5, gap: "xs", key: `empty-${i}` })
+}
+
+board = Center([Box([Column($util.range(0, MAX - 1).map(i => rowFor(i)), { gap: "xs" })], { maxWidth: "320px" })])
+
+function letterKey(c) {
+  const st = keyStatus(c)
+  return Button(c, { variant: st == "correct" ? "primary" : st == "present" ? "secondary" : "ghost", size: "sm", onClick: () => press(c), disabled: $phase != "playing" })
+}
+
+kbRows = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"]
+
+keyboard = Column([
+  Show($phase == "won", { children: Banner("Brilliant!", { message: `You found ${$answer}.`, tone: "success", icon: "trophy" }) }),
+  Show($phase == "lost", { children: Banner("Out of guesses", { message: `The word was ${$answer}.`, tone: "danger", icon: "face-frown" }) }),
+  Show($phase == "won", { children: Confetti({ fire: true, count: 90, key: stats.won }) }),
+  Center([Column([
+    Row(kbRows[0].split("").map(c => letterKey(c)), { gap: "2xs", justify: "center" }),
+    Row(kbRows[1].split("").map(c => letterKey(c)), { gap: "2xs", justify: "center" }),
+    Row([
+      Button("Enter", { variant: "primary", size: "sm", onClick: submit, disabled: $phase != "playing" }),
+      ...kbRows[2].split("").map(c => letterKey(c)),
+      IconButton("delete-left", { label: "Backspace", variant: "ghost", size: "sm", onClick: backspace, disabled: $phase != "playing" })
+    ], { gap: "2xs", justify: "center" })
+  ], { gap: "2xs" })])
+], { gap: "md" })
+
+controls = Stats([
+  StatCard("Played", { value: String(stats.played), icon: "gamepad" }),
+  StatCard("Won", { value: String(stats.won), icon: "trophy", tone: "success" }),
+  StatCard("Win rate", { value: stats.played > 0 ? $util.percent(stats.won / stats.played) : "—", icon: "percent", tone: "info" })
+])

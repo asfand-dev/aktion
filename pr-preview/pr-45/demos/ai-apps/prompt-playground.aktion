@@ -1,0 +1,320 @@
+// Prompt Playground — a prompt-engineering lab: system/user editors with {{variable}}
+// substitution, sampling controls, a restorable run history, a scoring rubric and a
+// two-run diff. Completions are MOCKED — canned inline data keyed by model + temperature,
+// no network and no real model call; tokens, latency and cost are computed from the text.
+// Starting point for: a prompt IDE or model console. Uses: 12-col Grid + GridItem,
+// CodeEditor, FieldRepeater, Sliders, TagInput, JsonTree, DiffViewer, Rating, $store.
+$app(Column([header, kpis, workspace, lower, compareCard, followUps], { gap: "lg", padding: { base: "sm", md: "md" } }))
+
+// ---- Catalogue + canned completions (invented models, priced per 1M tokens) --
+models = [
+  { id: "helio-4-turbo", name: "Helio 4 Turbo", context: "200K", inPrice: 3, outPrice: 15, speed: 180, note: "Balanced flagship" },
+  { id: "helio-4-mini", name: "Helio 4 Mini", context: "128K", inPrice: 0.35, outPrice: 1.4, speed: 340, note: "Cheap, good at format" },
+  { id: "atlas-r2", name: "Atlas R2 Reasoning", context: "400K", inPrice: 8, outPrice: 32, speed: 45, note: "Deliberate, shows its work" },
+  { id: "nimbus-lite", name: "Nimbus Lite", context: "32K", inPrice: 0.08, outPrice: 0.24, speed: 520, note: "Draft-grade, edge deployable" }
+]
+modelById = id => models.find(m => m.id == id) ?? models[0]
+tempBand = t => t <= 0.35 ? "focused" : t <= 0.95 ? "balanced" : "creative"
+fallbackDrafts = {
+  focused: "### {{feature}} is available\n\n{{feature}} is live for every workspace. It removes the manual comparison step {{audience}} ran before each deploy.\n\n- On by default, no migration required.\n- Regional rollout completes inside 48 hours.\n\n**Next step:** confirm your default reviewer in Settings.",
+  balanced: "### {{feature}} — now in every workspace\n\nWe shipped {{feature}} today. {{audience}} no longer diff two builds by hand: the service compares them on push and returns one reviewed summary.\n\n**What changed**\n- Automatic comparison on every push to a release branch.\n- One reviewed summary instead of three separate reports.\n- Inline history, so a regression traces back to the change that caused it.\n\n**Next step:** pin {{feature}} to your release checklist.",
+  creative: "### The quiet end of the manual diff\n\nFor years {{audience}} kept a second monitor open just to compare builds. {{feature}} closes that window.\n\nPush a release branch and the comparison is already waiting — grouped by intent rather than by file, with the risky changes floated to the top.\n\n**Next step:** run it against last week's release and see what you missed."
+}
+drafts = {
+  "helio-4-turbo:focused": "### {{feature}} is live\n\n{{feature}} ships today to every workspace. It removes the manual review pass {{audience}} ran before each deploy.\n\n- Enabled by default; existing projects pick it up on next open.\n- Staged rollout finishes within 48 hours across all regions.\n- Every accepted change writes an audit entry.\n\n**Next step:** open Settings → Releases and confirm your default reviewer.",
+  "helio-4-turbo:balanced": "### {{feature}} — now in every workspace\n\n{{feature}} is out today. {{audience}} no longer compare two builds by hand: the service does it on push and hands back a reviewed summary in seconds.\n\n**What changed**\n- Automatic comparison on every push to a release branch.\n- A single reviewed summary in place of three separate reports.\n- Inline history, so a regression traces back to the change that caused it.\n\n**Next step:** add {{feature}} to your release checklist and tell us what it misses.",
+  "helio-4-turbo:creative": "### Close the second monitor\n\n{{audience}} have kept a spare screen open for years purely to compare builds. {{feature}} takes that job.\n\nPush a release branch and the comparison is already waiting — grouped by intent, ranked by blast radius, with the frightening changes floated to the top and the noise folded away.\n\n- Intent-grouped summaries\n- Risk-ranked change list\n- One-click hand-off to review\n\n**Next step:** point it at last week's release and count what you missed.",
+  "atlas-r2:balanced": "### {{feature}}\n\n_Reasoning trace: 4 steps, 2 branches discarded._\n\n{{feature}} is available now. The rollout is staged, so {{audience}} on the enterprise tier see it first.\n\n1. Comparison starts on push and finishes before CI does.\n2. Findings are ranked by blast radius, not by line count.\n3. Anything ambiguous is flagged rather than guessed.\n\n**Caveat:** binary assets are skipped in this release.\n\n**Next step:** enable it on one repository before rolling it out broadly.",
+  "nimbus-lite:balanced": "### {{feature}} is out\n\n{{feature}} is available to all workspaces today.\n\n- Runs automatically on release branches.\n- Summarises what changed for {{audience}}.\n- Flags risky edits first.\n\n**Next step:** turn it on for one repo."
+}
+jsonDraft = "{\n  \"headline\": \"{{feature}} is live\",\n  \"audience\": \"{{audience}}\",\n  \"summary\": \"{{feature}} compares release branches on push and returns one reviewed summary.\",\n  \"highlights\": [\n    \"Automatic comparison on every push\",\n    \"Risk-ranked change list\",\n    \"Inline history for regressions\"\n  ],\n  \"word_budget\": {{words}},\n  \"next_step\": \"Add it to the release checklist.\"\n}"
+templates = [
+  { id: "release-note", label: "Release note", icon: "bullhorn", description: "Announce a shipped feature with one next step", system: "You are a release-notes writer for a developer tool. Prefer verbs over adjectives. Never invent a number.", user: "Write a release note for {{feature}} aimed at {{audience}}.\nHold it under {{words}} words and end with one clear next step.", vars: [{ name: "feature", value: "Semantic Diff" }, { name: "audience", value: "release managers" }, { name: "words", value: "120" }], json: false },
+  { id: "sql-explain", label: "SQL explainer", icon: "database", description: "Explain a query, then suggest one index", system: "You explain SQL to analysts. Describe intent first, mechanics second. Flag full table scans.", user: "Explain what this query does for {{audience}}, then suggest one index that would help:\n\n{{feature}}", vars: [{ name: "feature", value: "SELECT customer_id, SUM(total) FROM orders GROUP BY 1" }, { name: "audience", value: "a junior analyst" }, { name: "words", value: "150" }], json: false },
+  { id: "support-triage", label: "Support triage", icon: "life-ring", description: "Classify a ticket and draft the first reply", system: "You triage inbound support tickets. Choose exactly one severity: sev1, sev2 or sev3. Do not apologise twice.", user: "Triage this ticket for {{audience}} and draft a first reply under {{words}} words:\n\n{{feature}}", vars: [{ name: "feature", value: "Exports have returned empty CSVs since Tuesday" }, { name: "audience", value: "the on-call engineer" }, { name: "words", value: "90" }], json: false },
+  { id: "entity-extract", label: "Entity extraction", icon: "table-list", description: "Strict JSON output against a fixed schema", system: "You extract structured records. Return a single JSON object and nothing else. Use null for anything not stated.", user: "Extract the launch record for {{feature}} as JSON for {{audience}}. Keep every string under {{words}} characters.", vars: [{ name: "feature", value: "Semantic Diff" }, { name: "audience", value: "the changelog pipeline" }, { name: "words", value: "120" }], json: true }
+]
+criteria = [
+  { key: "clarity", label: "Clarity", hint: "Reads cleanly for the stated audience" },
+  { key: "grounding", label: "Grounding", hint: "No invented facts, names or numbers" },
+  { key: "format", label: "Format", hint: "Respects the requested shape and length" },
+  { key: "tone", label: "Tone", hint: "Matches the product voice" }
+]
+seedSystem = templates[0].system
+seedUser = templates[0].user
+seedVars = templates[0].vars
+
+// ---- Store: runs, pinned versions and rubric scores -------------------------
+lab = $store({
+  persist: "prompt-playground.lab",
+  runs: [
+    { id: "r-2041", label: "v3 · concise + next step", model: "helio-4-turbo", temperature: 0.4, topP: 0.9, maxTokens: 800, stops: ["</draft>"], jsonMode: false, system: seedSystem, user: seedUser, vars: seedVars, output: "### Semantic Diff is live\n\nSemantic Diff ships today to every workspace. It removes the manual review pass release managers ran before each deploy.\n\n- Enabled by default; existing projects pick it up on next open.\n- Staged rollout finishes within 48 hours across all regions.\n\n**Next step:** open Settings → Releases and confirm your default reviewer.", promptTokens: 58, completionTokens: 88, latency: 769, cost: 0.0015, at: "10:42", saved: true },
+    { id: "r-2038", label: "v2 · bullet-heavy", model: "helio-4-mini", temperature: 0.9, topP: 0.95, maxTokens: 600, stops: [], jsonMode: false, system: seedSystem, user: seedUser, vars: seedVars, output: "### Semantic Diff — now in every workspace\n\nSemantic Diff is out today. Release managers no longer compare two builds by hand.\n\n- Automatic comparison on every push to a release branch.\n- A single reviewed summary in place of three separate reports.\n- Inline history, so a regression traces back to the change that caused it.\n\n**Next step:** add Semantic Diff to your release checklist.", promptTokens: 58, completionTokens: 97, latency: 565, cost: 0.0002, at: "10:19", saved: false }
+  ],
+  scores: { "r-2041": { clarity: 5, grounding: 4, format: 4, tone: 4 } },
+  addRun: (s, run) => { s.runs = [run, ...s.runs] },
+  markSaved: (s, id) => { s.runs = s.runs.map(r => r.id == id ? { ...r, saved: true } : r) },
+  setScore: (s, id, key, value) => {
+    const current = s.scores[id] ?? {}
+    s.scores = { ...s.scores, [id]: { ...current, [key]: value } }
+  }
+})
+$systemPrompt = seedSystem
+$userPrompt = seedUser
+$vars = seedVars
+$model = "helio-4-turbo"
+$temperature = 0.4
+$topP = 0.9
+$maxTokens = 800
+$stops = ["</draft>"]
+$jsonMode = false
+$template = "release-note"
+$pending = false
+$activeRunId = "r-2041"
+$historyFilter = "all"
+$diffA = "r-2038"
+$diffB = "r-2041"
+$diffMode = "split"
+
+// ---- Derived values (every counter below is computed, never hardcoded) ------
+usd = n => "$" + n.toFixed(4)
+tokensIn = text => Math.max(1, Math.ceil(String(text ?? "").trim().length / 4))
+resolve = text => $vars.reduce((acc, v) => v.name ? acc.split("{{" + v.name + "}}").join(v.value ?? "") : acc, String(text ?? ""))
+draftFor = (id, band) => $jsonMode ? jsonDraft : drafts[id + ":" + band] ?? fallbackDrafts[band]
+runIdAt = i => lab.runs.length > i ? lab.runs[i].id : ""
+activeModel = modelById($model)
+resolvedSystem = resolve($systemPrompt)
+resolvedUser = resolve($userPrompt)
+unresolved = resolvedSystem.includes("{{") || resolvedUser.includes("{{")
+livePromptTokens = tokensIn(resolvedSystem + "\n" + resolvedUser)
+activeRun = lab.runs.find(r => r.id == $activeRunId) ?? (lab.runs.length > 0 ? lab.runs[0] : null)
+activeScores = activeRun ? lab.scores[activeRun.id] ?? {} : {}
+scoredValues = criteria.map(c => activeScores[c.key] ?? 0).filter(v => v > 0)
+rubricScore = scoredValues.length > 0 ? $util.round($util.avg(scoredValues), 1) : 0
+totalSpend = $util.sum(lab.runs.map(r => r.cost))
+avgLatency = lab.runs.length > 0 ? Math.round($util.avg(lab.runs.map(r => r.latency))) : 0
+visibleRuns = $historyFilter == "saved" ? lab.runs.filter(r => r.saved) : lab.runs
+diffLeft = lab.runs.find(r => r.id == $diffA) ?? lab.runs[0]
+diffRight = lab.runs.find(r => r.id == $diffB) ?? lab.runs[0]
+payload = {
+  model: $model,
+  messages: [{ role: "system", content: resolvedSystem }, { role: "user", content: resolvedUser }],
+  temperature: $temperature,
+  top_p: $topP,
+  max_tokens: $maxTokens,
+  stop: $stops,
+  response_format: $jsonMode ? { type: "json_object" } : { type: "text" },
+  stream: true
+}
+
+// ---- Actions — the "model call" is a setTimeout over inline data ------------
+function run() {
+  if ($pending) return
+  $pending = true
+  const m = modelById($model)
+  const body = resolve(draftFor($model, tempBand($temperature)))
+  const promptTokens = tokensIn(resolvedSystem + "\n" + resolvedUser)
+  const completionTokens = Math.min($maxTokens, tokensIn(body))
+  const latency = Math.round(280 + completionTokens / m.speed * 1000)
+  const cost = promptTokens / 1000000 * m.inPrice + completionTokens / 1000000 * m.outPrice
+  const id = "r-" + String($util.now())
+  const label = "v" + String(lab.runs.length + 1) + " · " + m.name + " @ " + $temperature
+  const record = { id: id, label: label, model: $model, temperature: $temperature, topP: $topP, maxTokens: $maxTokens, stops: $stops, jsonMode: $jsonMode, system: $systemPrompt, user: $userPrompt, vars: $vars, output: body, promptTokens: promptTokens, completionTokens: completionTokens, latency: latency, cost: cost, at: $util.formatDate($util.now(), "HH:mm"), saved: false }
+  setTimeout(() => {
+    lab.addRun(record)
+    $activeRunId = id
+    $diffB = id
+    $pending = false
+    $toast.success(m.name + " answered in " + latency + " ms")
+  }, Math.round(Math.min(1500, 380 + 26000 / m.speed)))
+}
+
+function restore(id) {
+  const r = lab.runs.find(x => x.id == id)
+  if (!r) return
+  $model = r.model
+  $temperature = r.temperature
+  $topP = r.topP
+  $maxTokens = r.maxTokens
+  $stops = r.stops
+  $jsonMode = r.jsonMode
+  $systemPrompt = r.system
+  $userPrompt = r.user
+  $vars = r.vars
+  $activeRunId = id
+  $toast.info("Restored " + r.label)
+}
+
+function loadTemplate(id) {
+  const t = templates.find(x => x.id == id)
+  if (!t) return
+  $template = id
+  $systemPrompt = t.system
+  $userPrompt = t.user
+  $vars = t.vars
+  $jsonMode = t.json
+  $toast.info("Loaded the " + t.label.toLowerCase() + " template")
+}
+
+function applyFollowUp(key) {
+  if (key == "cool") { $temperature = 0.2 }
+  if (key == "cheap") { $model = "nimbus-lite" }
+  if (key == "json") { $jsonMode = true }
+  if (key == "latest") {
+    $diffA = runIdAt(1)
+    $diffB = runIdAt(0)
+  }
+  $toast.info(followUpNotes[key] ?? "Applied")
+}
+
+followUpNotes = { cool: "Temperature dropped to 0.2 — the request preview updated too.", cheap: "Switched to Nimbus Lite: a fraction of the output price.", json: "JSON mode on — the mock now returns a single object.", latest: "Diff set to the two most recent runs." }
+function saveVersion() { if (activeRun) { lab.markSaved(activeRun.id) } }
+function scoreRun(key, value) { if (activeRun) { lab.setScore(activeRun.id, key, value) } }
+function addVar() { $vars = [...$vars, { name: "var" + String($vars.length + 1), value: "" }] }
+function removeVar(index) { $vars = $vars.filter((v, i) => i != index) }
+function editVars(index, field, value, rows) { $vars = rows.map(r => ({ name: r.name, value: r.value })) }
+
+// ---- Header + computed KPI strip --------------------------------------------
+header = PageHeader("Prompt playground", {
+  subtitle: activeModel.name + " · " + activeModel.context + " context · $" + activeModel.outPrice.toFixed(2) + " per 1M output tokens",
+  breadcrumbs: ["Workbench", "Prompts", "Release notes"],
+  status: Badge($pending ? "Running" : "Idle", { tone: $pending ? "info" : "neutral", icon: $pending ? "bolt" : "circle-check" }),
+  actions: [
+    Button("Reset to template", { variant: "ghost", icon: "rotate-left", size: "sm", onClick: () => loadTemplate($template) }),
+    Button($pending ? "Running…" : "Run prompt", { variant: "primary", icon: "play", size: "sm", loading: $pending, onClick: run })
+  ]
+})
+kpis = Stats([
+  { label: "Runs", value: String(lab.runs.length), hint: lab.runs.filter(r => r.saved).length + " pinned as versions" },
+  { label: "Avg latency", value: avgLatency + " ms", hint: "across this session", tone: avgLatency > 1500 ? "warning" : "success" },
+  { label: "Session spend", value: usd(totalSpend), hint: "mocked billing", tone: "primary" },
+  { label: "Prompt size", value: livePromptTokens + " tok", hint: "system + resolved user" },
+  { label: "Rubric", value: rubricScore > 0 ? rubricScore + " / 5" : "unscored", hint: scoredValues.length + " of 4 criteria", tone: rubricScore >= 4 ? "success" : "warning" }
+], { layout: "strip" })
+
+// ---- Editing column ---------------------------------------------------------
+modelCard = Card([
+  SectionHeader("Model & sampling", { eyebrow: "ENDPOINT", status: Pill(activeModel.note, { tone: "corporate" }) }),
+  Select("model", { items: models.map(m => ({ value: m.id, label: m.name })), value: $model, label: "Model" }),
+  DescriptionList([
+    DescriptionItem("Context window", { value: activeModel.context + " tokens", icon: "database" }),
+    DescriptionItem("Input price", { value: "$" + activeModel.inPrice.toFixed(2) + " / 1M", icon: "arrow-right-to-bracket" }),
+    DescriptionItem("Output price", { value: "$" + activeModel.outPrice.toFixed(2) + " / 1M", icon: "coins" }),
+    DescriptionItem("Throughput", { value: activeModel.speed + " tok/s", icon: "gauge-high" })
+  ], { columns: 2 }),
+  Separator("horizontal"),
+  Slider("temperature", { min: 0, max: 2, step: 0.1, value: $temperature, label: "Temperature", showValue: true, marks: [0, 1, 2], hint: "Selects the " + tempBand($temperature) + " variant of the canned completion." }),
+  Slider("topP", { min: 0.1, max: 1, step: 0.05, value: $topP, label: "Top-p", showValue: true }),
+  Slider("maxTokens", { min: 128, max: 4096, step: 64, value: $maxTokens, label: "Max output tokens", showValue: true, suffix: " tok" }),
+  TagInput("stops", { value: $stops, label: "Stop sequences", placeholder: "Add a stop sequence", max: 4, hint: "Sent as the stop array in the request." }),
+  Switch("jsonMode", { label: "JSON mode", value: $jsonMode, description: "Constrain the completion to one JSON object." })
+])
+promptCard = Card([
+  SectionHeader("Prompt", { eyebrow: "TEMPLATE", subtitle: "Placeholders resolve from the variables below", actions: [Badge(String($vars.length) + " vars", { tone: "info", icon: "code", size: "sm" })] }),
+  CodeEditor("systemPrompt", { value: $systemPrompt, language: "markdown", label: "System prompt", filename: "system.md", minHeight: "110px", maxHeight: "180px", copyable: true }),
+  TextArea("userPrompt", { value: $userPrompt, label: "User prompt", rows: 4, autoResize: true, hint: "Use {{name}} placeholders — they are substituted live." }),
+  FormSection("Variables", [
+    FieldRepeater($vars, { fields: [{ name: "name", label: "Name", placeholder: "feature" }, { name: "value", label: "Value", placeholder: "Semantic Diff" }], onAdd: addVar, onRemove: removeVar, onChange: editVars, addLabel: "Add variable", removeLabel: "Remove", max: 6 })
+  ], { helper: "Values flow into the resolved prompt, the request payload and the mocked completion." }),
+  Show(unresolved, { children: Callout("warning", { title: "Unresolved placeholder", description: "The resolved prompt still contains {{…}} — add a matching variable before running.", icon: "triangle-exclamation", compact: true }) }),
+  CodeBlock({ language: "text", codeString: resolvedUser, filename: "resolved-prompt.txt", wrap: true, copy: true })
+])
+pendingBlock = Column([
+  Row([TypingIndicator(activeModel.name), Badge("sampling", { tone: "info", icon: "bolt", size: "sm" })], { gap: "sm", align: "center" }),
+  Progress({ indeterminate: true, label: "Streaming completion", tone: "primary" }),
+  Skeleton({ variant: "paragraph", lines: 6, label: "Waiting for the completion" })
+], { gap: "md" })
+
+function resultBlock(r) {
+  const m = modelById(r.model)
+  const chips = [Badge("T " + r.temperature, { tone: "neutral", size: "xs", icon: "temperature-half" }), Badge("top-p " + r.topP, { tone: "neutral", size: "xs" }), Badge(r.jsonMode ? "json_object" : "text", { tone: r.jsonMode ? "primary" : "neutral", size: "xs" }), Badge(r.stops.length > 0 ? r.stops.length + " stop seq" : "no stop seq", { tone: "neutral", size: "xs" }), Show(r.saved, { children: Badge("pinned", { tone: "success", size: "xs", icon: "star" }) })]
+  return Column([
+    Stats([
+      { label: "Prompt", value: r.promptTokens + " tok", hint: usd(r.promptTokens / 1000000 * m.inPrice) },
+      { label: "Completion", value: r.completionTokens + " tok", hint: usd(r.completionTokens / 1000000 * m.outPrice) },
+      { label: "Latency", value: r.latency + " ms", hint: m.speed + " tok/s", tone: r.latency > 1500 ? "warning" : "success" },
+      { label: "Cost", value: usd(r.cost), hint: "this run", tone: "primary" }
+    ], { layout: "strip" }),
+    Box([Prose([Markdown(r.output)], { size: "sm" })], { padding: "md", border: "subtle", radius: "md", background: "muted" }),
+    Row(chips, { gap: "2xs", wrap: true }),
+    Row([CopyButton(r.output, { label: "Copy completion" }), Button("Pin as version", { variant: "secondary", size: "sm", icon: "floppy-disk", disabled: r.saved, onClick: saveVersion }), Button("Re-run", { variant: "ghost", size: "sm", icon: "arrows-rotate", onClick: run }), Spacer(), Text(r.at, { variant: "small", tone: "muted" })], { gap: "sm", align: "center", wrap: true })
+  ], { gap: "md" })
+}
+
+emptyOutput = EmptyState("No completion yet", { description: "Run the prompt to see a mocked completion with computed token, latency and cost figures.", icon: "wand-magic-sparkles", action: Button("Run prompt", { variant: "primary", icon: "play", onClick: run }) })
+outputCard = Card([
+  SectionHeader("Completion", { eyebrow: activeModel.name.toUpperCase(), status: StatusDot($pending ? "Sampling" : "Ready", { tone: $pending ? "info" : "success", pulse: $pending }) }),
+  Show($pending, { children: pendingBlock, fallback: activeRun ? resultBlock(activeRun) : emptyOutput })
+])
+requestCard = Card([
+  SectionHeader("Request payload", { eyebrow: "MIRRORS THE CONTROLS", subtitle: "POST /v1/completions" }),
+  Tabs([
+    TabItem("json", { label: "JSON", icon: "code", children: [CodeBlock({ language: "json", codeString: JSON.stringify(payload, null, 2), wrap: true, filename: "request.json" })] }),
+    TabItem("tree", { label: "Tree", icon: "sitemap", children: [JsonTree(payload, { expandedDepth: 2, maxHeight: 280 })] })
+  ], { defaultValue: "json", fitted: true })
+])
+
+// ---- History rail — selecting a run restores every input --------------------
+runRow = r => ListItem(r.label, {
+  description: modelById(r.model).name + " · " + r.latency + " ms · " + usd(r.cost),
+  icon: r.saved ? "star" : "clock-rotate-left",
+  active: activeRun != null && r.id == activeRun.id,
+  onClick: () => restore(r.id),
+  trailing: [Badge(r.completionTokens + " tok", { tone: "neutral", size: "xs" })]
+})
+historyCard = Card([
+  SectionHeader("Run history", { eyebrow: "VERSIONS", status: Badge(String(lab.runs.length), { tone: "primary" }) }),
+  ToggleGroup("historyFilter", { items: [{ value: "all", label: "All" }, { value: "saved", label: "Pinned" }], value: $historyFilter, size: "sm", label: "History filter" }),
+  Show(visibleRuns.length > 0, {
+    children: List(visibleRuns.map(r => runRow(r)), { gap: "2xs" }),
+    fallback: EmptyState("Nothing pinned yet", { description: "Pin a completion as a version to keep it here.", icon: "star" })
+  }),
+  Show(lab.runs.length > 1, { children: Column([Separator("horizontal", { label: "Latency trend" }), Sparkline(lab.runs.map(r => r.latency).reverse(), { tone: "primary", width: "100%", height: 32, label: "Latency of recent runs, newest last" })], { gap: "xs" }) }),
+  Text("Selecting a run restores its prompt, variables and sampling settings.", { variant: "small", tone: "muted" })
+])
+workspace = Grid([
+  GridItem(Column([modelCard, promptCard], { gap: "lg" }), { span: 12, spanAt: { lg: 5 } }),
+  GridItem(Column([outputCard, requestCard], { gap: "lg" }), { span: 12, spanAt: { lg: 4 } }),
+  GridItem(historyCard, { span: 12, spanAt: { lg: 3 } })
+], { columns: 12, gap: "lg" })
+criterionRow = c => Row([
+  StackItem(Column([Text(c.label, { variant: "body-heavy" }), Text(c.hint, { variant: "small", tone: "muted" })], { gap: "3xs" }), { grow: 1 }),
+  Rating(activeScores[c.key] ?? 0, { max: 5, size: "sm", interactive: true, allowClear: true, label: c.label + " score", onChange: v => scoreRun(c.key, v) })
+], { gap: "sm", align: "center" })
+
+evalCard = Card([
+  SectionHeader("Evaluation", { eyebrow: "RUBRIC", subtitle: activeRun ? "Scoring " + activeRun.label : "No run selected", status: Pill(rubricScore > 0 ? rubricScore + " / 5" : "unscored", { tone: rubricScore >= 4 ? "success" : "activating" }) }),
+  Show(activeRun != null, {
+    children: Column([
+      Column(criteria.map(c => criterionRow(c)), { gap: "sm" }),
+      Progress({ value: rubricScore * 20, label: "Overall rubric score", tone: rubricScore >= 4 ? "success" : "warning", showValue: true }),
+      Callout("info", { title: "Scores are kept per run", description: "Restore an older version from the history rail and its scores come back with it.", icon: "circle-info", compact: true })
+    ], { gap: "md" }),
+    fallback: EmptyState("Nothing to score", { description: "Run the prompt first.", icon: "clipboard-check" })
+  })
+])
+templatesCard = Card([
+  SectionHeader("Starter templates", { eyebrow: "LIBRARY", subtitle: "Loads the system prompt, user prompt and variables" }),
+  Grid(templates.map(t => Tile(t.label, { icon: t.icon, description: t.description, value: t.vars.length + " vars", tone: t.id == $template ? "primary" : "default", selected: t.id == $template, onClick: () => loadTemplate(t.id) })), { columns: { base: 1, sm: 2 }, gap: "sm" })
+])
+lower = Grid([evalCard, templatesCard], { columns: { base: 1, lg: 2 }, gap: "lg" })
+compareCard = Card([
+  SectionHeader("Compare runs", { eyebrow: "DIFF", subtitle: "Line-level diff of two completions", actions: [ToggleGroup("diffMode", { items: [{ value: "split", label: "Split" }, { value: "unified", label: "Unified" }], value: $diffMode, size: "sm", label: "Diff layout" })] }),
+  Show(lab.runs.length > 1, {
+    children: Column([
+      Grid([
+        Select("diffA", { items: lab.runs.map(r => ({ value: r.id, label: r.label })), value: $diffA, label: "Baseline" }),
+        Select("diffB", { items: lab.runs.map(r => ({ value: r.id, label: r.label })), value: $diffB, label: "Candidate" })
+      ], { columns: { base: 1, md: 2 }, gap: "md" }),
+      DiffViewer(diffLeft ? diffLeft.output : "", diffRight ? diffRight.output : "", { mode: $diffMode, leftTitle: diffLeft ? diffLeft.label : "Baseline", rightTitle: diffRight ? diffRight.label : "Candidate", lineNumbers: true, maxHeight: 300 }),
+      Row([Badge(diffLeft ? diffLeft.completionTokens + " tok" : "0 tok", { tone: "neutral", size: "xs" }), Icon("arrow-right", { size: "xs" }), Badge(diffRight ? diffRight.completionTokens + " tok" : "0 tok", { tone: "primary", size: "xs" }), Spacer(), Text(diffLeft && diffRight ? "Cost delta " + usd(diffRight.cost - diffLeft.cost) : "", { variant: "small", tone: "muted" })], { gap: "xs", align: "center", wrap: true })
+    ], { gap: "md" }),
+    fallback: EmptyState("Two runs needed", { description: "Run the prompt again to compare variants side by side.", icon: "code-compare" })
+  })
+])
+
+followUps = Card([
+  SectionBlock("Where to take this next", [
+    FollowUpBlock([{ label: "Cool it down to 0.2", message: "cool" }, { label: "Switch to the cheapest model", message: "cheap" }, { label: "Force JSON output", message: "json" }, { label: "Diff the two newest runs", message: "latest" }], { onSelect: (message, label) => applyFollowUp(message) })
+  ], { description: "Each suggestion edits the live settings — the request payload and mocked completion follow.", icon: "wand-magic-sparkles" })
+])

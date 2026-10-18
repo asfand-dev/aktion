@@ -1,0 +1,93 @@
+// Cocktail Explorer — search TheCocktailDB, browse a gallery, open a full recipe.
+// Uses: declarative $query (cached per search), Sheet recipe panel, staggered animate gallery.
+$app(Column([header, searchRow, results, recipeSheet], { gap: "lg", padding: "md" }))
+
+$q = "margarita"
+$term = "margarita"
+$mode = "search"
+$seed = 0
+$selected = null
+
+searchUrl = q => `https://www.thecocktaildb.com/api/json/v1/1/search.php?s=${encodeURIComponent(q)}`
+randomUrl = "https://www.thecocktaildb.com/api/json/v1/1/random.php"
+
+// One declarative, cached query — repeat searches hit the cache, "Surprise me" busts it via the key.
+$drinks = $query({
+  url: $mode == "random" ? randomUrl : searchUrl($term || ""),
+  key: $mode == "random" ? `drink-rand-${$seed}` : `drink-search-${$term}`,
+  ttl: 300000
+})
+
+function loadSearch() { $mode = "search"; $term = $q }
+function loadRandom() { $mode = "random"; $seed = $seed + 1 }
+
+function ingredients(d) {
+  const out = []
+  for (let i = 1; i <= 15; i++) {
+    const ing = d["strIngredient" + i]
+    const measure = d["strMeasure" + i]
+    if (ing && ing.trim()) out.push({ name: ing.trim(), measure: (measure || "").trim() })
+  }
+  return out
+}
+
+function openRecipe(d) { $selected = d }
+function closeRecipe() { $selected = null }
+
+header = PageHeader("Cocktail Explorer", {
+  subtitle: "Recipes from TheCocktailDB",
+  badge: Badge("Live API · cached", { tone: "success", icon: "martini-glass-citrus" }),
+  actions: [Button("Surprise me", { onClick: loadRandom, variant: "secondary", icon: "shuffle" })]
+})
+
+searchRow = Row([
+  StackItem(SearchBar("q", { placeholder: "Search by name… e.g. mojito, negroni", value: $q, onSubmit: loadSearch }), { grow: 1 }),
+  Button("Search", { onClick: loadSearch, variant: "primary", icon: "magnifying-glass" })
+], { gap: "sm", align: "end" })
+
+drinkCard = (d, i) => MediaCard(d.strDrink, {
+  imageSrc: d.strDrinkThumb,
+  description: d.strCategory || "",
+  badge: Badge(d.strAlcoholic || "", { tone: (d.strAlcoholic == "Alcoholic") ? "warning" : "success", size: "sm" }),
+  tags: d.strGlass ? [d.strGlass] : [],
+  ratio: "1:1",
+  actions: [Button("View recipe", { onClick: () => openRecipe(d), variant: "primary", icon: "book-open", fullWidth: true })],
+  animate: { preset: "fade-up", delay: Math.min(i, 7) * 60 },
+  sx: { states: { hover: { translateY: "-3px", shadow: "lg" } } }
+})
+
+gallery = Show($drinks.data && $drinks.data.drinks, {
+  fallback: EmptyState("No cocktails found", { description: `Nothing matched "${$term}". Try another name or hit Surprise me.`, icon: "magnifying-glass", action: Button("Random cocktail", { onClick: loadRandom, variant: "primary" }) }),
+  children: Grid(($drinks.data && $drinks.data.drinks ? $drinks.data.drinks : []).map((d, i) => drinkCard(d, i)), { columns: { base: 1, sm: 2, lg: 4 }, gap: "lg" })
+})
+
+results = Async($drinks, {
+  loading: LoadingState("Mixing results…"),
+  error: ErrorState("Couldn't reach the bar", { description: "The cocktail API didn't respond. Try again.", actions: [Button("Retry", { onClick: () => $drinks.refetch(), variant: "primary", icon: "rotate-right" })] }),
+  data: gallery
+})
+
+recipeBody = $selected
+  ? Column([
+      Row([
+        Image($selected.strDrinkThumb, { alt: $selected.strDrink, ratio: "1:1", fit: "cover" }),
+        StackItem(Column([
+          Row([Badge($selected.strCategory || "Cocktail", { tone: "info", size: "sm" }), Badge($selected.strAlcoholic || "", { tone: "warning", size: "sm" }), Badge($selected.strGlass || "", { tone: "neutral", size: "sm" })], { gap: "xs", wrap: true }),
+          Text("Ingredients", { variant: "large-heavy" }),
+          List(ingredients($selected).map(x => ListItem(x.name, { description: x.measure, icon: "wine-bottle" })))
+        ], { gap: "sm" }), { grow: 1, minWidth: "220px" })
+      ], { gap: "lg", align: "start", wrap: true }),
+      Separator("horizontal", { label: "method" }),
+      Text("Instructions", { variant: "large-heavy" }),
+      Text($selected ? ($selected.strInstructions || "No instructions provided.") : "", { variant: "body" }),
+      Button("Close", { variant: "secondary", onClick: closeRecipe, fullWidth: true })
+    ], { gap: "md" })
+  : Text("", { variant: "small" })
+
+// Slide-in side panel — Escape closes it and focus is trapped automatically.
+recipeSheet = Sheet([recipeBody], {
+  open: !!$selected,
+  side: "right",
+  title: $selected ? $selected.strDrink : "Recipe",
+  onClose: closeRecipe
+})

@@ -1,0 +1,321 @@
+// Model Evaluation — a benchmark console for eight invented models: a per-suite weighted
+// composite, a sortable leaderboard, radar/bar/scatter comparisons, per-task sample outputs
+// with rubric voting, and a cost calculator. EVERYTHING HERE IS SIMULATED LOCALLY: the models,
+// providers, prices and scores are invented, and the "model responses" in the drill-down are
+// canned strings held in this file — no request is made, no model is called, nothing is fetched.
+// Starting point for: eval dashboards, model routers.
+// Uses: DataGrid + FilterPill, RadarChart/BarChart/ScatterChart, ComparisonTable, Tabs, Rating, Sliders.
+$app(Column([Header(), Disclosure(), RunPanel(), Kpis(), Leaderboard(), Comparison(), Drilldown(), Calculator(), Methodology()], { gap: "lg", padding: { base: "sm", md: "lg" } }))
+
+capabilities = ["Reasoning", "Coding", "Math", "Retrieval", "Vision", "Safety"]
+capIcons = ["brain", "code", "square-root-variable", "magnifying-glass", "eye", "shield-halved"]
+
+models = [
+  { id: "hl9", name: "Helios 9", provider: "Aster Labs", caps: [92, 89, 94, 86, 83, 90], latency: 940, priceIn: 4.5, priceOut: 18, context: 400, maxOut: "64K", released: "2026-04-02", tools: true, json: true, vision: true, tuning: "LoRA adapters", batch: "50% off", residency: "EU + US", license: "Proprietary" },
+  { id: "hl9m", name: "Helios 9 Mini", provider: "Aster Labs", caps: [83, 82, 84, 80, 74, 88], latency: 310, priceIn: 0.6, priceOut: 2.4, context: 200, maxOut: "32K", released: "2026-04-02", tools: true, json: true, vision: true, tuning: "LoRA adapters", batch: "50% off", residency: "EU + US", license: "Proprietary" },
+  { id: "mv3", name: "Meridian 3", provider: "Northgate AI", caps: [88, 93, 85, 88, 79, 86], latency: 620, priceIn: 3.0, priceOut: 12, context: 256, maxOut: "32K", released: "2026-02-18", tools: true, json: true, vision: false, tuning: "Full fine-tune", batch: "40% off", residency: "US only", license: "Proprietary" },
+  { id: "mv3f", name: "Meridian 3 Flash", provider: "Northgate AI", caps: [79, 84, 76, 82, 71, 84], latency: 180, priceIn: 0.35, priceOut: 1.4, context: 128, maxOut: "16K", released: "2026-02-18", tools: true, json: true, vision: false, tuning: "Not offered", batch: "40% off", residency: "US only", license: "Proprietary" },
+  { id: "or2", name: "Orinoco 2", provider: "Veldt Systems", caps: [85, 78, 88, 91, 88, 82], latency: 760, priceIn: 2.2, priceOut: 9, context: 1000, maxOut: "64K", released: "2026-05-27", tools: true, json: false, vision: true, tuning: "Adapter only", batch: "Not offered", residency: "EU + US + APAC", license: "Proprietary" },
+  { id: "cb7", name: "Cobalt 7", provider: "Kestrel Research", caps: [90, 86, 81, 84, 68, 93], latency: 1120, priceIn: 5.2, priceOut: 21, context: 200, maxOut: "32K", released: "2026-01-09", tools: true, json: true, vision: false, tuning: "Full fine-tune", batch: "25% off", residency: "EU only", license: "Proprietary" },
+  { id: "sg1", name: "Sagebrush 1", provider: "Open Collective", caps: [76, 80, 72, 77, 62, 79], latency: 240, priceIn: 0.18, priceOut: 0.54, context: 128, maxOut: "8K", released: "2025-11-14", tools: false, json: true, vision: false, tuning: "Self-hosted", batch: "Self-hosted", residency: "Anywhere", license: "Apache 2.0" },
+  { id: "tv4", name: "Tessellate 4V", provider: "Lumen Foundry", caps: [81, 75, 79, 85, 94, 85], latency: 690, priceIn: 1.9, priceOut: 7.6, context: 300, maxOut: "16K", released: "2026-03-21", tools: true, json: true, vision: true, tuning: "Adapter only", batch: "30% off", residency: "EU + US", license: "Source-available" }
+]
+
+suites = [
+  { id: "swe-pro", label: "SWE-Pro 240", tasks: 240, avgTokens: 14000, weights: [0.25, 0.35, 0.10, 0.15, 0.05, 0.10] },
+  { id: "reason-hard", label: "ReasonHard v3", tasks: 180, avgTokens: 9000, weights: [0.40, 0.10, 0.30, 0.10, 0.02, 0.08] },
+  { id: "rag-1k", label: "RAG-1K Retrieval", tasks: 1000, avgTokens: 22000, weights: [0.20, 0.08, 0.05, 0.47, 0.05, 0.15] },
+  { id: "mm-bench", label: "Multimodal Bench", tasks: 320, avgTokens: 11000, weights: [0.18, 0.10, 0.10, 0.14, 0.40, 0.08] },
+  { id: "redteam", label: "Redteam Safety 500", tasks: 500, avgTokens: 4200, weights: [0.20, 0.04, 0.03, 0.08, 0.05, 0.60] }
+]
+
+$suite = "swe-pro"
+$search = ""
+$capFilters = []
+$picked = ["mv3", "hl9"]
+$sort = { key: "Overall", direction: "desc" }
+$page = 1
+$running = false
+$progress = 0
+$runSeed = 0
+$lastRun = "11 Jun, 04:12"
+$task = "sql-join"
+$votes = []
+$volume = 750
+$tokens = 6000
+$outShare = 30
+
+// ---- Scoring (deterministic mock: each run applies a small measurement drift) ----
+function activeSuite() { return suites.find(s => s.id == $suite) ?? suites[0] }
+function drift(v, seed) { return $util.clamp(Math.round((v + Math.sin(seed * 1.7 + $runSeed * 2.3) * 1.3) * 10) / 10, 0, 100) }
+function scoreRow(m, mi) {
+  const w = activeSuite().weights
+  const caps = m.caps.map((v, ci) => drift(v, mi * 6 + ci))
+  const overall = Math.round($util.sum(caps.map((v, ci) => v * w[ci])) * 10) / 10
+  return { ...m, caps: caps, overall: overall }
+}
+function ranked() { return models.map((m, i) => scoreRow(m, i)).sort((a, b) => b.overall - a.overall) }
+function blended(m) { return Math.round((m.priceIn * 0.75 + m.priceOut * 0.25) * 100) / 100 }
+function pickedModels() { return ranked().filter(m => $picked.includes(m.id)) }
+function capCount(ci) { return ranked().filter(m => m.caps[ci] >= 85).length }
+function matches(m) {
+  const q = $search.trim().toLowerCase()
+  const hitQuery = q == "" || (m.name + " " + m.provider).toLowerCase().includes(q)
+  return hitQuery && $capFilters.every(c => m.caps[capabilities.indexOf(c)] >= 85)
+}
+function rows() { return ranked().filter(m => matches(m)) }
+function evalSpend() { const s = activeSuite(); return $util.sum(models.map(m => (s.tasks * s.avgTokens / 1000000) * (m.priceIn * 0.75 + m.priceOut * 0.25))) }
+function monthlyCost(m) { return $volume * 1000 * ($tokens / 1000000) * (m.priceIn * (1 - $outShare / 100) + m.priceOut * ($outShare / 100)) }
+function voteFor(taskId, modelId) { const v = $votes.find(x => x.task == taskId && x.model == modelId); return v ? v.value : 0 }
+function tally(modelId) { const vs = $votes.filter(v => v.model == modelId).map(v => v.value); return { n: vs.length, avg: vs.length > 0 ? Math.round($util.avg(vs) * 10) / 10 : 0, pref: vs.filter(v => v >= 4).length } }
+// ---- Actions ----------------------------------------------------------------
+function togglePick(id) {
+  if ($picked.includes(id)) { $picked = $picked.filter(p => p != id); return }
+  if ($picked.length >= 3) { $toast.info("The comparison holds three models — deselect one first"); return }
+  $picked = [...$picked, id]
+}
+function toggleCap(c) {
+  $capFilters = $capFilters.includes(c) ? $capFilters.filter(x => x != c) : [...$capFilters, c]
+  $page = 1
+}
+function pickTopThree() { $picked = ranked().slice(0, 3).map(m => m.id) }
+function clearPicks() { $picked = [] }
+function changeSuite(v) { $suite = v; $page = 1 }
+function runEval() {
+  if ($running) return
+  $running = true
+  $progress = 0
+  tick()
+}
+function tick() {
+  setTimeout(() => {
+    $progress = Math.min(100, $progress + 25)
+    if ($progress >= 100) { finishRun() } else { tick() }
+  }, 320)
+}
+function finishRun() {
+  // Clear the pending flags first: nothing below may leave the run panel stuck on screen.
+  $running = false
+  $progress = 0
+  $runSeed = $runSeed + 1
+  $lastRun = $util.formatDate($util.now(), "MMM D, HH:mm")
+  $toast.success(`${activeSuite().label} re-scored · ${models.length} models`)
+}
+function recordVote(taskId, modelId, value) {
+  $votes = [...$votes.filter(v => !(v.task == taskId && v.model == modelId)), { task: taskId, model: modelId, value: value }]
+  $toast.success(`Rubric vote saved · ${value} of 5`)
+}
+stageOf = p => p < 25 ? "Spinning up sandboxes" : p < 50 ? "Streaming task prompts" : p < 75 ? "Scoring against the rubric ensemble" : "Aggregating capability scores"
+// ---- Sections ---------------------------------------------------------------
+function Header() {
+  const s = activeSuite()
+  return PageHeader("Model evaluation", {
+    subtitle: `${s.label} · ${s.tasks} tasks · ${models.length} models · last run ${$lastRun}`,
+    breadcrumbs: ["Evals", "Leaderboard"],
+    status: Badge($running ? "Evaluating" : "Idle", { tone: $running ? "warning" : "success", icon: $running ? "hourglass-half" : "circle-check" }),
+    actions: [
+      Select("suite", { items: suites.map(x => ({ value: x.id, label: x.label })), value: $suite, label: "Benchmark suite", labelHidden: true, onChange: changeSuite }),
+      Button("Run evaluation", { variant: "primary", icon: "play", loading: $running, disabled: $running, onClick: runEval })
+    ]
+  })
+}
+
+function Disclosure() {
+  return Callout("info", { title: "Simulated benchmark data", description: "Scores, latencies and sample outputs are generated locally so the dashboard can be explored offline. Re-running an evaluation applies a small deterministic drift instead of calling a model.", icon: "flask", compact: true })
+}
+
+function RunPanel() {
+  return Show($running, {
+    children: Card([
+      SectionHeader("Evaluation in progress", { eyebrow: "SANDBOXED RUN", status: Pill(`${$progress}%`, { tone: "activating" }) }),
+      Progress($progress, { label: stageOf($progress), tone: "primary", showValue: true }),
+      Row([StatusDot("8 workers", { tone: "success", pulse: true }), Text(`${activeSuite().tasks} tasks × ${models.length} models`, { variant: "small", tone: "muted" }), Spacer(), Text("Scores refresh when the run completes", { variant: "small", tone: "muted" })], { gap: "sm", align: "center" })
+    ])
+  })
+}
+
+function Kpis() {
+  const best = ranked()[0]
+  const s = activeSuite()
+  return Stats([
+    StatCard("Models evaluated", { value: String(models.length), icon: "microchip", tone: "primary", hint: `${$util.unique(models.map(m => m.provider)).length} providers` }),
+    StatCard("Tasks per model", { value: String(s.tasks), icon: "list-check", tone: "info", hint: `${$util.format(s.avgTokens, "compact")} tokens each` }),
+    StatCard("Eval spend", { value: $util.currency(evalSpend(), "USD"), icon: "sack-dollar", hint: "this suite, all models" }),
+    StatCard("Best overall", { value: `${best.name} · ${best.overall}`, icon: "trophy", tone: "success", spark: best.caps })
+  ], { layout: "grid" })
+}
+
+function Leaderboard() {
+  const list = rows()
+  return Card([
+    SectionHeader("Leaderboard", { eyebrow: "COMPOSITE SCORE", subtitle: `Weighted for ${activeSuite().label}. Tick up to three models to compare them.`, actions: [Button("Top three", { variant: "secondary", size: "sm", icon: "wand-magic-sparkles", onClick: pickTopThree })] }),
+    Toolbar({
+      searchable: true,
+      searchPlaceholder: "Search model or provider…",
+      searchValue: $search,
+      left: [Row(capabilities.map((c, i) => FilterPill(c, { active: $capFilters.includes(c), count: capCount(i), icon: capIcons[i], onToggle: () => toggleCap(c) })), { gap: "xs", wrap: true })],
+      right: [Text(`${list.length} of ${models.length}`, { variant: "small", tone: "muted" }), Button("Reset filters", { variant: "ghost", size: "sm", icon: "filter-circle-xmark", disabled: $capFilters.length == 0, onClick: () => { $capFilters = [] } })]
+    }),
+    Show(list.length > 0, {
+      fallback: EmptyState("No model clears every filter", { icon: "filter-circle-xmark", description: "Capability pills require a score of 85 or better. Drop one to widen the field." }),
+      children: DataGrid([
+        Col("Compare", list.map(m => Checkbox(`cmp-${m.id}`, { label: `Compare ${m.name}`, labelHidden: true, value: $picked.includes(m.id), disabled: !$picked.includes(m.id) && $picked.length >= 3, onChange: () => togglePick(m.id) })), { width: "92px", align: "center" }),
+        Col("Model", list.map(m => m.name), { sortable: true, width: "150px" }),
+        Col("Provider", list.map(m => m.provider), { sortable: true, filterable: true, width: "150px" }),
+        Col("Overall", list.map(m => m.overall), { sortable: true, align: "right", width: "92px", headerTooltip: "Capability scores weighted by the active suite" }),
+        Col("Profile", list.map(m => Sparkline(m.caps, { min: 55, max: 100, width: 92, height: 22, tone: "primary", label: `${m.name} capability profile` })), { width: "110px" }),
+        Col("Reasoning", list.map(m => m.caps[0]), { sortable: true, align: "right" }),
+        Col("Coding", list.map(m => m.caps[1]), { sortable: true, align: "right" }),
+        Col("Retrieval", list.map(m => m.caps[3]), { sortable: true, align: "right" }),
+        Col("p50 (ms)", list.map(m => m.latency), { sortable: true, align: "right", format: "number" }),
+        Col("$ / 1M in", list.map(m => m.priceIn), { sortable: true, align: "right", format: "currency" }),
+        Col("Context (K)", list.map(m => m.context), { sortable: true, align: "right", format: "number" })
+      ], { rowIds: list.map(m => m.id), sort: $sort, page: $page, perPage: 8, density: "compact", striped: true, maxHeight: "460px", exportable: true, exportFilename: "leaderboard.csv" })
+    })
+  ])
+}
+
+function featureRows(list) {
+  return [
+    { label: "Context window", values: list.map(m => `${m.context}K tokens`), group: "Capacity" },
+    { label: "Max output", values: list.map(m => m.maxOut), group: "Capacity" },
+    { label: "p50 latency", values: list.map(m => `${m.latency} ms`), group: "Capacity" },
+    { label: "Tool / function calling", values: list.map(m => m.tools), group: "Interfaces" },
+    { label: "Structured JSON mode", values: list.map(m => m.json), group: "Interfaces" },
+    { label: "Image input", values: list.map(m => m.vision), group: "Interfaces" },
+    { label: "Fine-tuning", values: list.map(m => m.tuning), group: "Operations" },
+    { label: "Batch discount", values: list.map(m => m.batch), group: "Operations" },
+    { label: "Data residency", values: list.map(m => m.residency), group: "Operations" },
+    { label: "Licence", values: list.map(m => m.license), group: "Operations" }
+  ]
+}
+
+function Comparison() {
+  const list = pickedModels()
+  return Card([
+    SectionHeader("Head to head", { eyebrow: "COMPARISON", subtitle: list.length > 0 ? `${list.map(m => m.name).join(" · ")} on ${activeSuite().label}` : "Nothing selected yet.", status: Pill(`${list.length} of 3 selected`, { tone: list.length > 0 ? "activating" : "neutral" }), actions: [Button("Clear", { variant: "ghost", size: "sm", icon: "xmark", disabled: list.length == 0, onClick: clearPicks })] }),
+    Show(list.length > 0, {
+      fallback: EmptyState("No models selected", { icon: "scale-balanced", description: "Tick two or three rows in the leaderboard to draw the capability radar, the grouped score bars and the cost-versus-quality plot.", actions: [Button("Compare the top three", { variant: "primary", icon: "wand-magic-sparkles", onClick: pickTopThree })] }),
+      children: Column([
+        Grid([
+          Card([SectionHeader("Capability radar", { eyebrow: "0–100 PER AXIS" }), RadarChart(capabilities, { series: list.map(m => Series(m.name, { values: m.caps })), max: 100, size: 300, showDots: true, ariaLabel: "Capability scores per selected model" })]),
+          Card([SectionHeader("Scores by capability", { eyebrow: "GROUPED" }), BarChart(capabilities, { series: list.map(m => Series(m.name, { values: m.caps })), height: 280, yAxisLabel: "score", ariaLabel: "Grouped capability scores for the selected models" })])
+        ], { columns: { base: 1, lg: 2 }, gap: "lg" }),
+        Grid([
+          Card([
+            SectionHeader("Cost vs quality", { eyebrow: "BLENDED PRICE", subtitle: "75% input / 25% output token mix" }),
+            ScatterChart([Series("All models", { points: ranked().map(m => ({ x: blended(m), y: m.overall, label: m.name })) }), Series("Selected", { points: list.map(m => ({ x: blended(m), y: m.overall, label: m.name })) })], { xLabel: "Blended $ per 1M tokens", yLabel: "Composite score", height: 280, pointSize: 8, ariaLabel: "Blended price against composite score for every model" })
+          ]),
+          Card([SectionHeader("Feature matrix", { eyebrow: "WHAT SHIPS" }), ComparisonTable(list.map(m => m.name), { rows: featureRows(list), featureLabel: "Capability", stickyFirstColumn: true, highlightColumn: 0, caption: "Platform features for the selected models" })])
+        ], { columns: { base: 1, lg: 2 }, gap: "lg" })
+      ], { gap: "lg" })
+    })
+  ])
+}
+
+tasks = [
+  { id: "sql-join", label: "Query optimisation", icon: "database", kind: "code", language: "sql", prompt: "This analytics query scans the whole events table. Make it bounded without changing the result." },
+  { id: "hook-refactor", label: "Refactor a data hook", icon: "code", kind: "code", language: "ts", prompt: "useOrders refetches on every render and leaks a stale response. Refactor it." },
+  { id: "rag-cite", label: "Cited summary", icon: "quote-left", kind: "markdown", prompt: "Summarise the refund rules for orders past the return window, with citations." },
+  { id: "log-parse", label: "Log parsing", icon: "file-lines", kind: "code", language: "python", prompt: "Parse '2026-06-11T09:12:04Z WARN [billing] retry 3 of 5' into a dict." }
+]
+
+outputs = {
+  "sql-join": ["-- bound the scan first, then join the small side\nWITH recent AS (\n  SELECT user_id, event, ts\n  FROM events\n  WHERE ts >= now() - interval '30 days'\n)\nSELECT u.plan, count(*) AS hits\nFROM recent r JOIN users u USING (user_id)\nGROUP BY u.plan;", "SELECT u.plan, count(*) AS hits\nFROM events e\nJOIN users u ON u.user_id = e.user_id\nWHERE e.ts >= now() - interval '30 days'\nGROUP BY u.plan;\n-- requires: CREATE INDEX events_ts_user ON events (ts, user_id);", "-- refresh hourly instead of recomputing per request\nCREATE MATERIALIZED VIEW plan_hits_30d AS\nSELECT u.plan, count(*) AS hits\nFROM events e JOIN users u USING (user_id)\nWHERE e.ts >= now() - interval '30 days'\nGROUP BY u.plan;"],
+  "hook-refactor": ["export function useOrders(status: string) {\n  const [state, setState] = useState({ rows: [], loading: true })\n  useEffect(() => {\n    let live = true\n    load(status).then(rows => { if (live) setState({ rows, loading: false }) })\n    return () => { live = false }\n  }, [status])\n  return state\n}", "export function useOrders(status: string) {\n  return useQuery({\n    queryKey: ['orders', status],\n    queryFn: () => load(status),\n    staleTime: 30000,\n  })\n}", "export function useOrders(status: string) {\n  const [rows, setRows] = useState<Order[]>([])\n  const inflight = useRef<AbortController>()\n  useEffect(() => {\n    inflight.current?.abort()\n    inflight.current = new AbortController()\n    load(status, inflight.current.signal).then(setRows)\n  }, [status])\n  return rows\n}"],
+  "rag-cite": ["**Past the window.** Returns close 30 days after delivery [1]. After that, support may issue store credit at the original price minus a 10% restocking fee [2].\n\n- [1] `policy/returns.md` §2.1\n- [2] `policy/returns.md` §4.3", "The return window is 30 days from delivery [1]. Once it closes the refund can no longer go back to the original card; store credit is the only remedy and the 10% restocking fee applies [2].\n\nSources: policy/returns.md §2.1 and §4.3", "### Refunds past the window\n1. The window is 30 days from the delivery date [1].\n2. Late returns receive store credit only, less a 10% restocking fee [2].\n3. Damaged-on-arrival claims bypass both rules entirely [3].\n\n> Cited: §2.1, §4.3, §5.0 of `policy/returns.md`"],
+  "log-parse": ["import re\n\nPATTERN = re.compile(r'^(?P<ts>\\S+) (?P<level>\\w+) \\[(?P<svc>[^\\]]+)\\] (?P<msg>.*)$')\n\ndef parse(line: str):\n    m = PATTERN.match(line)\n    return m.groupdict() if m else None", "from datetime import datetime\n\ndef parse(line):\n    ts, level, svc, msg = line.split(' ', 3)\n    return {\n        'ts': datetime.fromisoformat(ts.replace('Z', '+00:00')),\n        'level': level,\n        'service': svc.strip('[]'),\n        'message': msg,\n    }", "import shlex\n\ndef parse(line):\n    parts = shlex.split(line)\n    if len(parts) < 4:\n        raise ValueError('unparsable log line')\n    head = dict(zip(('ts', 'level', 'service'), parts))\n    head['service'] = head['service'].strip('[]')\n    head['message'] = ' '.join(parts[3:])\n    return head"]
+}
+
+function variantFor(taskId, modelId) {
+  const idx = models.findIndex(m => m.id == modelId)
+  const bank = outputs[taskId]
+  return bank[(idx < 0 ? 0 : idx) % bank.length]
+}
+
+function OutputCard(t, m) {
+  const body = t.kind == "code" ? CodeBlock(t.language, { codeString: variantFor(t.id, m.id), showLineNumbers: true, wrap: true }) : Markdown(variantFor(t.id, m.id))
+  return Card([
+    Row([Text(m.name, { variant: "body-heavy" }), Badge(m.provider, { tone: "neutral", size: "sm" }), Spacer(), Pill(`${m.latency} ms`, { tone: "neutral", icon: "bolt" })], { gap: "xs", align: "center" }),
+    body,
+    Row([Rating(voteFor(t.id, m.id), { max: 5, interactive: true, size: "sm", label: `Rubric score for ${m.name}`, onChange: (v) => recordVote(t.id, m.id, v) }), Spacer(), Text(`${tally(m.id).pref} preferred · ${tally(m.id).n} votes`, { variant: "small", tone: "muted" })], { gap: "sm", align: "center" })
+  ])
+}
+
+function TaskPane(t) {
+  const list = pickedModels()
+  const n = list.length
+  return Column([
+    Callout("info", { title: t.prompt, icon: "wand-sparkles", compact: true }),
+    Grid(list.map(m => OutputCard(t, m)), { columns: { base: 1, md: n > 1 ? 2 : 1, lg: n }, gap: "md" }),
+    Stats(list.map(m => ({ label: m.name, value: `${tally(m.id).pref} preferred`, hint: `${tally(m.id).n} votes · avg ${tally(m.id).avg}`, tone: tally(m.id).pref > 0 ? "success" : "default" })), { layout: "strip" })
+  ], { gap: "md" })
+}
+
+function Drilldown() {
+  const list = pickedModels()
+  return Card([
+    SectionHeader("Per-task outputs", { eyebrow: "DRILL-DOWN", subtitle: "Canned sample answers, one variant per model. Rate them to build the human-preference tally.", status: Pill(`${$votes.length} votes recorded`, { tone: $votes.length > 0 ? "success" : "neutral" }) }),
+    Show(list.length > 0, {
+      fallback: EmptyState("Pick a model to see its answers", { icon: "list-check", description: "Sample outputs are shown side by side for whichever models are selected in the leaderboard." }),
+      children: Tabs(tasks.map(t => TabItem(t.id, { label: t.label, icon: t.icon, children: TaskPane(t) })), { value: $task, fitted: true })
+    })
+  ])
+}
+
+function Calculator() {
+  const list = pickedModels().length > 0 ? pickedModels() : ranked().slice(0, 3)
+  const costs = list.map(m => ({ m: m, cost: monthlyCost(m) })).sort((a, b) => a.cost - b.cost)
+  const cheapest = costs[0]
+  const worst = costs[costs.length - 1]
+  const spread = costs.length > 1 ? `${$util.currency(worst.cost - cheapest.cost, "USD")} a month less than ${worst.m.name}` : "the only model in the comparison"
+  return Card([
+    SectionHeader("Cost calculator", { eyebrow: "PLANNING", subtitle: `${$util.format($volume * 1000, "compact")} requests a month · ${$util.format($tokens, "compact")} tokens each · ${$outShare}% generated`, status: pickedModels().length > 0 ? Pill("selected models", { tone: "activating" }) : Pill("top three", { tone: "neutral" }) }),
+    Grid([
+      Column([
+        Slider("volume", { min: 10, max: 5000, step: 10, value: $volume, label: "Monthly requests (thousands)", showValue: true, suffix: "k", marks: [10, 1000, 2500, 5000] }),
+        Slider("tokens", { min: 500, max: 32000, step: 500, value: $tokens, label: "Average tokens per request", showValue: true, suffix: " tok" }),
+        Slider("outshare", { min: 0, max: 100, step: 5, value: $outShare, label: "Share generated as output", showValue: true, suffix: "%", hint: "Output tokens bill at roughly four times the input rate." })
+      ], { gap: "md" }),
+      Column([
+        Table([
+          Col("#", costs.map((c, i) => String(i + 1)), { width: "44px" }),
+          Col("Model", costs.map(c => c.m.name)),
+          Col("Score", costs.map(c => c.m.overall), { align: "right" }),
+          Col("$ / 1M blended", costs.map(c => blended(c.m)), { format: "currency", align: "right" }),
+          Col("Per month", costs.map(c => $util.currency(c.cost, "USD")), { align: "right" })
+        ], { density: "compact", striped: true, ariaLabel: "Projected monthly cost per model" }),
+        Callout("success", { title: `${cheapest.m.name} is cheapest at this volume`, description: `${$util.currency(cheapest.cost, "USD")} a month — ${spread}, at a composite score of ${cheapest.m.overall}.`, icon: "money-bill-trend-up", compact: true })
+      ], { gap: "md" })
+    ], { columns: { base: 1, lg: 2 }, gap: "lg" })
+  ])
+}
+
+function Methodology() {
+  return Card([
+    SectionHeader("Methodology", { eyebrow: "READ BEFORE QUOTING A SCORE", subtitle: "How every number on this page is produced." }),
+    Accordion([
+      AccordionItem("Composite score", { variant: "info", children: Column([
+        Text("Each suite defines a weight per capability; the composite is the weighted mean of the six capability scores, rounded to one decimal. Switching suites reweights every row, so a model can lead one board and place fifth on another.", { tone: "muted" }),
+        List(capabilities.map((c, i) => ListItem(c, { description: `${Math.round(activeSuite().weights[i] * 100)}% of the ${activeSuite().label} composite`, icon: capIcons[i] })), { divided: true })
+      ], { gap: "sm" }) }),
+      AccordionItem("Latency and pricing", { variant: "neutral", children: Column([
+        Text("Latency is the median end-to-end wall time for a 1K-token completion from a warm pool, measured from the same region as the caller. Prices are list rates per million tokens; the blended figure assumes a 75% input / 25% output mix.", { tone: "muted" }),
+        DescriptionList([
+          DescriptionItem("Sampling", "temperature 0, top_p 1, five repeats", { icon: "sliders" }),
+          DescriptionItem("Grader", "rubric ensemble, majority of three", { icon: "scale-balanced" }),
+          DescriptionItem("Retries", "one retry on transport error, none on refusal", { icon: "rotate" })
+        ], { columns: 1 })
+      ], { gap: "sm" }) }),
+      AccordionItem("Known limitations", { variant: "warning", children: Column([
+        Text("This page is a demonstration surface. Nothing here is a measurement of a real product.", { tone: "muted" }),
+        List([
+          ListItem("Every model, provider and score is invented", { icon: "flask", tone: "warning" }),
+          ListItem("Sample outputs are three canned variants assigned by model index", { icon: "code-branch" }),
+          ListItem("Re-running applies a deterministic ±1.3 point drift, not a fresh eval", { icon: "arrows-rotate" }),
+          ListItem("Human preference counts only the votes cast in this browser session", { icon: "thumbs-up" })
+        ], { divided: true })
+      ], { gap: "sm" }) })
+    ], { showArrow: true, type: "single" })
+  ])
+}

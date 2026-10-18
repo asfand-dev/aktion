@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Routing · Aktion</title>
+  <meta name="description" content="Client-side, hash-based routing in one call. $router({ ... }) maps URL patterns to UI, NavLink and SidebarItem navigate, and the reactive route handle tells you where you are — params, query, pattern, and navigate()." />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('doc-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (saved === 'light' || saved === 'dark') ? saved : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-doc-theme', theme);
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/site.css?v=2026.07.31" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+  <style>
+    /* Live layout demo: code on the left, rendered output on the right. */
+    .lay-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      margin: 18px 0 28px;
+      border: 1px solid var(--doc-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--doc-surface-elev);
+    }
+    @media (max-width: 880px) { .lay-demo { grid-template-columns: 1fr; } }
+    .lay-demo pre { margin: 0; border: none; border-radius: 0; background: var(--doc-code-bg, rgba(0,0,0,.04)); }
+    .lay-demo-preview {
+      padding: 18px;
+      display: block;
+      min-width: 0;
+      border-left: 1px solid var(--doc-border);
+      background:
+        linear-gradient(var(--doc-border) 1px, transparent 1px) 0 0 / 100% 16px,
+        var(--doc-surface);
+      background-blend-mode: normal;
+    }
+    @media (max-width: 880px) { .lay-demo-preview { border-left: none; border-top: 1px solid var(--doc-border); } }
+    .lay-demo-preview aktion-app { display: block; }
+    .lay-demo-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--doc-text-muted);
+      padding: 8px 12px 0;
+      grid-column: 1 / -1;
+    }
+    /* Visual filler so structural demos read clearly without real content. */
+    .demo-cheats code { white-space: nowrap; }
+  </style>
+</head>
+<body data-page="routing">
+  <div class="layout">
+    <aside class="sidebar"></aside>
+
+    <main>
+      <header class="hero">
+        <span class="hero-eyebrow">Advanced</span>
+        <h1>Routing.</h1>
+        <p class="lead">
+          Client&#8209;side, hash&#8209;based routing in a single function call.
+          <strong><code>$router({ &hellip; })</code></strong> maps URL patterns to
+          UI, <strong><code>NavLink</code></strong> navigates, and the reactive
+          <strong><code>route</code></strong> handle tells you where you are. Deep
+          links and back/forward work with no server config &mdash; the router
+          lives entirely in the URL hash.
+        </p>
+      </header>
+
+      <h2 id="router">The Router</h2>
+      <p>
+        <code>$router</code> is a plain function call: hand it an object that maps
+        URL patterns to UI, assign it to a binding, and reference that binding from
+        your shell. Only the arm matching the current hash runs &mdash; the others
+        are never evaluated.
+      </p>
+<pre><code>pages = $router({
+  "/":             Home(),
+  "/users/:id":    User(params.id),
+  "/docs/*":       Docs(params._),
+  default:         NotFound()
+})
+
+$app(AppShell(MainSidebar(), pages))</code></pre>
+      <p>The keys are matched in order; pick the one that fits the URL:</p>
+      <table class="signature-table">
+        <thead><tr><th>Pattern</th><th>Matches</th><th>Exposes</th></tr></thead>
+        <tbody>
+          <tr><td><code>"/"</code></td><td>The root path.</td><td>&mdash;</td></tr>
+          <tr><td><code>"/users"</code></td><td>An exact, static path.</td><td>&mdash;</td></tr>
+          <tr><td><code>"/users/:id"</code></td><td>A <strong>dynamic segment</strong> &mdash; <code>/users/42</code>, <code>/users/anna</code>&hellip;</td><td><code>params.id</code> (e.g. <code>"42"</code>)</td></tr>
+          <tr><td><code>"/docs/*"</code></td><td>A <strong>wildcard</strong> &mdash; everything under <code>/docs/</code>.</td><td><code>params._</code> (the matched suffix)</td></tr>
+          <tr><td><code>default:</code></td><td>Anything that matched nothing above.</td><td>&mdash;</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Inside an arm, <code>params</code> is in scope automatically &mdash; you
+        never declare it. Pass the captured values straight into your page
+        component, exactly as shown above with <code>User(params.id)</code> and
+        <code>Docs(params._)</code>. Omit the <code>default:</code> arm and an
+        unknown path simply renders nothing.
+      </p>
+
+      <h2 id="navlink">Navigating with NavLink</h2>
+      <p>
+        <code>NavLink(label, { to })</code> renders a router&#8209;aware anchor: it
+        sets the correct <code>href</code>, intercepts the click to navigate
+        without a reload, and <strong>auto&#8209;highlights</strong> itself when the
+        current path matches <code>to</code>. Drop a row of them anywhere for a nav
+        bar.
+      </p>
+<pre><code>nav = Row([
+  NavLink("Home",  { to: "/", exact: true }),
+  NavLink("Users", { to: "/users" })
+], { gap: "sm" })</code></pre>
+      <p>
+        By default the active check is a <strong>prefix</strong> match, so the
+        <code>"Users"</code> link stays highlighted on <code>/users/42</code> too.
+        The <code>"Home"</code> link uses <code>exact: true</code> &mdash; otherwise
+        <code>"/"</code> is a prefix of every path and it would always look active.
+        <code>NavLink</code> also accepts an <code>icon</code> and a
+        <code>variant</code> (<code>"default" | "primary" | "ghost" | "pill"</code>).
+      </p>
+
+      <h2 id="route">The route handle</h2>
+      <p>
+        <code>route</code> is a reserved, reactive handle that is always in scope.
+        Reading any field registers a dependency, so your UI re&#8209;renders on
+        every transition. <strong>Never declare a state slot named
+        <code>route</code> yourself.</strong>
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td><code>route.path</code></td><td><code>string</code></td><td><code>"/users/42"</code></td></tr>
+          <tr><td><code>route.params</code></td><td><code>{ [key]: string }</code></td><td><code>{ id: "42" }</code></td></tr>
+          <tr><td><code>route.query</code></td><td><code>{ [key]: string }</code></td><td><code>{ sort: "name" }</code> for <code>?sort=name</code></td></tr>
+          <tr><td><code>route.pattern</code></td><td><code>string | null</code></td><td>The arm that matched, e.g. <code>"/users/:id"</code></td></tr>
+          <tr><td><code>route.navigate("/path")</code></td><td><code>fn</code></td><td>Programmatic transition.</td></tr>
+        </tbody>
+      </table>
+<pre><code>label = "Sorted by " + (route.query.sort || "default")</code></pre>
+
+      <h2 id="navigate">Imperative navigation</h2>
+      <p>
+        Call <code>route.navigate("/path")</code> from inside an action &mdash; for
+        example after saving a record, to send the user to its detail page:
+      </p>
+<pre><code>function saveOrder() {
+  $orders.refetch()
+  route.navigate("/orders/" + $newId)
+}</code></pre>
+      <p>Or inline, straight off a button:</p>
+<pre><code>Button("Open dashboard", { onClick: () =&gt; route.navigate("/dashboard") })</code></pre>
+      <p>
+        Targets can be absolute (<code>"/orders/42"</code>) or carry a query string
+        (<code>"/orders/42?tab=items"</code>); the router updates the hash and the
+        <code>route</code> handle reactively.
+      </p>
+
+      <h2 id="appshell">App shell</h2>
+      <p>
+        Wrap the router in <code>AppShell(sidebar, content)</code> so the chrome
+        survives transitions &mdash; only the routed <code>pages</code> area
+        re&#8209;renders. Build the sidebar from <code>SidebarSection</code>s of
+        <code>SidebarItem(label, { to, icon?, badge? })</code>, which navigate and
+        auto&#8209;highlight just like <code>NavLink</code>.
+      </p>
+<pre><code>pages = $router({
+  "/":          Home(),
+  "/projects":  Projects(),
+  "/calendar":  Calendar(),
+  default:      NotFound()
+})
+
+nav = Sidebar([SidebarSection("Workspace", [
+  SidebarItem("Home",     { to: "/",         icon: "house" }),
+  SidebarItem("Projects", { to: "/projects", icon: "folder", badge: "4" }),
+  SidebarItem("Calendar", { to: "/calendar", icon: "calendar" })
+])])
+
+$app(AppShell(nav, pages))</code></pre>
+
+      <h2 id="nested">Nested &amp; layout routes</h2>
+      <p>
+        Real apps share chrome across a group of pages &mdash; a settings shell, a
+        dashboard with a secondary nav. Instead of repeating that frame in every
+        arm, give the router a <strong>layout arm</strong>: an object shaped
+        <code>{ layout, routes }</code>. The key matches as a <strong>prefix</strong>;
+        the <code>layout</code> function receives an <code>outlet</code> (the matched
+        child) and renders it wherever it likes; <code>routes</code> is a nested map
+        matched against the <em>remaining</em> path. Parent and child params merge,
+        and layouts nest arbitrarily deep.
+      </p>
+<pre><code>function SettingsShell(outlet) {
+  return Row([
+    Sidebar([SidebarSection("Settings", [
+      SidebarItem("Profile", { to: "/settings/profile" }),
+      SidebarItem("Billing", { to: "/settings/billing" })
+    ])]),
+    Column([ outlet ])          // ← matched child renders here
+  ], { gap: "lg" })
+}
+
+pages = $router({
+  "/": Home(),
+  "/settings": {
+    layout: SettingsShell,
+    routes: {
+      "/profile":      ProfilePage(),
+      "/billing/:id":  BillingPage(params.id)   // params merge parent + child
+    }
+  },
+  default: NotFound()
+})</code></pre>
+      <p>
+        Navigating between <code>/settings/profile</code> and
+        <code>/settings/billing/42</code> keeps <code>SettingsShell</code> mounted &mdash;
+        only the <code>outlet</code> swaps. This is the composition behind multi&#8209;level
+        navs without prop&#8209;drilling a &ldquo;current section&rdquo; flag.
+      </p>
+
+      <h2 id="guards">Navigation guards</h2>
+      <p>
+        Register a guard with <code>$util.onNavigate(fn)</code>. The guard receives
+        <code>{ to, from }</code> and returns one of three things:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Return</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>false</code></td><td><strong>Block</strong> the navigation &mdash; the URL stays put.</td></tr>
+          <tr><td>a path <code>string</code></td><td><strong>Redirect</strong> to that path instead.</td></tr>
+          <tr><td>anything else</td><td><strong>Allow</strong> the navigation.</td></tr>
+        </tbody>
+      </table>
+<pre><code>$util.onNavigate(({ to, from }) =&gt; {
+  if (to.startsWith("/admin") &amp;&amp; !$user.isAdmin) return "/login"   // redirect
+  if (to === "/checkout" &amp;&amp; $cart.length === 0)   return false      // block
+  return true                                                       // allow
+})</code></pre>
+      <p>
+        Guards are enforced everywhere navigation can originate: in&#8209;app
+        <code>route.navigate(&hellip;)</code> / <code>NavLink</code>, the browser
+        back/forward buttons, and manual edits to the URL (a blocked or redirected
+        change rewinds the address bar). Guards <strong>fail open</strong> &mdash; if
+        yours throws, navigation proceeds &mdash; and a redirect loop is capped.
+        Call <code>$util.onNavigate(null)</code> to clear.
+      </p>
+
+      <h2 id="query">Query params &harr; state</h2>
+      <p>
+        Read query parameters reactively through <code>route.query</code> or
+        <code>$util.url.query</code>. To <em>write</em> them &mdash; so a filter,
+        tab, or sort survives a refresh and is shareable &mdash; use the
+        <code>$util.url</code> helpers, which update the URL in place (history and
+        hash modes both supported) and re&#8209;render:
+      </p>
+      <table class="signature-table">
+        <thead><tr><th>Call</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>$util.url.setQuery("tab", "billing")</code></td><td>Set one param. A <code>null</code> / <code>""</code> value drops the key.</td></tr>
+          <tr><td><code>$util.url.setQuery({ sort: "name", page: 2 })</code></td><td>Set several at once.</td></tr>
+          <tr><td><code>$util.url.removeQuery("page")</code></td><td>Drop a key.</td></tr>
+          <tr><td><code>$util.url.navigate("/path")</code></td><td>Imperative navigation (same as <code>route.navigate</code>).</td></tr>
+        </tbody>
+      </table>
+<pre><code>$tab = route.query.tab || "overview"
+
+nav = Row([
+  Button("Overview", { onClick: () =&gt; $util.url.setQuery("tab", "overview") }),
+  Button("Billing",  { onClick: () =&gt; $util.url.setQuery("tab", "billing") })
+])
+// the URL becomes ?tab=billing — reload-safe and shareable</code></pre>
+
+      <h2 id="transitions">Route transitions</h2>
+      <p>
+        Wrap your routed pages in <code>RouteView</code> to replay a CSS entrance
+        animation on every navigation. It swaps a keyed wrapper keyed on
+        <code>route.path</code>, so the fresh page re&#8209;runs its entrance &mdash;
+        no JavaScript timing, and it respects <code>prefers-reduced-motion</code>.
+      </p>
+<pre><code>pages = $router({ "/": Home(), "/about": About(), default: NotFound() })
+
+$app(AppShell(nav,
+  RouteView(pages, { routeKey: route.path, animation: "fade", duration: 250 })
+))
+// animation: "fade" | "zoom" | "slide"</code></pre>
+
+      <h2 id="prefetch">Prefetch on hover</h2>
+      <p>
+        Warm a route&rsquo;s data before the click. Pass a <code>prefetch</code>
+        callable to <code>NavLink</code> &mdash; it fires once on the first
+        pointer&#8209;enter or focus, priming the target route&rsquo;s
+        <code>$query</code> cache so the page paints instantly when the user commits.
+      </p>
+<pre><code>NavLink("Reports", {
+  to: "/reports",
+  prefetch: () =&gt; $query({ url: API + "/reports", key: "reports" })
+})</code></pre>
+
+      <h2 id="lazy">Lazy route loading</h2>
+      <p>
+        Router arms evaluate lazily &mdash; an arm&rsquo;s tree is only built when its
+        path matches. For code that should be <em>downloaded</em> on demand, wrap an
+        async chunk in <code>Lazy(loader, fallback?)</code>: it renders the
+        <code>fallback</code> until the dynamic import resolves, then swaps in the
+        real view. Combine with the <a href="modules.html#lazy">module loader</a> to
+        split large pages out of the initial bundle.
+      </p>
+<pre><code>pages = $router({
+  "/":        Home(),
+  "/reports": Lazy(() =&gt; import("./reports.aktion"), Spinner()),
+  default:    NotFound()
+})</code></pre>
+
+      <h2 id="scroll">Scroll restoration</h2>
+      <p>
+        Opt in with the <code>scroll-restoration</code> attribute on the host
+        <code>&lt;aktion-app&gt;</code> element. The runtime saves each page&rsquo;s
+        scroll position on the way out and restores it on back/forward, while a fresh
+        forward navigation scrolls to the top.
+      </p>
+<pre><code>&lt;aktion-app scroll-restoration="auto"&gt;&lt;/aktion-app&gt;
+&lt;!-- "auto" → restore on back/forward, top on fresh nav
+     "top"  → always scroll to top on every navigation --&gt;</code></pre>
+
+      <h2 id="tabs">Tabs vs routing</h2>
+      <p>
+        Routing is for distinct <em>pages</em> with their own URLs &mdash; things
+        you want to deep&#8209;link, bookmark, and reach with back/forward. For
+        switching between <em>sections of the same page</em> that should not change
+        the URL, reach for <code>Tabs</code> instead. It keeps the selection in the
+        component and never touches the hash, so it is safe to use many times on one
+        screen.
+      </p>
+      <div class="lay-demo">
+        <span class="lay-demo-label">Live</span>
+<pre><code>$app(Column([
+  Tabs([
+    TabItem("overview", { label: "Overview", children: [Text("Sections, not pages — the URL never changes.")] }),
+    TabItem("activity", { label: "Activity", children: [Text("Switching tabs keeps you on the same route.")] }),
+    TabItem("settings", { label: "Settings", children: [Text("Reach for Router when each view needs its own URL.")] })
+  ])
+]))</code></pre>
+        <div class="lay-demo-preview"></div>
+      </div>
+
+      <h2 id="next">Next</h2>
+      <div class="demo-grid">
+        <a class="demo-card" href="actions.html">
+          <span class="demo-tag">Behaviour</span>
+          <h3>Actions</h3>
+          <p>Wire up <code>onClick</code>, forms, and <code>route.navigate</code> from event handlers.</p>
+          <span class="demo-arrow">Read the guide &rarr;</span>
+        </a>
+        <a class="demo-card" href="components.html">
+          <span class="demo-tag">Reference</span>
+          <h3>Component catalog</h3>
+          <p>AppShell, Sidebar, NavLink, Tabs &mdash; every prop with a live preview.</p>
+          <span class="demo-arrow">Browse components &rarr;</span>
+        </a>
+        <a class="demo-card" href="layout.html">
+          <span class="demo-tag">Core concepts</span>
+          <h3>Layout</h3>
+          <p>Column, Row, and Grid &mdash; the primitives that frame every routed page.</p>
+          <span class="demo-arrow">View layout &rarr;</span>
+        </a>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="assets/site.js?v=2026.08.07"></script>
+  <script type="module">
+    // Render each .lay-demo code block as a live <aktion-app> beside it.
+    import "./dist/aktion.js"; // registers the <aktion-app> custom element
+    const theme = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+    for (const demo of document.querySelectorAll(".lay-demo")) {
+      const code = demo.querySelector("code");
+      const host = demo.querySelector(".lay-demo-preview");
+      if (!code || !host) continue;
+      const src = code.textContent || "";
+      const app = document.createElement("aktion-app");
+      app.setAttribute("theme", theme);
+      host.appendChild(app);
+      // setResponse once connected; guard so a single bad demo can't break the page.
+      try {
+        if (typeof app.setResponse === "function") app.setResponse(src);
+        else app.setAttribute("response", src);
+      } catch (err) {
+        console.error("[layout demo] render failed", err);
+      }
+    }
+    // Keep demos in sync when the doc theme toggles.
+    const sync = () => {
+      const t = document.documentElement.getAttribute("data-doc-theme") === "dark" ? "dark" : "light";
+      document.querySelectorAll(".lay-demo-preview aktion-app").forEach((a) => a.setAttribute("theme", t));
+    };
+    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-doc-theme"] });
+  </script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+// Unit Converter — length, mass, temperature, data & speed with live two-way conversion.
+// Uses: $store({ persist }) for last selection, CopyButton, sx typography.
+$app(Column([header, picker, converter, reference], { gap: "lg", padding: "md" }))
+
+last = $store({
+  persist: "convert.last",
+  cat: "length",
+  from: "m",
+  to: "ft",
+  pick: (s, c, f, t) => { s.cat = c; s.from = f; s.to = t },
+  swap: (s) => { const f = s.from; s.from = s.to; s.to = f }
+})
+$val = 1
+
+// factors are relative to each category's base unit
+factors = {
+  length: { m: 1, km: 1000, cm: 0.01, mm: 0.001, mi: 1609.344, yd: 0.9144, ft: 0.3048, in: 0.0254 },
+  mass:   { kg: 1, g: 0.001, mg: 0.000001, lb: 0.45359237, oz: 0.0283495, st: 6.35029, t: 1000 },
+  data:   { B: 1, KB: 1024, MB: 1048576, GB: 1073741824, TB: 1099511627776 },
+  speed:  { "m/s": 1, "km/h": 0.277778, mph: 0.44704, kn: 0.514444, "ft/s": 0.3048 }
+}
+labels = {
+  m: "Meter", km: "Kilometer", cm: "Centimeter", mm: "Millimeter", mi: "Mile", yd: "Yard", ft: "Foot", in: "Inch",
+  kg: "Kilogram", g: "Gram", mg: "Milligram", lb: "Pound", oz: "Ounce", st: "Stone", t: "Tonne",
+  B: "Byte", KB: "Kilobyte", MB: "Megabyte", GB: "Gigabyte", TB: "Terabyte",
+  "m/s": "Meters / sec", "km/h": "Km / hour", mph: "Miles / hour", kn: "Knot", "ft/s": "Feet / sec",
+  C: "Celsius", F: "Fahrenheit", K: "Kelvin"
+}
+defaults = { length: ["m", "ft"], mass: ["kg", "lb"], temp: ["C", "F"], data: ["MB", "GB"], speed: ["km/h", "mph"] }
+unitsFor = c => c == "temp" ? ["C", "F", "K"] : Object.keys(factors[c])
+
+function toBase(cat, unit, v) {
+  if (cat == "temp") {
+    if (unit == "F") return (v - 32) * 5 / 9
+    if (unit == "K") return v - 273.15
+    return v
+  }
+  return v * factors[cat][unit]
+}
+function fromBase(cat, unit, base) {
+  if (cat == "temp") {
+    if (unit == "F") return base * 9 / 5 + 32
+    if (unit == "K") return base + 273.15
+    return base
+  }
+  return base / factors[cat][unit]
+}
+function trim(n) {
+  if (!isFinite(n)) return "0"
+  const r = Math.round(n * 1000000) / 1000000
+  return String(r)
+}
+
+result = trim(fromBase(last.cat, last.to, toBase(last.cat, last.from, Number($val) || 0)))
+
+header = PageHeader("Unit Converter", { subtitle: "Convert anything, instantly" })
+
+picker = ToggleGroup("cat", { items: [
+  { value: "length", label: "Length", icon: "ruler-horizontal" },
+  { value: "mass",   label: "Mass",   icon: "weight-hanging" },
+  { value: "temp",   label: "Temp",   icon: "temperature-half" },
+  { value: "data",   label: "Data",   icon: "database" },
+  { value: "speed",  label: "Speed",  icon: "gauge-high" }
+], value: last.cat, onChange: (c) => last.pick(c, defaults[c][0], defaults[c][1]) })
+
+fromSelect = Select("from", { items: unitsFor(last.cat).map(u => SelectItem(u, { label: `${labels[u]} (${u})` })), value: last.from, searchable: true })
+toSelect   = Select("to",   { items: unitsFor(last.cat).map(u => SelectItem(u, { label: `${labels[u]} (${u})` })), value: last.to,   searchable: true })
+
+converter = Card([
+  SectionHeader("Convert", { eyebrow: last.cat.toUpperCase() }),
+  Grid([
+    Column([FormControl("From", { field: fromSelect }), NumberInput("val", { value: $val, step: 1 })], { gap: "sm" }),
+    Center([IconButton("right-left", { label: "Swap units", variant: "secondary", size: "lg", onClick: () => last.swap() })], { minHeight: "100%" }),
+    Column([FormControl("To", { field: toSelect }), Box([Text(result, { variant: "title", sx: { fontSize: "2rem" } })], { padding: "sm", border: "subtle", background: "surface" })], { gap: "sm" })
+  ], { columns: { base: 1, md: 3 }, gap: "md", alignItems: "end" }),
+  Separator("horizontal", { label: "result" }),
+  Row([
+    Text(`${trim($val)} ${last.from}  =  ${result} ${last.to}`, { variant: "large-heavy", tone: "primary" }),
+    CopyButton(`${result} ${last.to}`, { label: "Copy result" })
+  ], { gap: "md", justify: "center", align: "center", wrap: true })
+], { animate: "fade-up" })
+
+refRows = unitsFor(last.cat).filter(u => u != last.from)
+reference = Card([
+  SectionHeader("Reference", { subtitle: `${trim($val)} ${labels[last.from]} in every ${last.cat} unit` }),
+  Table([
+    Col("Unit", { values: refRows.map(u => labels[u]) }),
+    Col("Symbol", { values: refRows.map(u => Badge(u, { tone: "info", size: "sm" })) }),
+    Col("Value", { align: "right", values: refRows.map(u => Text(trim(fromBase(last.cat, u, toBase(last.cat, last.from, Number($val) || 0))), { variant: "body-heavy" })) })
+  ], { striped: true, density: "compact" })
+])

@@ -1,0 +1,53 @@
+// Notification Center — a bell with an unread badge that opens a dropdown panel,
+// filter tabs (all / unread), per-item mark-as-read, mark-all-read and a clear
+// action, plus a grouped list with tones and timestamps.
+$app(Column([header, panel], { gap: "lg", padding: "md" }))
+
+$notes = [
+  { id: "n1", title: "New trial signup", body: "Acme Co started a Pro trial.", time: "12m ago", tone: "success", icon: "user-plus", read: false },
+  { id: "n2", title: "Payment failed", body: "Card ending 4242 was declined.", time: "1h ago", tone: "danger", icon: "credit-card", read: false },
+  { id: "n3", title: "Storage 80% full", body: "Consider archiving old projects.", time: "3h ago", tone: "warning", icon: "database", read: false },
+  { id: "n4", title: "Weekly report ready", body: "Your analytics digest is available.", time: "Yesterday", tone: "info", icon: "chart-line", read: true },
+  { id: "n5", title: "Ada commented", body: "\"Looks great — ship it!\"", time: "2 days ago", tone: "primary", icon: "comment", read: true }
+]
+$filter = "all"
+
+unread = $notes.filter(n => !n.read).length
+shown = $notes.filter(n => $filter == "all" || !n.read)
+
+function markRead(id) { $notes = $notes.map(n => n.id == id ? { ...n, read: true } : n) }
+function markAll() { $notes = $notes.map(n => ({ ...n, read: true })) }
+function dismiss(id) { $notes = $notes.filter(n => n.id != id) }
+function clearAll() { $notes = [] }
+
+header = PageHeader("Notifications", {
+  subtitle: unread > 0 ? `${unread} unread` : "You're all caught up",
+  breadcrumbs: false,
+  actions: [NotificationBell({ count: unread }), Button("Mark all read", { variant: "ghost", size: "sm", icon: "check-double", disabled: unread == 0, onClick: markAll })]
+})
+
+function noteRow(n) {
+  return OnClick(Box([Row([
+    Icon(n.icon, { color: `var(--rui-color-${n.tone})` }),
+    StackItem(Column([
+      Row([Text(n.title, { variant: n.read ? "body" : "body-heavy" }), !n.read ? StatusDot("", { tone: "primary" }) : null], { gap: "xs", align: "center" }),
+      Text(n.body, { variant: "small", tone: "muted" }),
+      Text(n.time, { variant: "small", tone: "muted" })
+    ], { gap: "xs" }), { grow: 1 }),
+    IconButton("xmark", { label: "Dismiss", variant: "ghost", size: "xs", onClick: () => dismiss(n.id) })
+  ], { gap: "sm", align: "start" })], { padding: "sm", border: "subtle", background: n.read ? "surface" : "primary" }),
+  { onClick: () => markRead(n.id) })
+}
+
+panel = Card([Column([
+  Row([
+    ToggleGroup("filter", { items: [{ value: "all", label: `All (${$notes.length})` }, { value: "unread", label: `Unread (${unread})` }], value: $filter, size: "sm" }),
+    Spacer(),
+    Button("Clear all", { variant: "ghost", size: "sm", icon: "trash", disabled: $notes.length == 0, onClick: clearAll })
+  ], { align: "center" }),
+  Separator("horizontal"),
+  Show(shown.length > 0, {
+    fallback: EmptyState($filter == "unread" ? "No unread notifications" : "No notifications", { description: "New activity will show up here.", icon: "bell-slash" }),
+    children: Column(shown.map(n => noteRow(n)), { gap: "sm" })
+  })
+], { gap: "md" })])

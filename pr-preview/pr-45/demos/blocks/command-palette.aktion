@@ -1,0 +1,81 @@
+// Command Palette — a Cmd/Ctrl-K launcher with fuzzy-ish filtering, grouped
+// results, keyboard shortcut hints, recent commands and a live "last action"
+// readout. Opens via button or the keyboard shortcut.
+$app(Container([Column([header, hint, palette, recent], { gap: "lg" })], { size: "md" }))
+
+commands = [
+  { id: "new-doc", label: "New document", group: "Create", icon: "file", shortcut: "N" },
+  { id: "new-folder", label: "New folder", group: "Create", icon: "folder-plus", shortcut: "F" },
+  { id: "search", label: "Search everything", group: "Navigate", icon: "magnifying-glass", shortcut: "/" },
+  { id: "go-home", label: "Go to dashboard", group: "Navigate", icon: "gauge", shortcut: "G H" },
+  { id: "go-settings", label: "Open settings", group: "Navigate", icon: "gear", shortcut: "G S" },
+  { id: "theme", label: "Toggle theme", group: "View", icon: "circle-half-stroke", shortcut: "T" },
+  { id: "invite", label: "Invite teammate", group: "Team", icon: "user-plus", shortcut: "I" },
+  { id: "logout", label: "Sign out", group: "Account", icon: "right-from-bracket", shortcut: "Q" }
+]
+
+$open = false
+$q = ""
+$last = null
+$recent = []
+
+filtered = commands.filter(c => $q == "" || c.label.toLowerCase().includes($q.toLowerCase()) || c.group.toLowerCase().includes($q.toLowerCase()))
+groups = $util.unique(filtered.map(c => c.group))
+
+function run(c) {
+  $last = c.label
+  $recent = [c.id, ...$recent.filter(x => x != c.id)].slice(0, 4)
+  $open = false
+  $q = ""
+  $toast.show(`Ran: ${c.label}`, { tone: "info" })
+}
+
+$effect(() => {
+  const onKey = (e) => {
+    if (e.key == "k" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $open = true }
+    else if (e.key == "Escape") { $open = false }
+  }
+  document.addEventListener("keydown", onKey)
+  cleanup(() => document.removeEventListener("keydown", onKey))
+}, ["mount"])
+
+header = PageHeader("Command palette", { subtitle: "Press Cmd/Ctrl + K anywhere to open", breadcrumbs: false, actions: [Button("Open palette", { variant: "primary", icon: "terminal", onClick: () => { $open = true } })] })
+
+hint = Card([Row([
+  Icon("keyboard", { size: "lg", color: "var(--rui-color-primary)" }),
+  StackItem(Column([
+    Text($last ? `Last command: ${$last}` : "No command run yet", { variant: "body-heavy" }),
+    Text("Open the palette, type to filter, then Enter to run.", { variant: "small", tone: "muted" })
+  ], { gap: "xs" }), { grow: 1 }),
+  Kbd(["Cmd", "K"])
+], { align: "center", gap: "md" })])
+
+function commandRow(c) {
+  return OnClick(Box([Row([
+    Icon(c.icon, { color: "var(--rui-color-primary)" }),
+    StackItem(Text(c.label, { variant: "body" }), { grow: 1 }),
+    Kbd([c.shortcut])
+  ], { align: "center", gap: "sm" })], { padding: "sm", border: "subtle", background: "surface" }),
+  { onClick: () => run(c) })
+}
+
+palette = Modal("", {
+  open: $open, closeOnBackdrop: true, onClose: () => { $open = false },
+  children: [Column([
+    SearchBar("q", { placeholder: "Type a command or search…", value: $q, shortcut: "Esc" }),
+    Show(filtered.length > 0, {
+      fallback: EmptyState("No matching commands", { description: "Try a different search.", icon: "ghost" }),
+      children: Column(groups.map(g => Column([
+        Text(g.toUpperCase(), { variant: "small-heavy", tone: "muted" }),
+        Column(filtered.filter(c => c.group == g).map(c => commandRow(c)), { gap: "xs" })
+      ], { gap: "xs" })), { gap: "md" })
+    })
+  ], { gap: "md" })]
+})
+
+recent = Show($recent.length > 0, {
+  children: Card([Column([
+    SectionHeader("Recent commands", { eyebrow: "HISTORY" }),
+    Column($recent.map(id => commands.find(c => c.id == id)).map(c => Row([Icon(c.icon, { size: "sm" }), Text(c.label, { variant: "small" }), Spacer(), Button("Run again", { variant: "ghost", size: "xs", icon: "rotate-right", onClick: () => run(c) })], { align: "center", gap: "sm" })), { gap: "xs" })
+  ], { gap: "md" })])
+})

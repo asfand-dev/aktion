@@ -1,0 +1,357 @@
+// AI Chat Assistant — a full assistant workspace: a conversation rail with rename and delete,
+// a generative-UI thread (Markdown, code, tables, stats), a composer with model, temperature
+// and attachments, and a context panel for sources, memory and usage. Every reply is a LOCAL
+// MOCK — no network and no model call; answers are picked deterministically from an inline
+// library after a simulated latency. Starting point for: any assistant, copilot or agent console.
+// Uses: $store, ChatBubble + rich content, InlineEdit, ConfirmDialog, Sheet, Tabs, FollowUpBlock.
+$app(Column([header, workspace, settingsSheet, confirmDelete], { gap: "lg", padding: { base: "sm", md: "md" } }))
+
+$search = ""
+$draft = ""
+$fact = ""
+$model = "atlas-4-turbo"
+$temp = 0.4
+$pending = false
+$reqId = 0
+$renameId = ""
+$deleteId = ""
+$attachments = []
+$panelTab = "sources"
+$settingsOpen = false
+
+models = [
+  { value: "atlas-4-turbo", label: "Atlas 4 Turbo", inPrice: 2.5, outPrice: 10, ctx: 200000, latency: 950 },
+  { value: "atlas-4-mini", label: "Atlas 4 Mini", inPrice: 0.15, outPrice: 0.6, ctx: 128000, latency: 480 },
+  { value: "meridian-3-pro", label: "Meridian 3 Pro", inPrice: 3, outPrice: 15, ctx: 1000000, latency: 1500 },
+  { value: "lumen-2-flash", label: "Lumen 2 Flash", inPrice: 0.08, outPrice: 0.3, ctx: 64000, latency: 320 }
+]
+
+// Canned answers — each carries its rich body, its "citations" and the follow-ups offered after it.
+replies = [
+  {
+    match: ["latency", "p95", "slow", "deploy", "regression", "checkout"],
+    lead: "The regression tracks build 2026.7.14-rc2 — the batched cart loader was replaced with a per-line lookup.",
+    body: "## Likely cause: an N+1 on cart items\n\nThree signals line up with the deploy window:\n\n- **checkout.query_count** went 4 → 61 per request\n- **DB connection wait** climbed to 380 ms at p95\n- **API CPU** is flat, so this is I/O, not compute\n\nRestoring the batched loader should return p95 to roughly 260 ms.",
+    code: { language: "typescript", filename: "src/checkout/loadCart.ts", source: "export async function loadCart(cartId: string) {\n  const [cart, items] = await Promise.all([\n    db.cart.findById(cartId),\n    db.cartItem.findManyByCart(cartId)\n  ])\n  return { ...cart, items }\n}" },
+    table: { cols: ["Stage", "p95 before", "p95 after"], rows: [["Cart load", "38 ms", "910 ms"], ["Tax quote", "64 ms", "71 ms"], ["Payment auth", "118 ms", "121 ms"]] },
+    sources: [{ title: "deploy-log · 2026.7.14-rc2", kind: "Deploy", icon: "rocket", score: 0.94 }, { title: "apm/checkout p95 — last 7 days", kind: "Metric", icon: "chart-line", score: 0.91 }, { title: "PR #4821 — inline cart lookup", kind: "Code", icon: "code-branch", score: 0.86 }],
+    follow: ["Draft the revert PR description", "What else shipped in 2026.7.14?", "Add a query-count regression test"]
+  },
+  {
+    match: ["vector", "index", "embedding", "hnsw", "retrieval", "search"],
+    lead: "For 8M embeddings at 1536 dimensions, HNSW wins on recall and tail latency; IVF-PQ wins on memory.",
+    body: "### Picking an index for 8M vectors\n\n- **HNSW** holds recall above 0.94 at m=32, but keeps the whole graph in RAM\n- **IVF-PQ** fits in a third of the memory and rebuilds in minutes, for ~4 points of recall\n- **Flat** stays exact and is still fine below ~200k vectors\n\nIf the corpus passes 20M, shard by tenant before changing index type.",
+    metrics: [{ label: "Recall@10", value: "0.94", hint: "HNSW m=32" }, { label: "p95 query", value: "18 ms", hint: "8M vectors" }, { label: "RAM / 1M vec", value: "3.1 GB", hint: "float32" }],
+    table: { cols: ["Index", "Recall@10", "p95", "Build"], rows: [["HNSW m=32", "0.94", "18 ms", "41 min"], ["IVF-PQ 4096", "0.90", "26 ms", "11 min"], ["Flat", "1.00", "310 ms", "0 min"]] },
+    sources: [{ title: "Retrieval benchmark — Q2 rerun", kind: "Notebook", icon: "flask", score: 0.93 }, { title: "vector-store capacity plan", kind: "Doc", icon: "file-lines", score: 0.88 }],
+    follow: ["Estimate the cost of sharding by tenant", "Show the recall curve by m", "Which index for 200k vectors?"]
+  },
+  {
+    match: ["sql", "churn", "cohort", "retention", "query"],
+    lead: "Here is a monthly cohort query — signup month down the side, 30-day retention across.",
+    body: "### Monthly churn cohort\n\nThe query buckets every account by signup month, then counts the ones still active in the last 30 days. Run it against the read replica: on the current table it scans about 2.4M rows.",
+    code: { language: "sql", filename: "analytics/churn_cohort.sql", source: "WITH signups AS (\n  SELECT id, date_trunc('month', created_at) AS cohort\n  FROM accounts\n)\nSELECT s.cohort,\n       count(*) FILTER (WHERE a.last_seen > now() - interval '30 days') AS retained,\n       count(*) AS total\nFROM signups s\nJOIN accounts a ON a.id = s.id\nGROUP BY 1\nORDER BY 1 DESC" },
+    metrics: [{ label: "Rows scanned", value: "2.4M", hint: "read replica" }, { label: "Runtime", value: "1.8 s", hint: "warm cache" }],
+    sources: [{ title: "warehouse schema — accounts", kind: "Schema", icon: "database", score: 0.9 }, { title: "Retention definitions (v3)", kind: "Doc", icon: "file-lines", score: 0.82 }],
+    follow: ["Add a weekly variant", "Chart the last 12 cohorts", "Explain the FILTER clause"]
+  },
+  {
+    match: ["cost", "price", "budget", "spend", "token", "billing"],
+    lead: "Last month's spend was concentrated in long-context summarisation — routing that work to a smaller model saves about 61%.",
+    body: "### Where the spend goes\n\nSummarisation is 12% of requests but 58% of cost, because each one carries a 40k-token document into the prompt.\n\n1. Route summarisation to **Atlas 4 Mini**, keep review on the larger model\n2. Cache the document embedding instead of re-sending the body\n3. Cap max output at 900 tokens for chat replies\n\nTogether these hold quality on the eval set while roughly halving the monthly bill.",
+    metrics: [{ label: "Monthly spend", value: "$4,180", hint: "all workspaces", tone: "primary" }, { label: "Projected", value: "$1,630", hint: "after routing", tone: "success" }, { label: "Eval delta", value: "-0.4 pt", hint: "within noise" }],
+    table: { cols: ["Workload", "Share of calls", "Share of cost"], rows: [["Summarisation", "12%", "58%"], ["Chat", "63%", "27%"], ["Classification", "25%", "15%"]] },
+    sources: [{ title: "Usage export — July 2026", kind: "Report", icon: "receipt", score: 0.95 }, { title: "Model routing RFC", kind: "Doc", icon: "file-lines", score: 0.87 }],
+    follow: ["Draft the routing RFC summary", "What would Lumen 2 Flash cost?", "Show cost per conversation"]
+  }
+]
+
+chat = $store({
+  active: "c1",
+  system: "You are Atlas, a careful engineering assistant for the Northwind platform team. Prefer evidence from workspace documents, show your reasoning briefly, and never invent metrics.",
+  verbosity: "balanced",
+  webSearch: true,
+  citations: true,
+  redact: false,
+  memoryOn: true,
+  conversations: [
+    { id: "c1", title: "Checkout p95 regression", group: "today", starred: true },
+    { id: "c2", title: "Vector index for 8M embeddings", group: "today", starred: false },
+    { id: "c3", title: "Churn cohort SQL", group: "yesterday", starred: false },
+    { id: "c4", title: "Onboarding email rewrite", group: "yesterday", starred: true },
+    { id: "c5", title: "Assistant budget review", group: "earlier", starred: false },
+    { id: "c6", title: "Probe tuning scratchpad", group: "earlier", starred: false }
+  ],
+  threads: {
+    c1: [{ id: "m1", role: "user", body: "Checkout p95 jumped from 240ms to 1.4s after Tuesday's deploy. What changed?", time: "09:12", feedback: "" }, { id: "m2", role: "assistant", ref: 0, time: "09:12", feedback: "up" }],
+    c2: [{ id: "m3", role: "user", body: "Compare HNSW and IVF-PQ for an 8M embedding index.", time: "08:41", feedback: "" }, { id: "m4", role: "assistant", ref: 1, time: "08:41", feedback: "" }],
+    c3: [{ id: "m5", role: "user", body: "Write SQL for a monthly churn cohort by signup month.", time: "17:20", feedback: "" }, { id: "m6", role: "assistant", ref: 2, time: "17:20", feedback: "" }],
+    c4: [], c5: [], c6: []
+  },
+  memory: [
+    { id: "f1", fact: "Deploys ship Tuesdays at 14:00 UTC", source: "Confirmed in Checkout p95 regression" },
+    { id: "f2", fact: "Warehouse reads go to the replica, never primary", source: "Confirmed in Churn cohort SQL" },
+    { id: "f3", fact: "Jordan prefers TypeScript examples over pseudocode", source: "Inferred from 14 conversations" }
+  ],
+  select: (s, id) => { s.active = id },
+  rename: (s, id, title) => { s.conversations = s.conversations.map(c => c.id == id ? { ...c, title: title } : c) },
+  star: (s, id) => { s.conversations = s.conversations.map(c => c.id == id ? { ...c, starred: !c.starred } : c) },
+  create: (s, conv) => { s.conversations = [conv, ...s.conversations]; s.threads = { ...s.threads, [conv.id]: [] }; s.active = conv.id },
+  remove: (s, id) => { s.conversations = s.conversations.filter(c => c.id != id); s.active = s.conversations.length > 0 ? s.conversations[0].id : "" },
+  append: (s, id, msg) => { s.threads = { ...s.threads, [id]: [...s.threads[id] ?? [], msg] } },
+  setRef: (s, cid, mid, ref) => { s.threads = { ...s.threads, [cid]: (s.threads[cid] ?? []).map(m => m.id == mid ? { ...m, ref: ref } : m) } },
+  setFeedback: (s, cid, mid, v) => { s.threads = { ...s.threads, [cid]: (s.threads[cid] ?? []).map(m => m.id == mid ? { ...m, feedback: v } : m) } },
+  remember: (s, entry) => { s.memory = [...s.memory, entry] },
+  forget: (s, id) => { s.memory = s.memory.filter(f => f.id != id) },
+  setSystem: (s, v) => { s.system = v },
+  setVerbosity: (s, v) => { s.verbosity = v },
+  setWebSearch: (s, v) => { s.webSearch = v },
+  setCitations: (s, v) => { s.citations = v },
+  setRedact: (s, v) => { s.redact = v },
+  setMemoryOn: (s, v) => { s.memoryOn = v }
+})
+
+// ---- Derived — every counter below is computed from the live thread ---------------------------
+currentModel = models.find(m => m.value == $model) ?? models[0]
+activeConv = chat.conversations.find(c => c.id == chat.active) ?? chat.conversations[0]
+messages = activeConv ? chat.threads[activeConv.id] ?? [] : []
+lastAssistant = messages.filter(m => m.role == "assistant").slice(-1)[0]
+lastReply = lastAssistant ? replies[lastAssistant.ref] : null
+sources = lastReply ? lastReply.sources : []
+tokensOf = t => Math.max(1, Math.ceil(String(t).length / 4))
+refText = r => r.body + (r.code ? r.code.source : "") + (r.table ? r.table.rows.map(row => row.join(" ")).join(" ") : "")
+msgTokens = m => m.role == "user" ? tokensOf(m.body) : tokensOf(refText(replies[m.ref]))
+money = n => "$" + n.toFixed(4)
+compact = n => n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n)
+stamp = () => $util.formatDate($util.now(), "HH:mm")
+allMessages = chat.conversations.map(c => chat.threads[c.id] ?? []).reduce((a, t) => a.concat(t), [])
+inTokens = tokensOf(chat.system) + $util.sum(allMessages.filter(m => m.role == "user").map(m => msgTokens(m)))
+outTokens = $util.sum(allMessages.filter(m => m.role == "assistant").map(m => msgTokens(m)))
+sessionCost = inTokens / 1000000 * currentModel.inPrice + outTokens / 1000000 * currentModel.outPrice
+threadTokens = tokensOf(chat.system) + $util.sum(messages.map(m => msgTokens(m)))
+contextUsed = Math.min(100, Math.round(threadTokens / currentModel.ctx * 1000) / 10)
+draftCost = tokensOf($draft) / 1000000 * currentModel.inPrice
+
+// ---- Actions — all local, all deterministic ---------------------------------------------------
+function pickReply(text) {
+  const q = text.toLowerCase()
+  const hit = replies.findIndex(r => r.match.some(k => q.includes(k)))
+  if (hit >= 0) return hit
+  return q.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0) % replies.length
+}
+
+function send(text) {
+  const body = (text ?? $draft).trim()
+  if (!body || $pending || !activeConv) return
+  const convId = activeConv.id
+  const ref = pickReply(body)
+  chat.append(convId, { id: $util.uuid(), role: "user", body: body, time: stamp(), feedback: "" })
+  $draft = ""
+  $attachments = []
+  $pending = true
+  $reqId += 1
+  const ticket = $reqId
+  setTimeout(() => {
+    if ($reqId != ticket) return
+    chat.append(convId, { id: $util.uuid(), role: "assistant", ref: ref, time: stamp(), feedback: "" })
+    $pending = false
+  }, currentModel.latency)
+}
+
+function regenerate(msg) {
+  if ($pending || !activeConv) return
+  const convId = activeConv.id
+  $pending = true
+  $reqId += 1
+  const ticket = $reqId
+  setTimeout(() => {
+    if ($reqId != ticket) return
+    chat.setRef(convId, msg.id, (msg.ref + 1) % replies.length)
+    $pending = false
+  }, currentModel.latency)
+}
+
+function stop() { $reqId += 1; $pending = false; $toast.info("Generation stopped") }
+function rate(msg, value) { chat.setFeedback(activeConv.id, msg.id, msg.feedback == value ? "" : value) }
+function newChat() { chat.create({ id: $util.uuid(), title: "New conversation", group: "today", starred: false }); $search = ""; $draft = "" }
+function attach() { const pool = ["checkout-trace.har", "cohort-export.csv", "voice-guide.pdf", "usage-july.json"]; $attachments = [...$attachments, pool[$attachments.length % pool.length]] }
+function remember() { if (!$fact.trim()) return; chat.remember({ id: $util.uuid(), fact: $fact.trim(), source: "Added by you just now" }); $fact = "" }
+
+header = PageHeader("Atlas Assistant", {
+  breadcrumbs: ["Workspace", "Assistants", "Atlas"],
+  subtitle: `${currentModel.label} · temp ${$temp} · ${chat.verbosity} replies · ${compact(threadTokens)} of ${compact(currentModel.ctx)} context`,
+  status: Badge($pending ? "Generating" : "Ready", { tone: $pending ? "warning" : "success", icon: $pending ? "hourglass-half" : "circle-check" }),
+  actions: [Button("New chat", { variant: "primary", icon: "plus", size: "sm", onClick: newChat }), Button("Settings", { variant: "secondary", icon: "sliders", size: "sm", onClick: () => { $settingsOpen = true } })]
+})
+
+// ---- Conversation rail -------------------------------------------------------------------------
+groups = [{ key: "today", label: "Today" }, { key: "yesterday", label: "Yesterday" }, { key: "earlier", label: "Earlier" }]
+visible = chat.conversations.filter(c => $search == "" || c.title.toLowerCase().includes($search.toLowerCase()))
+
+function ConvRow(c) {
+  const count = (chat.threads[c.id] ?? []).length
+  const title = $renameId == c.id
+    ? InlineEdit(c.title, { label: "Conversation title", labelHidden: true, hint: "Enter saves · Esc cancels", onSave: v => { chat.rename(c.id, v); $renameId = "" }, onCancel: () => { $renameId = "" } })
+    : OnClick(Column([
+        Row([Icon(c.starred ? "star" : "message", { size: "xs" }), Text($util.truncate(c.title, 24), { variant: "small-heavy" })], { gap: "2xs", align: "center" }),
+        Text(count > 0 ? `${count} messages` : "Empty thread", { variant: "small", tone: "muted" })
+      ], { gap: "3xs" }), { onClick: () => chat.select(c.id) })
+  return Box([Row([
+    StackItem(title, { grow: 1 }),
+    IconButton("pen", { label: `Rename ${c.title}`, size: "xs", variant: "ghost", onClick: () => { $renameId = c.id } }),
+    IconButton("trash", { label: `Delete ${c.title}`, size: "xs", variant: "ghost", onClick: () => { $deleteId = c.id } })
+  ], { gap: "3xs", align: "center" })], { padding: "sm", radius: "md", border: c.id == chat.active ? "default" : "subtle", background: c.id == chat.active ? "muted" : "surface" })
+}
+
+function ConvGroup(g) {
+  const rows = visible.filter(c => c.group == g.key)
+  return rows.length == 0 ? null : Column([Text(g.label, { variant: "small-heavy", tone: "muted" }), Column(rows.map(c => ConvRow(c)), { gap: "2xs" })], { gap: "2xs" })
+}
+
+convPane = Card([
+  Row([StackItem(SectionHeader("Conversations", { eyebrow: "WORKSPACE" }), { grow: 1 }), IconButton("plus", { label: "Start a new chat", variant: "primary", size: "sm", onClick: newChat })], { gap: "xs", align: "center" }),
+  SearchBar("conv-search", { placeholder: "Search chats…", value: $search, ariaLabel: "Search conversations", shortcut: "/" }),
+  Show(visible.length > 0, { fallback: EmptyState("No chats match", { icon: "magnifying-glass", description: "Try a different keyword." }), children: ScrollArea([Column(groups.map(g => ConvGroup(g)), { gap: "md" })], { maxHeight: "44vh" }) }),
+  Separator("horizontal"),
+  PersonChip("Jordan Lee", { role: "Platform team", status: "online" })
+], { padding: "md" })
+
+// ---- Thread ------------------------------------------------------------------------------------
+starters = [
+  { label: "Triage a latency regression", icon: "gauge-high", description: "Checkout p95 tripled after the last deploy", prompt: "Checkout p95 jumped from 240ms to 1.4s after Tuesday's deploy. What changed?" },
+  { label: "Compare vector indexes", icon: "diagram-project", description: "HNSW against IVF-PQ for 8M embeddings", prompt: "Compare HNSW and IVF-PQ for an 8M embedding index." },
+  { label: "Write the churn cohort SQL", icon: "database", description: "Monthly retention by signup month", prompt: "Write SQL for a monthly churn cohort by signup month." },
+  { label: "Review assistant spend", icon: "receipt", description: "Where last month's token budget went", prompt: "Where did our assistant token budget go last month?" }
+]
+
+RichBody = r => [
+  Markdown(r.body),
+  r.metrics ? Stats(r.metrics, { layout: "strip" }) : null,
+  r.table ? Table(r.table.cols.map((col, i) => Col(col, r.table.rows.map(row => row[i]), { align: i == 0 ? "left" : "right" })), { density: "compact", striped: true, ariaLabel: "Supporting figures" }) : null,
+  r.code ? CodeBlock({ language: r.code.language, codeString: r.code.source, filename: r.code.filename, showLineNumbers: true }) : null
+]
+
+function AssistantMessage(m) {
+  const r = replies[m.ref]
+  return Column([
+    ChatBubble(currentModel.label, { body: r.lead, time: m.time, from: "agent", content: RichBody(r) }),
+    Row([
+      CopyButton(refText(r), { label: "Copy reply", iconOnly: true }),
+      IconButton("rotate-right", { label: "Regenerate this reply", size: "xs", variant: "ghost", disabled: $pending, onClick: () => regenerate(m) }),
+      IconButton("thumbs-up", { label: "Mark reply helpful", size: "xs", variant: m.feedback == "up" ? "primary" : "ghost", active: m.feedback == "up", onClick: () => rate(m, "up") }),
+      IconButton("thumbs-down", { label: "Mark reply unhelpful", size: "xs", variant: m.feedback == "down" ? "danger" : "ghost", active: m.feedback == "down", onClick: () => rate(m, "down") }),
+      Spacer(),
+      m.feedback ? Pill(m.feedback == "up" ? "Helpful" : "Flagged", { tone: m.feedback == "up" ? "success" : "warning" }) : null,
+      Text(`${msgTokens(m)} output tokens`, { variant: "small", tone: "muted" })
+    ], { gap: "2xs", align: "center", wrap: true })
+  ], { gap: "2xs" })
+}
+
+MessageView = m => m.role == "user" ? ChatBubble("You", { body: m.body, time: m.time, from: "me", status: "read" }) : AssistantMessage(m)
+emptyThread = Column([
+  EmptyState("Ask Atlas anything", { icon: "wand-magic-sparkles", description: `${currentModel.label} is loaded with your workspace context. Pick a starter or write your own prompt.` }),
+  Grid(starters.map(s => Tile(s.label, { icon: s.icon, description: s.description, tone: "primary", onClick: () => send(s.prompt) })), { columns: { base: 1, md: 2 }, gap: "sm" })
+], { gap: "md" })
+pendingRow = Row([Avatar(currentModel.label, { size: "xs", fallback: "initials" }), TypingIndicator(currentModel.label), Badge(`~${currentModel.latency} ms`, { tone: "warning", icon: "hourglass-half", size: "sm" }), LoadingDots({ label: "Composing a grounded reply", size: "sm" })], { gap: "xs", align: "center", wrap: true })
+followRow = lastReply && !$pending ? FollowUpBlock(lastReply.follow, { title: "Suggested next steps", onSelect: msg => send(msg) }) : null
+
+composer = Column([
+  Show($attachments.length > 0, { children: FilterChips($attachments, { onRemove: v => { $attachments = $attachments.filter(a => a != v) }, onClear: () => { $attachments = [] }, clearLabel: "Remove all" }) }),
+  TextArea("composer", { value: $draft, label: "Message Atlas", labelHidden: true, placeholder: `Message ${currentModel.label}…`, rows: 3, autoResize: true, maxLength: 4000, disabled: $pending }),
+  Row([
+    IconButton("paperclip", { label: "Attach a file", variant: "ghost", size: "sm", onClick: attach }),
+    Select("model", models.map(m => SelectItem(m.value, m.label)), { value: $model, label: "Model", labelHidden: true }),
+    StackItem(Slider("temperature", { min: 0, max: 1, step: 0.1, value: $temp, label: "Temperature", showValue: true, marks: [{ value: 0, label: "Precise" }, { value: 1, label: "Creative" }] }), { grow: 1, minWidth: "180px" }),
+    Spacer(),
+    $pending ? Button("Stop", { variant: "secondary", icon: "stop", onClick: stop }) : Button("Send", { variant: "primary", icon: "paper-plane", disabled: $draft.trim() == "", onClick: () => send() })
+  ], { gap: "sm", align: "end", wrap: true }),
+  Row([
+    StatusDot(chat.webSearch ? "Web search on" : "Workspace only", { tone: chat.webSearch ? "info" : "default" }),
+    Text(`${chat.verbosity} · ${chat.citations ? "citations on" : "citations off"}`, { variant: "small", tone: "muted" }),
+    Spacer(),
+    Text(`${tokensOf($draft)} draft tokens · est. ${money(draftCost)}`, { variant: "small", tone: "muted" })
+  ], { gap: "xs", align: "center", wrap: true })
+], { gap: "sm" })
+
+threadPane = activeConv
+  ? Card([
+      Row([
+        Avatar(currentModel.label, { size: "sm", status: "online", fallback: "initials" }),
+        StackItem(Column([
+          Text(activeConv.title, { variant: "body-heavy" }),
+          Row([StatusDot($pending ? "Generating" : "Idle", { tone: $pending ? "warning" : "success", pulse: $pending }), Text(`${messages.length} messages · ${compact(threadTokens)} tokens`, { variant: "small", tone: "muted" })], { gap: "xs", align: "center", wrap: true })
+        ], { gap: "3xs" }), { grow: 1 }),
+        IconButton("star", { label: "Star this conversation", size: "sm", variant: activeConv.starred ? "primary" : "ghost", active: activeConv.starred, onClick: () => chat.star(activeConv.id) }),
+        IconButton("sliders", { label: "Open assistant settings", size: "sm", variant: "ghost", onClick: () => { $settingsOpen = true } })
+      ], { gap: "sm", align: "center" }),
+      Separator("horizontal"),
+      Show(messages.length > 0, { fallback: emptyThread, children: ScrollArea([Column([...messages.map(m => MessageView(m)), $pending ? pendingRow : null, followRow], { gap: "md" })], { maxHeight: "52vh", stickToBottom: true }) }),
+      Separator("horizontal"),
+      composer
+    ])
+  : Card([EmptyState("No conversation open", { icon: "comments", description: "Every chat was deleted — start a fresh one.", action: Button("New chat", { variant: "primary", icon: "plus", onClick: newChat }) })])
+
+// ---- Context panel -----------------------------------------------------------------------------
+sourcesView = Show(sources.length > 0, {
+  fallback: EmptyState("No sources yet", { icon: "book-open", description: "Ask something and the documents behind the answer appear here." }),
+  children: Column([
+    ...sources.map(s => ListItem(s.title, { description: `${s.kind} · relevance ${Math.round(s.score * 100)}%`, icon: s.icon, trailing: Pill(`${Math.round(s.score * 100)}%`, { tone: s.score > 0.9 ? "success" : "neutral" }) })),
+    Callout("info", { title: "Grounding is simulated", description: "Answers come from an inline library — no retrieval service is contacted.", compact: true })
+  ], { gap: "xs" })
+})
+
+memoryView = Column([
+  Row([StackItem(Text("Facts Atlas carries between conversations", { variant: "small", tone: "muted" }), { grow: 1 }), Switch("memory-on", { label: "Memory", value: chat.memoryOn, onChange: v => chat.setMemoryOn(v) })], { gap: "xs", align: "center" }),
+  Show(chat.memory.length > 0, {
+    fallback: EmptyState("Nothing remembered", { icon: "brain", description: "Facts you confirm are stored here." }),
+    children: Column(chat.memory.map(f => Row([
+      StackItem(Column([Text(f.fact, { variant: "small-heavy" }), Text(f.source, { variant: "small", tone: "muted" })], { gap: "3xs" }), { grow: 1 }),
+      IconButton("xmark", { label: `Forget: ${f.fact}`, size: "xs", variant: "ghost", onClick: () => chat.forget(f.id) })
+    ], { gap: "2xs", align: "start" })), { gap: "sm" })
+  }),
+  Separator("horizontal"),
+  Row([StackItem(Input("new-fact", { value: $fact, label: "New fact", labelHidden: true, placeholder: "Teach Atlas a fact…" }), { grow: 1 }), Button("Remember", { variant: "secondary", size: "sm", icon: "plus", disabled: $fact.trim() == "", onClick: remember })], { gap: "xs", align: "end" })
+], { gap: "sm" })
+
+usageView = Column([
+  Stats([
+    { label: "Prompt tokens", value: compact(inTokens), hint: "every thread" },
+    { label: "Output tokens", value: compact(outTokens), hint: "generated locally" },
+    { label: "Session cost", value: money(sessionCost), hint: currentModel.label, tone: "primary" },
+    { label: "Turns", value: String(allMessages.length), hint: `${chat.conversations.length} conversations` }
+  ], { layout: "strip" }),
+  Progress(contextUsed, { max: 100, label: `Context window · ${compact(threadTokens)} of ${compact(currentModel.ctx)}`, tone: contextUsed > 80 ? "warning" : "primary", showValue: true }),
+  BarChart(messages.map((m, i) => `T${i + 1}`), { series: [Series("Tokens", { values: messages.map(m => msgTokens(m)) })], height: 150, showLegend: false, emptyText: "No turns in this conversation yet", ariaLabel: "Tokens per turn in the open conversation" }),
+  Separator("horizontal", { label: "Price per million tokens" }),
+  Table([
+    Col("Model", models.map(m => m.label)),
+    Col("In", models.map(m => "$" + m.inPrice.toFixed(2)), { align: "right" }),
+    Col("Out", models.map(m => "$" + m.outPrice.toFixed(2)), { align: "right" }),
+    Col("Latency", models.map(m => `${m.latency} ms`), { align: "right" })
+  ], { density: "compact", ariaLabel: "Model pricing and simulated latency" })
+], { gap: "md" })
+
+contextPane = Card([
+  SectionHeader("Context", { eyebrow: "THIS THREAD", subtitle: activeConv ? activeConv.title : "No conversation open" }),
+  Tabs([
+    TabItem("sources", { label: "Sources", icon: "book-open", badge: String(sources.length), children: [sourcesView] }),
+    TabItem("memory", { label: "Memory", icon: "brain", badge: String(chat.memory.length), children: [memoryView] }),
+    TabItem("usage", { label: "Usage", icon: "chart-simple", children: [usageView] })
+  ], { value: $panelTab, fitted: true })
+], { padding: "md" })
+
+workspace = SplitView([convPane], [Split(threadPane, contextPane, { ratio: "2/1", gap: "lg", stackAt: "lg", align: "start" })], { primaryWidth: "280px" })
+
+// ---- Overlays ----------------------------------------------------------------------------------
+settingsSheet = Sheet([Column([
+  FormSection("System prompt", [TextArea("system-prompt", { value: chat.system, label: "System prompt", labelHidden: true, rows: 5, onChange: v => chat.setSystem(v), hint: `${tokensOf(chat.system)} tokens · prepended to every request` })], { helper: "The header summary updates the moment you change it." }),
+  FormSection("Response length", [ToggleGroup("verbosity", { items: [{ value: "concise", label: "Concise" }, { value: "balanced", label: "Balanced" }, { value: "thorough", label: "Thorough" }], value: chat.verbosity, size: "sm", label: "Response length", onChange: v => chat.setVerbosity(v) })]),
+  FormSection("Safety and grounding", [
+    Switch("web-search", { label: "Search the web", value: chat.webSearch, description: "Cite public pages alongside workspace documents.", onChange: v => chat.setWebSearch(v) }),
+    Switch("citations", { label: "Always cite sources", value: chat.citations, description: "Every claim links to the document it came from.", onChange: v => chat.setCitations(v) }),
+    Switch("redact", { label: "Redact PII before sending", value: chat.redact, description: "Mask emails, phone numbers and card numbers.", onChange: v => chat.setRedact(v) })
+  ], { helper: "Applies to every conversation in this workspace." }),
+  Callout("info", { title: "This assistant is a mock", description: "Replies are chosen from an inline library after a simulated delay. Nothing leaves the browser.", compact: true })
+], { gap: "lg" })], { open: $settingsOpen, side: "right", title: "Assistant settings", width: "440px", onClose: () => { $settingsOpen = false }, footer: [Button("Done", { variant: "primary", onClick: () => { $settingsOpen = false } })] })
+
+confirmDelete = ConfirmDialog("Delete this conversation?", { open: $deleteId != "", message: "The thread and its messages are removed from this workspace.", tone: "danger", confirmLabel: "Delete conversation", onConfirm: () => { chat.remove($deleteId); $deleteId = "" }, onCancel: () => { $deleteId = "" } })
