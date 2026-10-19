@@ -62,16 +62,19 @@
     const app = document.getElementById("showcase");
     const errorBox = document.getElementById("showcase-error");
 
-    // Readiness contract with scripts/capture-showcase.mjs: `data-showcase` on
-    // <html> goes loading -> ready (or -> timeout). The program announces it
-    // has mounted by emitting `showcase:ready`; the page then waits for web
-    // fonts and images, so the screenshot never catches a half-loaded page.
+    // Readiness contract with the screenshot job (.github/workflows/_screenshots.yml,
+    // Primajin/screenshots-ci-action): `data-showcase` on <html> goes loading ->
+    // ready (or -> timeout, with a console error). The job's wait-for-selector
+    // is html:not([data-showcase="loading"]), so it waits for either. The
+    // program announces it has mounted by emitting `showcase:ready`; the page
+    // then waits for web fonts and images, so the screenshot never catches a
+    // half-loaded page.
     //
     // With ?capture=1, lazy images and iframes (Map) are switched to eager
     // first, so they load before the page reports ready instead of whenever
     // they come into view. Visitors keep lazy loading. Iframes are not waited
-    // on (a `load` that already happened cannot be observed); the capture
-    // script's network-idle wait covers them.
+    // on (a `load` that already happened cannot be observed); the action's own
+    // network-idle wait before it captures a grown viewport covers them.
     const CAPTURE = new URLSearchParams(location.search).get("capture") === "1";
     const READY_TIMEOUT_MS = 30000;
     const MEDIA_WAIT_MS = 20000;
@@ -164,7 +167,12 @@
     });
 
     setTimeout(() => {
-      if (root.dataset.showcase === "loading") root.dataset.showcase = "timeout";
+      if (root.dataset.showcase === "loading") {
+        root.dataset.showcase = "timeout";
+        // The screenshot job reports console errors in its comment, which is
+        // how a page that never became ready shows up there.
+        console.error(`[showcase] the page did not report ready within ${READY_TIMEOUT_MS / 1000} s`);
+      }
     }, READY_TIMEOUT_MS);
 
     await customElements.whenDefined("aktion-app");

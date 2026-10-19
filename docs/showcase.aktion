@@ -7,8 +7,9 @@
 // companies are made up.
 //
 // This page is also the pull-request screenshot: CI captures it in full on
-// every PR (.github/workflows/_screenshots.yml), so a change to any component
-// is visible in review. tests/showcase-page.test.ts fails when a registered
+// every PR with Primajin/screenshots-ci-action
+// (.github/workflows/_screenshots.yml), so a change to any component is
+// visible in review. tests/showcase-page.test.ts fails when a registered
 // component is missing from this file or a group count below drifts from the
 // library — adding a component means adding a specimen here.
 //

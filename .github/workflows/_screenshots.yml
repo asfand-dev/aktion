@@ -1,16 +1,31 @@
 name: "CI · Screenshots"
 
-# Full-page screenshots of the component showcase (docs/showcase.html, every
-# built-in component on one page) from this PR's preview, posted as ONE pull
-# request comment that is edited on every push rather than a new comment per
-# push. The images live as assets on the `image-holder` release, which is what
-# the comment links to.
+# Screenshots of the component showcase (docs/showcase.html, every built-in
+# component on one page) from this PR's preview, posted as ONE pull request
+# comment with one section per look (desktop light, desktop dark, mobile). The
+# comment is edited on every push rather than a new comment per push, and each
+# call replaces only its own section. The images live as assets on the
+# `image-holder` release, which is what the comment links to.
 #
-# The capture is scripts/capture-showcase.mjs, not a stock screenshot action:
-# the showcase is ~31,000 px tall, and Chromium wraps any single capture taller
-# than 16,384 device pixels back to the top of the page. The script captures at
-# 1x in segments, with a page-tall viewport so iframes, lazy images and
-# scroll-triggered components are all rendered (see its header for details).
+# The capture is Primajin/screenshots-ci-action. The showcase is ~31,000 px
+# tall, so the page is grown to its full height (full-page-strategy:
+# grow-viewport): the Map's cross-origin iframe renders and the lazy and
+# IntersectionObserver-driven components trigger, which Chromium's own
+# full-page mode does not do. A page taller than 16,000 px is captured in
+# consecutive parts (Chromium wraps a single capture taller than 16,384 device
+# pixels back to the top of the page). The errors of the page, and a page that
+# never became ready, are a warning in the comment.
+#
+# The three calls run one after the other, which is what makes the sections of
+# one comment safe: calls that share a comment-tag must not run in parallel.
+# The job-level concurrency group below also covers two pushes in a row.
+#
+# The `image-holder` release holds at most 1000 assets and the action never
+# overwrites one: every run adds one asset per image part (8 today: 2 + 2 + 4).
+# Nothing here prunes them. When the release gets close to the limit, delete
+# the oldest assets by hand or with a scheduled workflow; see "Asset names and
+# the limit of 1000 assets" in
+# https://github.com/Primajin/screenshots-ci-action/blob/main/README.PR.md#asset-names-and-the-limit-of-1000-assets
 on:
   workflow_call:
 
@@ -18,15 +33,18 @@ jobs:
   screenshots:
     runs-on: ubuntu-latest
     name: Screenshot the component showcase
+    # One run per pull request at a time: two runs would both find no comment
+    # yet and each create one. A newer push replaces an older, now stale run.
+    concurrency:
+      group: screenshots-pr-${{ github.event.number }}
+      cancel-in-progress: true
     permissions:
-      checks: read
       contents: write # upload the images to the image-holder release
       pull-requests: write # create or update the screenshot comment
     env:
       SHOWCASE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-preview/pr-${{ github.event.number }}/showcase.html
-      PR_NUMBER: ${{ github.event.number }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       RELEASE_TAG: image-holder
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       # No "wait for build" step here: the caller's `needs: deploy-preview`
       # already guarantees the preview job (including its own "wait for
@@ -53,49 +71,102 @@ jobs:
           echo "Timed out waiting for the showcase after ${timeout}s"
           exit 1
 
-      - name: Checkout code
-        uses: actions/checkout@v7
+      - name: Find the id of the ${{ env.RELEASE_TAG }} release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "id=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq .id)" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+      # What every call below shares, and why:
+      #  - ?theme= and ?capture=1: docs/showcase.html pins the theme and, with
+      #    capture=1, loads lazy media eagerly and pre-opens the states a
+      #    visitor would trigger by hand.
+      #  - wait-for-selector: the page sets `data-showcase` on <html> to
+      #    "loading" and then to "ready", or to "timeout" after 30 s. Waiting
+      #    for anything but "loading" is waiting for either; the page logs an
+      #    error when it timed out, which report-page-problems puts in the
+      #    comment. The 45 s timeout is only a backstop for a page that never
+      #    ran its script at all; the screenshot is taken anyway.
+      #  - reducedMotion: the animated components honour prefers-reduced-motion,
+      #    so little moves while the page is captured. Scale stays 1 (the
+      #    default of `sizes`): a 2x capture of a 31,000 px page would double
+      #    the pixels and the parts.
+      #  - no-desktop: only the look of this call, not the 7 stock desktop sizes.
+      - name: Desktop, light theme
+        uses: Primajin/screenshots-ci-action@v4
         with:
-          node-version: '24'
-          cache: 'npm'
+          url: ${{ env.SHOWCASE_URL }}?theme=light&capture=1
+          no-desktop: true
+          sizes: 1440x900
+          context-options: '{"colorScheme": "light", "reducedMotion": "reduce"}'
+          full-page: true
+          full-page-strategy: grow-viewport
+          wait-until: load
+          wait-for-selector: 'html:not([data-showcase="loading"])'
+          wait-for-selector-timeout: 45000
+          report-page-problems: true
+          release-id: ${{ steps.release.outputs.id }}
+          comment-tag: showcase
+          comment-headline: Component showcase
+          comment-section: Desktop · light theme
+          comment-open: first
 
-      # Brings in playwright-core, which drives the Google Chrome preinstalled
-      # on GitHub's Ubuntu runners, so there is no browser download.
-      - name: Install dependencies
-        run: npm ci
+      # The calls share the screenshots/ directory and desktop light and dark
+      # write a file of the same name, so each look is moved aside before the
+      # next one. Only the artifact needs this: every call uploads and posts
+      # just the files it wrote itself.
+      - name: Keep the files of the desktop light look
+        shell: bash
+        run: mkdir -p looks && mv screenshots looks/desktop-light
 
-      - name: Capture the showcase
-        run: node scripts/capture-showcase.mjs "$SHOWCASE_URL" screenshots --prefix "showcase-pr${PR_NUMBER}-${HEAD_SHA::7}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+      - name: Desktop, dark theme
+        uses: Primajin/screenshots-ci-action@v4
+        with:
+          url: ${{ env.SHOWCASE_URL }}?theme=dark&capture=1
+          no-desktop: true
+          sizes: 1440x900
+          context-options: '{"colorScheme": "dark", "reducedMotion": "reduce"}'
+          full-page: true
+          full-page-strategy: grow-viewport
+          wait-until: load
+          wait-for-selector: 'html:not([data-showcase="loading"])'
+          wait-for-selector-timeout: 45000
+          report-page-problems: true
+          release-id: ${{ steps.release.outputs.id }}
+          comment-tag: showcase
+          comment-headline: Component showcase
+          comment-section: Desktop · dark theme
 
+      - name: Keep the files of the desktop dark look
+        shell: bash
+        run: mv screenshots looks/desktop-dark
+
+      - name: Mobile, light theme
+        uses: Primajin/screenshots-ci-action@v4
+        with:
+          url: ${{ env.SHOWCASE_URL }}?theme=light&capture=1
+          no-desktop: true
+          sizes: 390x844:mobile
+          context-options: '{"colorScheme": "light", "reducedMotion": "reduce"}'
+          full-page: true
+          full-page-strategy: grow-viewport
+          wait-until: load
+          wait-for-selector: 'html:not([data-showcase="loading"])'
+          wait-for-selector-timeout: 45000
+          report-page-problems: true
+          release-id: ${{ steps.release.outputs.id }}
+          comment-tag: showcase
+          comment-headline: Component showcase
+          comment-section: Mobile · light theme
+
+      - name: Keep the files of the mobile look
+        shell: bash
+        run: mv screenshots looks/mobile-light
+
+      # The images are also an artifact of the run, one directory per look.
       - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
         with:
-          path: screenshots
+          path: looks
           name: showcase-screenshots
-
-      - name: Upload the images to the ${{ env.RELEASE_TAG }} release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$RELEASE_TAG" screenshots/*.jpg --clobber --repo "$GITHUB_REPOSITORY"
-
-      - name: Post or update the screenshot comment
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          node scripts/showcase-comment.mjs screenshots/manifest.json \
-            --assets "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}" \
-            --page "$SHOWCASE_URL" \
-            --commit "$HEAD_SHA" \
-            --run "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" > comment.md
-          # The marker is MARKER in scripts/showcase-comment.mjs.
-          id=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- showcase-screenshots -->"))) | .id' | tail -n 1)
-          if [ -n "$id" ]; then
-            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" -F body=@comment.md > /dev/null
-            echo "Updated comment ${id}"
-          else
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -F body=@comment.md > /dev/null
-            echo "Created the screenshot comment"
-          fi

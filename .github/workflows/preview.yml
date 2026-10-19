@@ -63,7 +63,6 @@ jobs:
     if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     needs: deploy-preview
     permissions:
-      checks: read
       contents: write
       pull-requests: write
     uses: ./.github/workflows/_screenshots.yml
