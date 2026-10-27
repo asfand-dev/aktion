@@ -177,7 +177,7 @@ export function reportRuntimeError(ctx: EvaluationContext, err: unknown, meta: A
     }
   }
   // eslint-disable-next-line no-console
-  console.error(meta.message ?? `[aktion] ${meta.kind} error in ${meta.source}`, err);
+  console.error("%s", meta.message ?? `[aktion] ${meta.kind} error in ${meta.source}`, err);
 }
 
 /**
@@ -190,5 +190,5 @@ export function reportVia(sink: RuntimeErrorSink | undefined, err: unknown, meta
     return;
   }
   // eslint-disable-next-line no-console
-  console.error(meta.message ?? `[aktion] ${meta.kind} error in ${meta.source}`, err);
+  console.error("%s", meta.message ?? `[aktion] ${meta.kind} error in ${meta.source}`, err);
 }
