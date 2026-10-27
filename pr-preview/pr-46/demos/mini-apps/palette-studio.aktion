@@ -1,0 +1,76 @@
+// Palette Studio — generate colour palettes, lock the keepers, undo/redo every shuffle.
+// Standalone tool for: design systems, brand exploration, theme building.
+// Uses: $store({ history }) undo/redo, Swatch, CopyButton, KbdShortcut + OnKeyboard, sx.
+$app(OnKeyboard(Column([header, paletteRow, actions, exportCard], { gap: "lg", padding: "md" }), { onKeyDown: (key) => { if (key == " " || key == "Space" || key == "Spacebar") shuffle() }, focusable: true }))
+
+HUES = [0, 20, 35, 50, 145, 165, 200, 220, 250, 280, 320]
+
+function randomColor() {
+  const h = HUES[Math.floor(Math.random() * HUES.length)] + Math.floor(Math.random() * 18)
+  const s = 55 + Math.floor(Math.random() * 35)
+  const l = 38 + Math.floor(Math.random() * 30)
+  return hslToHex(h, s, l)
+}
+
+function hslToHex(h, s, l) {
+  const sn = s / 100
+  const ln = l / 100
+  const a = sn * Math.min(ln, 1 - ln)
+  const f = n => {
+    const k = (n + h / 30) % 12
+    const c = ln - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)))
+    return Math.round(255 * c).toString(16).padStart(2, "0")
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
+}
+
+studio = $store({
+  history: 50,
+  colors: ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4"],
+  locked: [false, false, false, false, false],
+  setColors: (s, next) => { s.colors = next },
+  toggleLock: (s, i) => { s.locked = s.locked.map((v, j) => j == i ? !v : v) }
+})
+
+function shuffle() {
+  studio.setColors(studio.colors.map((c, i) => studio.locked[i] ? c : randomColor()))
+}
+
+cssExport = `:root {\n${studio.colors.map((c, i) => `  --color-${i + 1}: ${c};`).join("\n")}\n}`
+
+header = PageHeader("Palette Studio", {
+  subtitle: "Shuffle until it sings — lock colours you love first",
+  badge: Badge(`${studio.locked.filter(Boolean).length} locked`, { tone: "primary", icon: "lock" }),
+  actions: [
+    Button("Undo", { variant: "ghost", icon: "rotate-left", size: "sm", onClick: () => studio.undo(), disabled: !studio.canUndo }),
+    Button("Redo", { variant: "ghost", icon: "rotate-right", size: "sm", onClick: () => studio.redo(), disabled: !studio.canRedo })
+  ]
+})
+
+swatchTile = (c, i) => Card([
+  Box([Text("", { variant: "small" })], { sx: { h: "120px", radius: "md" }, style: `background: ${c};` }),
+  Row([
+    StackItem(Text(c.toUpperCase(), { variant: "body-heavy" }), { grow: 1 }),
+    IconButton(studio.locked[i] ? "lock" : "lock-open", { label: "Lock colour", variant: studio.locked[i] ? "primary" : "ghost", size: "sm", onClick: () => studio.toggleLock(i) })
+  ], { align: "center" }),
+  CopyButton(c, { label: "Copy hex" })
+], {
+  key: `c-${i}`,
+  sx: { states: { hover: { translateY: "-3px", shadow: "lg" } } }
+})
+
+paletteRow = Grid(studio.colors.map((c, i) => swatchTile(c, i)), { columns: { base: 1, sm: 2, lg: 5 }, gap: "md" })
+
+actions = Card([
+  Row([
+    Button("Shuffle unlocked", { variant: "primary", icon: "shuffle", size: "lg", onClick: shuffle }),
+    Row([Text("or press", { variant: "small", tone: "muted" }), KbdShortcut(["Space"])], { gap: "xs", align: "center" }),
+    Spacer(),
+    Swatch("Preview", { background: studio.colors[0], foreground: "#ffffff", colors: studio.colors })
+  ], { gap: "md", align: "center", wrap: true })
+])
+
+exportCard = Card([
+  SectionHeader("Export", { eyebrow: "CSS VARIABLES", actions: [CopyButton(cssExport, { label: "Copy CSS" })] }),
+  CodeBlock(cssExport, { language: "css" })
+], { animate: "fade-up" })

@@ -1,0 +1,79 @@
+// Navigation — 10 reusable navigation components.
+$app(Column([header, Column(demos, { gap: "lg" })], { gap: "lg", padding: "md" }))
+
+header = PageHeader("Navigation", { subtitle: "10 reusable navigation components", badge: Badge("Components", { tone: "primary", icon: "compass" }) })
+function Demo(name, desc, body) { return Card([SectionHeader(name, { eyebrow: "COMPONENT", subtitle: desc }), body]) }
+
+// 1 — top navigation bar
+function TopNav({ brand = "Acme", links = [], actionLabel = "Sign in" } = {}) {
+  return Navbar({ brand, items: links.map(l => NavbarItem(l, { onClick: () => {} })), actions: [Button(actionLabel, { variant: "primary", size: "sm" })] })
+}
+
+// 2 — breadcrumb trail
+function Crumbs({ path = [] } = {}) {
+  return Breadcrumb(path)
+}
+
+// 3 — tabbed panel
+function TabbedPanel({ tabs = [] } = {}) {
+  return Tabs(tabs.map(t => TabItem(t.value, { label: t.label, icon: t.icon, badge: t.badge, children: t.children })), { defaultValue: tabs[0] && tabs[0].value })
+}
+
+// 4 — pagination (per-instance page atom)
+function Pager({ total = 100, perPage = 10 } = {}) {
+  $pageState = 1
+  return Pagination($pageState, { totalPages: Math.ceil(total / perPage), total, perPage })
+}
+
+// 5 — multi-step wizard (per-instance step atom)
+function Wizard({ steps = [] } = {}) {
+  $stepState = 0
+  return MultiStepForm({ steps, current: $stepState, nextLabel: "Next", prevLabel: "Back" })
+}
+
+// 6 — dropdown action menu
+function ActionMenu({ label = "Actions", items = [] } = {}) {
+  return DropdownMenu({ trigger: Button(label, { variant: "secondary", icon: "ellipsis-vertical" }), items: items.map(i => i.separator ? MenuSeparator() : MenuItem(i.label, { icon: i.icon, variant: i.variant, shortcut: i.shortcut })) })
+}
+
+// 7 — vertical nav list with active state (per-instance atom)
+function NavList({ items = [] } = {}) {
+  $activeNav = items[0] && items[0].id
+  return Column(items.map(i => OnClick(
+    Box([Row([Icon(i.icon, { size: "sm" }), StackItem(Text(i.label, { variant: i.id == $activeNav ? "body-heavy" : "body" }), { grow: 1 }), i.badge ? Badge(i.badge, { tone: "primary", size: "sm" }) : null], { align: "center", gap: "sm" })], { padding: "sm", border: "subtle", background: i.id == $activeNav ? "primary" : "none" }),
+    { onClick: () => { $activeNav = i.id } }
+  )), { gap: "xs" })
+}
+
+// 8 — back link
+function BackLink(label, { onClick } = {}) {
+  return Button(label || "Back", { variant: "ghost", icon: "arrow-left", onClick: onClick || (() => {}) })
+}
+
+// 9 — command palette trigger (Cmd-K, per-instance open atom)
+function CommandTrigger({ items = [] } = {}) {
+  $cmdOpen = false
+  return Column([
+    Row([Button("Open commands", { variant: "secondary", icon: "magnifying-glass", onClick: () => { $cmdOpen = true } }), Kbd(["Cmd", "K"])], { gap: "sm", align: "center" }),
+    CommandPalette({ items, open: $cmdOpen, placeholder: "Type a command…" })
+  ])
+}
+
+// 10 — segmented pill navigation (per-instance atom)
+function NavPills({ items = [] } = {}) {
+  $pill = items[0]
+  return Column([ToggleGroup("pills", { items: items.map(i => ({ value: i, label: i })), value: $pill }), Text(`Viewing: ${$pill}`, { variant: "small", tone: "muted" })], { gap: "sm" })
+}
+
+demos = [
+  Demo("TopNav", "Brand + links + action", TopNav({ brand: "Aktion", links: ["Product", "Pricing", "Docs"], actionLabel: "Get started" })),
+  Demo("Crumbs", "Breadcrumb trail", Crumbs({ path: ["Home", "Workspace", "Customers", "Acme Co"] })),
+  Demo("TabbedPanel", "Tabbed content", TabbedPanel({ tabs: [{ value: "overview", label: "Overview", icon: "gauge", children: [Text("Overview content")] }, { value: "activity", label: "Activity", icon: "clock", badge: "3", children: [Text("Recent activity")] }, { value: "settings", label: "Settings", icon: "gear", children: [Text("Settings panel")] }] })),
+  Demo("Pager", "Two-way bound pagination", Pager({ total: 248, perPage: 20 })),
+  Demo("Wizard", "Multi-step form", Wizard({ steps: [{ title: "Account", content: [Text("Step 1: create your account")] }, { title: "Profile", content: [Text("Step 2: set up your profile")] }, { title: "Done", content: [Text("Step 3: you're all set!")] }] })),
+  Demo("ActionMenu", "Dropdown menu", ActionMenu({ label: "Manage", items: [{ label: "Edit", icon: "pen" }, { label: "Duplicate", icon: "copy" }, { separator: true }, { label: "Delete", icon: "trash", variant: "danger" }] })),
+  Demo("NavList", "Vertical nav with active state", NavList({ items: [{ id: "home", label: "Home", icon: "house" }, { id: "inbox", label: "Inbox", icon: "inbox", badge: "12" }, { id: "reports", label: "Reports", icon: "chart-line" }, { id: "settings", label: "Settings", icon: "gear" }] })),
+  Demo("BackLink", "Back navigation link", BackLink("Back to orders")),
+  Demo("CommandTrigger", "Cmd-K command palette", CommandTrigger({ items: [{ label: "New file", group: "Create", shortcut: "N" }, { label: "Search docs", group: "Navigate", shortcut: "/" }, { label: "Toggle theme", group: "View" }] })),
+  Demo("NavPills", "Segmented pill nav", NavPills({ items: ["All", "Active", "Archived", "Trash"] }))
+]

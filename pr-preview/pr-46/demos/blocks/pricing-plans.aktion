@@ -1,0 +1,47 @@
+// Pricing Plans — three tiers with a monthly/yearly billing toggle that
+// recomputes prices live, a "most popular" highlight and per-plan CTAs.
+$app(Container([Column([header, toggle, plans, note], { gap: "lg" })], { size: "lg" }))
+
+$cycle = "yearly"
+yearly = $cycle == "yearly"
+
+tiers = [
+  { id: "starter", name: "Starter", monthly: 0,  blurb: "For side projects and trials.", icon: "seedling", popular: false,
+    features: ["1 project", "Community support", "1 GB storage", "Basic analytics"] },
+  { id: "pro", name: "Pro", monthly: 24, blurb: "For growing teams that ship fast.", icon: "rocket", popular: true,
+    features: ["Unlimited projects", "Priority support", "50 GB storage", "Advanced analytics", "Custom domains"] },
+  { id: "scale", name: "Scale", monthly: 79, blurb: "For organisations at scale.", icon: "building", popular: false,
+    features: ["Everything in Pro", "SSO & SAML", "Unlimited storage", "Audit logs", "Dedicated manager", "99.99% SLA"] }
+]
+
+money = n => n == 0 ? "Free" : $util.format(n, "currency", "USD")
+priceFor = t => yearly ? Math.round(t.monthly * 12 * 0.8) : t.monthly
+periodFor = t => t.monthly == 0 ? "" : yearly ? "/year" : "/month"
+
+header = Center([Column([
+  Badge("Pricing", { tone: "primary", icon: "tags" }),
+  Text("Simple, transparent pricing", { variant: "title" }),
+  Text("Start free, upgrade when you grow. Switch or cancel any time.", { variant: "small", tone: "muted" })
+], { gap: "xs", align: "center" })])
+
+toggle = Center([Row([
+  Text("Monthly", { variant: "small-heavy", tone: yearly ? "muted" : "default" }),
+  ToggleGroup("cycle", { items: [{ value: "monthly", label: "Monthly" }, { value: "yearly", label: "Yearly" }], value: $cycle, size: "sm" }),
+  Badge("Save 20%", { tone: "success", size: "sm", icon: "piggy-bank" })
+], { gap: "sm", align: "center" })])
+
+function planCard(t) {
+  return Card([Column([
+    Row([Icon(t.icon, { size: "lg", color: t.popular ? "var(--rui-color-primary)" : null }), Spacer(), t.popular ? Badge("Most popular", { tone: "primary" }) : null], { align: "center" }),
+    Text(t.name, { variant: "title" }),
+    Text(t.blurb, { variant: "small", tone: "muted" }),
+    Row([Text(money(priceFor(t)), { variant: "title" }), Text(periodFor(t), { variant: "small", tone: "muted" })], { gap: "xs", align: "end" }),
+    Button(t.monthly == 0 ? "Start free" : `Choose ${t.name}`, { variant: t.popular ? "primary" : "secondary", fullWidth: true, icon: "arrow-right" }),
+    Separator("horizontal"),
+    Column(t.features.map(f => Row([Icon("circle-check", { color: "var(--rui-color-success)", size: "sm" }), Text(f, { variant: "small" })], { gap: "sm", align: "center" })), { gap: "xs" })
+  ], { gap: "md" })])
+}
+
+plans = Grid(tiers.map(t => planCard(t)), { columns: { base: 1, md: 3 }, gap: "lg", alignItems: "start" })
+
+note = Center([Text("All prices in USD. VAT may apply. Yearly plans are billed up front.", { variant: "small", tone: "muted" })])

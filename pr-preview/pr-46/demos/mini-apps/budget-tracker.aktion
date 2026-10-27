@@ -1,0 +1,114 @@
+// Budget Tracker — log income & expenses, see a category breakdown and stay under budget.
+// Uses: $store({ persist, history }) with undo/redo, ConfirmDialog, $util.currency, animate.
+$app(Column([header, kpis, body, ledger, confirmClear], { gap: "lg", padding: "md" }))
+
+// ---- one persisted store with undo/redo instead of two $storage effects ----
+book = $store({
+  persist: "budget.book",
+  history: 30,
+  tx: [
+    { id: "t1", type: "income",  category: "Salary",    label: "Monthly salary",   amount: 3200, date: "2026-06-01" },
+    { id: "t2", type: "expense", category: "Rent",      label: "Apartment rent",   amount: 1200, date: "2026-06-02" },
+    { id: "t3", type: "expense", category: "Groceries", label: "Weekly shop",      amount: 86,   date: "2026-06-03" },
+    { id: "t4", type: "expense", category: "Transport", label: "Metro card",       amount: 40,   date: "2026-06-03" },
+    { id: "t5", type: "expense", category: "Fun",       label: "Concert tickets",  amount: 120,  date: "2026-06-04" },
+    { id: "t6", type: "expense", category: "Groceries", label: "Farmers market",   amount: 34,   date: "2026-06-04" }
+  ],
+  budget: 2000,
+  add:    (s, entry) => { s.tx = [entry, ...s.tx] },
+  remove: (s, id) => { s.tx = s.tx.filter(t => t.id != id) },
+  clear:  (s) => { s.tx = [] }
+})
+
+// form fields
+$fType = "expense"
+$fLabel = ""
+$fAmount = 0
+$fCat = "Groceries"
+$confirmOpen = false
+
+categories = ["Rent", "Groceries", "Transport", "Bills", "Fun", "Health", "Salary", "Other"]
+catTone = c => c == "Salary" ? "success" : c == "Rent" ? "danger" : c == "Fun" ? "warning" : "info"
+
+income   = $util.sum(book.tx.filter(t => t.type == "income").map(t => t.amount))
+expense  = $util.sum(book.tx.filter(t => t.type == "expense").map(t => t.amount))
+balance  = income - expense
+spentPct = book.budget > 0 ? Math.min(100, Math.round((expense / book.budget) * 100)) : 0
+
+expenses  = book.tx.filter(t => t.type == "expense")
+catLabels = $util.unique(expenses.map(t => t.category))
+catValues = catLabels.map(c => $util.sum(expenses.filter(t => t.category == c).map(t => t.amount)))
+
+money = n => $util.currency(n, "USD")
+
+function addTx() {
+  if (!$fLabel || $fAmount <= 0) return
+  book.add({ id: $util.uuid(), type: $fType, category: $fCat, label: $fLabel, amount: Number($fAmount), date: $util.formatDate($util.now(), "YYYY-MM-DD") })
+  $fLabel = ""
+  $fAmount = 0
+}
+
+header = PageHeader("Budget Tracker", {
+  subtitle: $util.formatDate($util.now(), "MMM D, YYYY"),
+  badge: Badge(balance >= 0 ? "In the black" : "Overspent", { tone: balance >= 0 ? "success" : "danger" }),
+  actions: [
+    Button("Undo", { variant: "ghost", icon: "rotate-left", size: "sm", onClick: () => book.undo(), disabled: !book.canUndo }),
+    Button("Redo", { variant: "ghost", icon: "rotate-right", size: "sm", onClick: () => book.redo(), disabled: !book.canRedo }),
+    Button("Clear all", { variant: "ghost", icon: "broom", size: "sm", onClick: () => { $confirmOpen = true } })
+  ]
+})
+
+confirmClear = ConfirmDialog("Clear every transaction?", {
+  open: $confirmOpen,
+  message: "This wipes the whole ledger. You can still press Undo afterwards.",
+  tone: "danger",
+  confirmLabel: "Clear ledger",
+  onConfirm: () => { book.clear(); $confirmOpen = false },
+  onCancel: () => { $confirmOpen = false }
+})
+
+kpis = Stats([
+  StatCard("Income",  { value: money(income),  icon: "arrow-down-long", tone: "success" }),
+  StatCard("Spent",   { value: money(expense), icon: "arrow-up-long",   tone: "danger" }),
+  StatCard("Balance", { value: money(balance), icon: "scale-balanced",  tone: balance >= 0 ? "primary" : "warning" }),
+  StatCard("Budget left", { value: money(Math.max(0, book.budget - expense)), icon: "piggy-bank" })
+])
+
+addForm = Card([
+  SectionHeader("Add transaction", { eyebrow: "NEW" }),
+  ToggleGroup("fType", { items: [{ value: "expense", label: "Expense" }, { value: "income", label: "Income" }], value: $fType }),
+  FormControl("Description", { field: Input("fLabel", { placeholder: "e.g. Coffee with team", value: $fLabel }) }),
+  Grid([
+    FormControl("Amount", { field: NumberInput("fAmount", { value: $fAmount, min: 0, step: 1 }) }),
+    FormControl("Category", { field: Select("fCat", { items: categories.map(c => SelectItem(c, { label: c })), value: $fCat }) })
+  ], { columns: 2, gap: "md" }),
+  Button("Add transaction", { onClick: addTx, variant: "primary", icon: "plus", fullWidth: true, disabled: !$fLabel || $fAmount <= 0 })
+], { animate: "fade-up" })
+
+budgetCard = Card([
+  SectionHeader("Monthly budget", { eyebrow: "LIMIT", subtitle: `${spentPct}% used` }),
+  Slider("budget", { min: 500, max: 5000, step: 100, value: book.budget, showValue: true }),
+  Progress(spentPct, { max: 100, tone: spentPct < 75 ? "success" : spentPct < 100 ? "warning" : "danger", showValue: true }),
+  Text(`${money(expense)} spent of ${money(book.budget)}`, { variant: "small", tone: "muted" })
+], { animate: { preset: "fade-up", delay: 80 } })
+
+breakdown = Show(catValues.length > 0, {
+  fallback: EmptyState("No expenses yet", { icon: "chart-pie" }),
+  children: PieChart(catLabels, { values: catValues, title: "Spending by category", valueFormat: "percent" })
+})
+
+body = Grid([addForm, budgetCard, Card([SectionHeader("Where it goes"), breakdown], { animate: { preset: "fade-up", delay: 160 } })], { columns: { base: 1, lg: 3 }, gap: "lg" })
+
+ledger = Card([
+  SectionHeader("Transactions", { subtitle: `${book.tx.length} entries`, eyebrow: "LEDGER" }),
+  Show(book.tx.length > 0, {
+    fallback: EmptyState("Nothing logged", { description: "Add your first transaction above.", icon: "receipt" }),
+    children: Table([
+      Col("Date", { values: book.tx.map(t => t.date) }),
+      Col("Description", { values: book.tx.map(t => t.label) }),
+      Col("Category", { values: book.tx.map(t => Badge(t.category, { tone: catTone(t.category), size: "sm" })) }),
+      Col("Amount", { align: "right", values: book.tx.map(t => Text(`${t.type == "income" ? "+" : "−"}${money(t.amount)}`, { variant: "body-heavy", tone: t.type == "income" ? "success" : "danger" })) }),
+      Col("", { align: "right", values: book.tx.map(t => IconButton("trash", { label: "Delete", variant: "ghost", size: "sm", onClick: () => book.remove(t.id) })) })
+    ], { striped: true })
+  })
+])

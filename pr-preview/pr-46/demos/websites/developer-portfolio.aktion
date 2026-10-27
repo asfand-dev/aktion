@@ -1,0 +1,307 @@
+// Developer Portfolio — a personal site for an invented staff product engineer: availability
+// hero, about + "currently", a grouped toolbelt, a tag-filtered project wall whose cards open
+// case-study drawers, open source, experience, writing, and a validated contact form.
+// Starting point for: personal sites, freelance/consultant pages, CV micro-sites.
+// Uses: $theme, NavBar + ThemeToggle, Display/GradientText, Split, Prose, DescriptionList, MetricStrip, FilterPill + Switch, MediaCard, Drawer, Timeline, AuthorByline, $form + SuccessState, Footer.
+$app(Column([skip, nav, hero, about, toolbelt, work, community, writing, contact, pageFooter, toTop], { gap: "none" }))
+
+$theme({
+  colors: { primary: "#c25b3c", accent: "#2f6f6b" },
+  radius: { md: "14px", lg: "20px", button: "12px" },
+  fonts: { import: ["Sora:600,700", "Inter:400,500,600"] },
+  font: { family: "Inter, system-ui, sans-serif", familyHeading: "Sora, Inter, sans-serif" }
+})
+
+// ---------- Content ----------
+me = {
+  name: "Priya Raghunathan", role: "Staff product engineer", email: "priya@raghunathan.dev",
+  portrait: "https://picsum.photos/seed/priya-raghunathan-desk/640/800", avatar: "https://picsum.photos/seed/priya-raghunathan-face/160/160"
+}
+
+bio = "I have spent nine years on the seam between design and engineering — four of them inside design-system teams, the rest shipping product.\n\nMy favourite work is the kind nobody demos: deleting a 400 kB dependency, making a table keyboard-navigable, writing the codemod so a rename actually lands. I care about **legibility** — in type and in code — about interfaces that behave on a five-year-old Android, and about leaving a team faster than I found it.\n\nOutside work I ride a very slow bicycle, teach a Saturday CSS class at a Neukölln community centre, and keep a notebook of interface details I wish more people copied."
+
+projects = [
+  { id: "atlas", name: "Atlas Ledger", client: "Meridian Climate Fund", year: "2025", badge: "Case study", role: "Lead engineer", link: "atlasledger.io", image: "https://picsum.photos/seed/atlas-ledger-ui/720/420",
+    blurb: "Double-entry accounting for climate grants, with an audit trail auditors actually enjoy reading.",
+    tags: ["Data viz", "Design systems"], stack: ["TypeScript", "React", "D3", "Postgres", "Style Dictionary"],
+    metrics: [{ label: "Reconciliation time", value: "−73%" }, { label: "Ledger rows", value: "18M" }, { label: "Audit findings", value: "0", tone: "success" }],
+    story: "Meridian tracked €400M of grant money in a spreadsheet that three people understood.\n\nI designed and built the ledger UI end to end: a virtualised transaction grid that stays at 60fps past a million rows, a reconciliation view that shows the *shape* of a discrepancy before the numbers, and an export that regulators accept without a phone call.\n\nThe hard part was never the charts. It was making a 40-year-old accounting model legible to a programme manager who joined last week." },
+  { id: "northlight", name: "Northlight UI", client: "Open source", year: "2024", badge: "Maintainer", role: "Creator & maintainer", link: "northlight.dev", image: "https://picsum.photos/seed/northlight-system/720/420",
+    blurb: "A 62-component React library with zero runtime CSS and a keyboard story that survives contact with real users.",
+    tags: ["Design systems", "Accessibility"], stack: ["TypeScript", "React", "Radix", "Storybook", "Chromatic"],
+    metrics: [{ label: "Components", value: "62" }, { label: "Bundle (gzip)", value: "24 kB" }, { label: "Teams using it", value: "9" }],
+    story: "Northlight started as one team's internal kit and is now used by nine product teams and about 4,200 people outside the company.\n\nEvery component ships with a keyboard spec, a reduced-motion path and a visual-regression baseline. Tokens are generated from Figma, so a rebrand is a pull request rather than a quarter.\n\nThe 4.0 release replaced our runtime CSS-in-JS with build-time extraction and took 38 kB off every page in the estate." },
+  { id: "tidepool", name: "Tidepool", client: "Studio Beacon", year: "2024", badge: "Realtime", role: "Frontend lead", link: "tidepool.app", image: "https://picsum.photos/seed/tidepool-canvas/720/420",
+    blurb: "A collaborative whiteboard that keeps drawing while the tunnel eats your connection.",
+    tags: ["Performance", "Data viz"], stack: ["TypeScript", "CRDTs", "Canvas", "WebRTC", "Rust/WASM"],
+    metrics: [{ label: "Cursor latency", value: "31ms" }, { label: "Offline replay", value: "100%" }, { label: "Client size", value: "6 kB" }],
+    story: "Tidepool's promise was simple: never lose a stroke. Delivering it meant a CRDT layer small enough to ship to a phone and a render loop that separates ink from chrome.\n\nI wrote the sync client and the hit-testing layer, moved shape indexing into WASM, and built a replay harness that fast-forwards a two-hour session in nine seconds so we can debug what a customer actually did.\n\nThe result is an offline whiteboard that reconciles cleanly after twenty minutes in the U-Bahn." },
+  { id: "quill", name: "Quill CLI", client: "Open source", year: "2023", badge: "Developer tool", role: "Author", link: "quillcli.dev", image: "https://picsum.photos/seed/quill-cli-terminal/720/420",
+    blurb: "Generates a fully typed API client from an OpenAPI document in one command — and keeps it honest in CI.",
+    tags: ["Developer tools", "Performance"], stack: ["TypeScript", "Node", "OpenAPI", "GitHub Actions"],
+    metrics: [{ label: "Weekly installs", value: "31k" }, { label: "Cold generate", value: "1.4s" }, { label: "Stars", value: "1.8k" }],
+    story: "Every team I joined had a hand-written API client that drifted from the spec within a sprint.\n\nQuill reads the OpenAPI document, emits narrow types and a tiny fetch wrapper, then fails the build when the served spec no longer matches what is committed. No codegen server, no runtime dependency, one file of output you can actually read.\n\nIt is the tool I most wish someone else had written first." },
+  { id: "fieldnote", name: "Fieldnote", client: "Rijksmuseum Labs", year: "2023", badge: "Accessibility", role: "Engineer & designer", link: "fieldnote.museum", image: "https://picsum.photos/seed/fieldnote-museum/720/420",
+    blurb: "A gallery-audio companion built for one-handed use, glare, and a museum's very patient wifi.",
+    tags: ["Accessibility", "Design systems"], stack: ["Svelte", "Service workers", "WCAG 2.2", "Web Audio"],
+    metrics: [{ label: "WCAG level", value: "AA+" }, { label: "First load", value: "89 kB" }, { label: "Works offline", value: "Fully", tone: "success" }],
+    story: "Visitors hold a phone in one hand, a coat in the other, and stand in a room with 900 lux of skylight.\n\nEvery control sits in the bottom third, contrast was tuned against measured gallery light rather than a design tool, and the whole tour caches on first tap so audio never stalls between rooms.\n\nWe tested with fourteen visitors including four screen-reader users. Six issues found, six fixed before launch." },
+  { id: "halcyon", name: "Halcyon Player", client: "Wavelength FM", year: "2022", badge: "Performance", role: "Engineer", link: "halcyon.fm", image: "https://picsum.photos/seed/halcyon-player/720/420",
+    blurb: "An embeddable audio player that starts in 300ms and never blocks the host page's main thread.",
+    tags: ["Performance", "Developer tools"], stack: ["TypeScript", "Web Components", "Web Audio", "Rollup"],
+    metrics: [{ label: "Time to audible", value: "312ms" }, { label: "Main-thread cost", value: "4ms" }, { label: "Embeds", value: "2,700" }],
+    story: "Publishers judge an embed by what it costs them, so Halcyon had a budget before it had a design: 12 kB, no layout shift, no long tasks.\n\nIt ships as a single custom element, decodes waveform peaks in a worker, and degrades to a native audio tag when scripting is blocked.\n\nTwo years on it sits on about 2,700 pages and has never appeared in a partner's Core Web Vitals complaint." }
+]
+
+tagList = ["All", "Design systems", "Performance", "Data viz", "Developer tools", "Accessibility"]
+
+stackGroups = [
+  { area: "Interface", icon: "window-maximize", tone: "primary", note: "Where most of the week goes.", items: ["TypeScript", "React", "Svelte", "CSS Grid", "Radix", "Motion One"] },
+  { area: "Systems & tokens", icon: "swatchbook", tone: "info", note: "Design systems that survive a rebrand.", items: ["Style Dictionary", "Figma API", "Storybook", "Chromatic", "WCAG 2.2"] },
+  { area: "Runtime & data", icon: "server", tone: "success", note: "Enough backend to be dangerous.", items: ["Node", "Postgres", "tRPC", "SQLite", "Rust (learning)"] },
+  { area: "Measure & ship", icon: "gauge-high", tone: "warning", note: "Numbers before opinions.", items: ["Playwright", "Vitest", "Lighthouse CI", "OpenTelemetry", "GitHub Actions"] }
+]
+
+services = [
+  { label: "Design systems", icon: "swatchbook", tone: "info", description: "Tokens, components, docs — and the migration plan that lands them." },
+  { label: "Performance work", icon: "gauge-high", tone: "warning", description: "Profiling, budgets and the unglamorous fixes that actually stick." },
+  { label: "Interface prototyping", icon: "wand-magic-sparkles", tone: "primary", description: "Clickable prototypes on real data, in days rather than sprints." },
+  { label: "Team mentoring", icon: "people-group", tone: "success", description: "Pairing, review culture and frontend hiring loops that find signal." }
+]
+
+repos = [
+  { name: "northlight-ui", stars: "4.2k", blurb: "Accessible React components — 62 of them, zero runtime CSS.", role: "Maintainer" },
+  { name: "quill-cli", stars: "1.8k", blurb: "Typed API clients generated from an OpenAPI document.", role: "Author" },
+  { name: "tidepool-sync", stars: "940", blurb: "A 6 kB CRDT sync client with offline replay.", role: "Author" },
+  { name: "eslint-plugin-rigour", stars: "612", blurb: "Twenty-one a11y rules the default config quietly leaves out.", role: "Co-maintainer" },
+  { name: "vite-plugin-fontkit", stars: "388", blurb: "Subsets and self-hosts web fonts at build time.", role: "Contributor" }
+]
+
+posts = [
+  { title: "The render loop is not your enemy", date: "2026-01-28", read: "9 min read", tag: "Performance", kind: "Essay", blurb: "Most 'React is slow' bugs are three unnecessary re-renders and one layout thrash. Here is how I find them in ten minutes." },
+  { title: "Designing tokens that survive a rebrand", date: "2025-11-04", read: "12 min read", tag: "Design systems", kind: "Field notes", blurb: "Semantic layers, the alias trap, and why your brand colour should never appear in a component file." },
+  { title: "Shipping a design system to four teams at once", date: "2025-08-19", read: "7 min read", tag: "Teams", kind: "Talk write-up", blurb: "Adoption is a migration problem wearing a design costume. Codemods, office hours and a very boring changelog." },
+  { title: "What I learned auditing 40,000 lines of legacy CSS", date: "2025-05-27", read: "14 min read", tag: "Refactoring", kind: "Post-mortem", blurb: "Six weeks, one spreadsheet, 61% deleted — and the three rules I now apply before touching a stylesheet." },
+  { title: "Type-safe feature flags without a service", date: "2025-02-11", read: "6 min read", tag: "TypeScript", kind: "Recipe", blurb: "A hundred lines of TypeScript replaced a vendor bill and made every flag greppable." }
+]
+
+// ---------- State ----------
+$tag = "All"
+$ossOnly = false
+$openId = null
+$showAllPosts = false
+$sent = false
+
+matches = (p, t) => (t == "All" || p.tags.includes(t)) && (!$ossOnly || p.client == "Open source")
+countFor = t => projects.filter(p => matches(p, t)).length
+filtered = projects.filter(p => matches(p, $tag))
+selected = projects.find(p => p.id == $openId)
+visiblePosts = $showAllPosts ? posts : posts.slice(0, 3)
+
+function pickTag(t) { $tag = $tag == t ? "All" : t }
+function clearFilters() { $tag = "All"; $ossOnly = false }
+function openProject(id) { $openId = id }
+function closeProject() { $openId = null }
+function togglePosts() { $showAllPosts = !$showAllPosts }
+function resetEnquiry() { $sent = false; enquiry.reset() }
+function pickService(label) { enquiry.setField("project", label); $toast.info(`Contact form set to “${label}”`) }
+function social(icon, label, handle) { return IconButton(icon, { label: label, variant: "ghost", onClick: () => $toast.info(`${label} — ${handle}`) }) }
+
+enquiry = $form({
+  values: { name: "", email: "", project: "Design systems", message: "" },
+  rules: {
+    name: [$util.rules.required("Tell me who you are")],
+    email: [$util.rules.required("I need somewhere to reply"), $util.rules.email("That email address looks off")],
+    message: [$util.rules.required("A sentence or two is plenty"), $util.rules.minLength(24, "A little more context, please — 24 characters or so")]
+  },
+  onSubmit: (v) => { $sent = true; $toast.success("Message sent — I reply within two working days") }
+})
+
+// ---------- Sections ----------
+skip = SkipLink("about", { label: "Skip to the main content" })
+
+nav = NavBar({
+  brand: Brand("priya.dev", { href: "#" }),
+  links: [Link("About", { href: "#about" }), Link("Work", { href: "#work" }), Link("Writing", { href: "#writing" }), Link("Contact", { href: "#contact" })],
+  actions: [ThemeToggle(), Button("Available for work", { variant: "primary", size: "sm", icon: "circle-dot", onClick: () => $toast.success("Two days a week from 2 March 2026 — say hello below") })],
+  sticky: true, blur: true
+})
+
+heroPitch = Column([
+  Eyebrow("BERLIN · OPEN TO CONTRACT WORK"),
+  Display(["Interfaces that stay ", GradientText("fast and legible", { gradient: "brand" }), " under real load"], { size: "hero", balance: true }),
+  Text("I'm Priya — a staff product engineer who builds design systems, guts render loops, and ships the unglamorous parts other people skip.", { variant: "large", tone: "muted" }),
+  Row([Pill("Berlin · CET", { tone: "corporate", icon: "location-dot" }), Pill("Contract & fractional", { tone: "activating" }), Pill("Design systems · Performance", { tone: "neutral" })], { gap: "xs", wrap: true }),
+  Row([
+    Button("Download résumé", { variant: "primary", size: "lg", icon: "file-arrow-down", onClick: () => $toast.success("resume-priya-raghunathan.pdf — 148 KB (demo download)") }),
+    CopyButton(me.email, { label: "Copy email", copiedLabel: "Email copied" })
+  ], { gap: "sm", wrap: true }),
+  Row([
+    social("brands:github", "GitHub", "@priyarag"), social("brands:mastodon", "Mastodon", "@priya@front-end.social"),
+    social("brands:linkedin", "LinkedIn", "in/priyaraghunathan"), social("rss", "Feed", "priya.dev/feed.xml")
+  ], { gap: "2xs", wrap: true })
+], { gap: "md" })
+
+heroPortrait = Card([Column([
+  Image(me.portrait, { alt: "Priya Raghunathan at her studio desk in Berlin, reviewing a component sheet", ratio: "4:5" }),
+  Row([StatusDot("Taking new work", { tone: "success", pulse: true }), Spacer(), Text("2 slots · from March 2026", { variant: "small", tone: "muted" })], { gap: "sm" })
+], { gap: "sm" })], { padding: "sm" })
+
+hero = Section([
+  Split(heroPitch, { right: heroPortrait, ratio: "3/2", gap: "xl", stackAt: "md", align: "center" })
+], { background: "base", width: "xl", padding: "lg" })
+
+currentlyCard = Card([Column([
+  SectionHeader("Currently", { eyebrow: "SNAPSHOT", subtitle: "Updated 6 February 2026" }),
+  DescriptionList([
+    DescriptionItem("Role", { value: "Staff product engineer, Kestrel Health", icon: "briefcase" }),
+    DescriptionItem("Based in", { value: "Berlin, Germany · CET", icon: "location-dot" }),
+    DescriptionItem("Availability", { value: Pill("2 days/week from March", { tone: "success" }), icon: "calendar-check" }),
+    DescriptionItem("Last shipped", { value: "Northlight UI 4.0 — 62 components", icon: "box-open" }),
+    DescriptionItem("Learning", { value: "Rust, and how to draw hands", icon: "book-open" })
+  ], { columns: 1 }),
+  Separator("horizontal"),
+  MetricStrip([Metric("9", { label: "Years shipping", countUp: true }), Metric("4", { label: "Design systems built", countUp: true }), Metric("62", { label: "Components maintained", countUp: true })], { columns: 3 })
+], { gap: "md" })])
+
+about = Section([
+  Split(Column([
+    Prose([Markdown(bio)]),
+    Quote("Priya rewrote our checkout render path in a fortnight. Time-to-interactive went from 4.1s to 1.3s and nobody noticed a visual change — which was the entire point.", { cite: "Bea Lindqvist · VP Engineering, Mapledoor" })
+  ], { gap: "md" }), { right: currentlyCard, ratio: "3/2", gap: "xl", stackAt: "md", align: "start" })
+], { background: "soft", width: "xl", id: "about", eyebrow: "ABOUT", title: "Nine years between the design file and production", subtitle: "Half design systems, half product. All of it shipped." })
+
+function stackCard(g) {
+  return Card([Column([
+    Row([Icon(g.icon, { size: "lg" }), Heading(g.area, { level: 3, size: "sm" })], { gap: "sm" }),
+    Text(g.note, { variant: "small", tone: "muted" }),
+    BadgeList(g.items, { tone: g.tone, size: "sm" })
+  ], { gap: "sm" })])
+}
+
+toolbelt = Section([
+  Reveal(Grid(stackGroups.map(g => stackCard(g)), { columns: { base: 1, sm: 2, lg: 4 }, gap: "md" }), { animation: "fade-up" }),
+  Separator("horizontal", { label: "What I get hired for" }),
+  Grid(services.map(s => Tile(s.label, { icon: s.icon, tone: s.tone, description: s.description, selected: enquiry.values.project == s.label, onClick: () => pickService(s.label) })), { columns: { base: 1, sm: 2, lg: 4 }, gap: "md" })
+], { background: "base", width: "xl", eyebrow: "TOOLBELT", title: "The kit, grouped by what it is for", subtitle: "Pick a service tile and it drops straight into the contact form." })
+
+function projectCard(p, i) {
+  return Reveal(MediaCard(p.name, {
+    imageSrc: p.image, description: p.blurb, tags: p.tags, badge: p.badge,
+    meta: `${p.client} · ${p.year} · ${p.role}`,
+    onClick: () => openProject(p.id)
+  }), { animation: "fade-up", delay: i * 60 })
+}
+
+projectDrawer = Drawer(selected ? selected.name : "Case study", {
+  open: $openId != null, side: "right", width: "640px", onClose: closeProject,
+  children: selected ? [Column([
+    Image(selected.image, { alt: `${selected.name} interface, built for ${selected.client}`, ratio: "16:9" }),
+    Row([Badge(selected.year, { tone: "neutral", size: "sm" }), Pill(selected.client, { tone: "corporate" }), Pill(selected.role, { tone: "activating" })], { gap: "xs", wrap: true }),
+    Stats(selected.metrics, { layout: "strip" }),
+    Prose([Markdown(selected.story)]),
+    SectionHeader("Built with", { eyebrow: "STACK" }),
+    BadgeList(selected.stack, { tone: "info", size: "sm" })
+  ], { gap: "md" })] : [Text("Pick a project to read its case study.", { tone: "muted" })],
+  footer: [Button("Close", { variant: "ghost", onClick: closeProject }), Button("Visit the live site", { variant: "primary", icon: "arrow-up-right-from-square", onClick: () => $toast.info(selected ? `${selected.link} — demo link` : "No project selected") })]
+})
+
+work = Section([
+  Row(tagList.map(t => FilterPill(t, { active: $tag == t, count: countFor(t), onToggle: () => pickTag(t) })), { gap: "xs", wrap: true, justify: "center" }),
+  Row([Switch("ossOnly", { label: "Open source only", value: $ossOnly, description: "Hide the client work" })], { justify: "center" }),
+  Show(filtered.length > 0, {
+    fallback: EmptyState("Nothing under those filters", { description: "No open-source project carries that tag yet — widen the filters, or just ask me about it directly.", icon: "folder-open", actions: [Button("Show everything", { variant: "primary", icon: "rotate-left", onClick: clearFilters })] }),
+    children: Grid(filtered.map((p, i) => projectCard(p, i)), { columns: { base: 1, md: 2, lg: 3 }, gap: "lg" })
+  }),
+  Text(`Showing ${filtered.length} of ${projects.length} projects${$tag == "All" ? "" : ` tagged “${$tag}”`}${$ossOnly ? ", open source only" : ""} · open a card for the case study`, { variant: "small", tone: "muted", align: "center" }),
+  projectDrawer
+], { background: "soft", width: "xl", id: "work", eyebrow: "SELECTED WORK", title: "Six things I am happy to be judged on", subtitle: "Filter by what you need built. Every card opens the case study.", align: "center" })
+
+ossCard = Card([Column([
+  SectionHeader("Open source", { eyebrow: "MAINTAINING", subtitle: "Weekends, evenings, and one very patient inbox." }),
+  List(repos.map(r => ListItem(r.name, {
+    description: r.blurb, icon: "code-branch", trailing: [Badge(r.stars, { icon: "star", tone: "warning", size: "sm" })],
+    onClick: () => $toast.info(`${r.name} · ${r.stars} stars · ${r.role}`)
+  })), { divided: true })
+], { gap: "md" })])
+
+experienceCard = Card([Column([
+  SectionHeader("Experience", { eyebrow: "THE ROAD HERE" }),
+  Timeline([
+    TimelineItem("Staff Product Engineer · Kestrel Health", { time: "2024 — now", description: "Patient-facing web across five markets. Cut first-load JS by 41% and set up the accessibility review that now gates every release.", icon: "heart-pulse", tone: "primary" }),
+    TimelineItem("Senior Frontend Engineer · Mapledoor", { time: "2021 — 2024", description: "Owned checkout and the internal component library. Rewrote the render path; time-to-interactive 4.1s → 1.3s.", icon: "map-location-dot" }),
+    TimelineItem("Frontend Engineer · Tessellate Studio", { time: "2019 — 2021", description: "Agency work for museums and public bodies. Learned to design for glare, gloves and terrible wifi.", icon: "shapes" }),
+    TimelineItem("Design Technologist · Bright Anvil", { time: "2017 — 2019", description: "Sat between four designers and eleven engineers and translated. Built our first token pipeline.", icon: "pen-ruler" }),
+    TimelineItem("BSc Computer Science · TU Delft", { time: "2013 — 2017", description: "Thesis on perceptual colour scales for scientific charts. Still my favourite rabbit hole.", icon: "graduation-cap", tone: "info" })
+  ])
+], { gap: "md" })])
+
+community = Section([
+  Grid([ossCard, experienceCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+], { background: "base", width: "xl", eyebrow: "BEYOND THE DAY JOB", title: "Open source, and how I got here" })
+
+function postCard(p) {
+  return Card([Column([
+    Row([Badge(p.tag, { tone: "primary", size: "sm" }), Spacer(), Pill(p.kind, { tone: "neutral" })], { gap: "sm" }),
+    Heading(p.title, { level: 3, size: "sm" }),
+    Text(p.blurb, { variant: "body", tone: "muted" }),
+    Separator("horizontal"),
+    Row([
+      AuthorByline(me.name, { avatar: me.avatar, role: me.role, date: $util.formatDate(p.date, "D MMM YYYY"), readingTime: p.read }),
+      Spacer(),
+      Button("Read", { variant: "ghost", size: "sm", icon: "arrow-right", onClick: () => $toast.info(`Opening “${p.title}” — demo link`) })
+    ], { gap: "sm", wrap: true })
+  ], { gap: "sm" })])
+}
+
+writing = Section([
+  Grid(visiblePosts.map(p => postCard(p)), { columns: { base: 1, md: 2, lg: 3 }, gap: "lg" })
+], {
+  background: "soft", width: "xl", id: "writing", eyebrow: "WRITING",
+  title: "Notes from the seam between design and code", subtitle: "Roughly one long post a quarter. No newsletter, no pop-up.",
+  actions: [Button($showAllPosts ? "Show fewer posts" : `Show all ${posts.length} posts`, { variant: "secondary", size: "sm", icon: $showAllPosts ? "chevron-up" : "chevron-down", onClick: togglePosts })]
+})
+
+enquiryForm = Card([Column([
+  SectionHeader("Tell me about it", { eyebrow: "CONTACT", subtitle: "Rough is fine — a paragraph beats a brief." }),
+  Input("cName", { label: "Your name", placeholder: "Alex Meyer", value: enquiry.values.name, error: enquiry.errors.name, onBlur: () => enquiry.touch("name"), required: true }),
+  Input("cEmail", { label: "Email", type: "email", placeholder: "alex@studio.com", autocomplete: "email", value: enquiry.values.email, error: enquiry.errors.email, onBlur: () => enquiry.touch("email"), required: true }),
+  Select("cProject", { label: "What kind of work?", items: services.map(s => SelectItem(s.label, { label: s.label })), value: enquiry.values.project }),
+  TextArea("cMessage", { label: "The short version", rows: 4, hint: "Two sentences is plenty — 24 characters minimum.", placeholder: "We have a component library nobody trusts and a checkout that takes four seconds to paint…", value: enquiry.values.message, error: enquiry.errors.message, onBlur: () => enquiry.touch("message"), required: true }),
+  Button("Send message", { variant: "primary", size: "lg", icon: "paper-plane", fullWidth: true, loading: enquiry.submitting, onClick: () => enquiry.submit() })
+], { gap: "md" })])
+
+enquiryAside = Card([Column([
+  SectionHeader("Good to know", { eyebrow: "LOGISTICS" }),
+  DescriptionList([
+    DescriptionItem("Response time", { value: "Within two working days", icon: "clock" }),
+    DescriptionItem("Time zone", { value: "CET · overlap until 18:00", icon: "earth-europe" }),
+    DescriptionItem("Rate", { value: "€780/day, sliding for non-profits", icon: "receipt" }),
+    DescriptionItem("Minimum", { value: "Two-week engagements", icon: "calendar-days" })
+  ], { columns: 1 }),
+  Callout("info", { title: "Not hiring, just curious?", description: "Send it anyway. I answer questions about design systems and performance for free, within reason.", icon: "mug-hot", compact: true }),
+  Row([CopyButton(me.email, { label: "Copy email", copiedLabel: "Copied" }), Button("Book a 20-minute intro", { variant: "secondary", icon: "video", onClick: () => $toast.info("Calendar link — demo only") })], { gap: "sm", wrap: true })
+], { gap: "md" })])
+
+sentState = Card([SuccessState("Message sent", {
+  description: "Thanks — it landed. I read everything myself and usually reply the same day, always within two working days.",
+  icon: "paper-plane",
+  actions: [Button("Send another", { variant: "secondary", icon: "rotate-left", onClick: resetEnquiry }), CopyButton(me.email, { label: "Copy my email" })]
+})])
+
+contact = Section([
+  Show($sent, { children: sentState, fallback: Grid([enquiryForm, enquiryAside], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" }) })
+], { background: "base", width: "lg", id: "contact", align: "center", eyebrow: "WORK TOGETHER", title: "Two slots open from March", subtitle: "Design systems, performance rescues, or a prototype that has to be real by Friday." })
+
+pageFooter = Footer({
+  brand: Brand("priya.dev"),
+  tagline: "Interfaces that stay fast, legible and kind. Berlin, CET.",
+  columns: [
+    FooterColumn("Site", { links: [Link("About", { href: "#about" }), Link("Work", { href: "#work" }), Link("Writing", { href: "#writing" }), Link("Contact", { href: "#contact" })] }),
+    FooterColumn("Elsewhere", { links: [Link("GitHub", { href: "#" }), Link("Mastodon", { href: "#" }), Link("LinkedIn", { href: "#" }), Link("RSS feed", { href: "#" })] }),
+    FooterColumn("Colophon", { links: [Link("Uses & setup", { href: "#" }), Link("Now page", { href: "#" }), Link("Résumé (PDF)", { href: "#" })] })
+  ],
+  legal: "© 2026 Priya Raghunathan — demo portfolio; the person, projects and numbers are invented."
+})
+
+toTop = BackToTop("Back to top", { showAfter: 600 })

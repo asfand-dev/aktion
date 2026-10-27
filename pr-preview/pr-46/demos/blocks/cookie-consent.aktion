@@ -1,0 +1,66 @@
+// Cookie Consent — a GDPR-style consent banner with Accept all / Reject / and a
+// "Customise" modal exposing per-category switches (necessary locked on). The
+// decision persists and the banner collapses to a small status card.
+$app(Column([content, banner, prefsModal], { gap: "lg", padding: "md" }))
+
+$decision = $storage.get("cookie.decision") ?? null
+$prefsOpen = false
+$prefs = $storage.get("cookie.prefs") ?? { necessary: true, analytics: false, marketing: false }
+
+categories = [
+  { key: "necessary", label: "Strictly necessary", desc: "Required for the site to function. Always on.", locked: true },
+  { key: "analytics", label: "Analytics", desc: "Helps us understand how the site is used.", locked: false },
+  { key: "marketing", label: "Marketing", desc: "Personalised ads and campaign measurement.", locked: false }
+]
+
+function decide(d, prefs) {
+  $decision = d
+  $prefs = prefs
+  $storage.set("cookie.decision", d)
+  $storage.set("cookie.prefs", prefs)
+  $prefsOpen = false
+  $toast.show(`Preferences saved: ${d}`, { tone: "info" })
+}
+function acceptAll() { decide("accepted", { necessary: true, analytics: true, marketing: true }) }
+function rejectAll() { decide("rejected", { necessary: true, analytics: false, marketing: false }) }
+function savePrefs() { decide("custom", $prefs) }
+function setPref(k, v) { $prefs = { ...$prefs, [k]: v } }
+function reopen() { $decision = null; $storage.remove("cookie.decision") }
+
+content = Card([Column([
+  SectionHeader("Demo page content", { eyebrow: "PREVIEW" }),
+  Text("This block shows a cookie-consent flow. Scroll-blocking banners are a common pattern; here the banner sits at the bottom until you make a choice.", { tone: "muted" }),
+  $decision ? Row([
+    Badge(`Choice: ${$decision}`, { tone: $decision == "rejected" ? "warning" : "success", icon: "cookie-bite" }),
+    Button("Change cookie settings", { variant: "ghost", size: "sm", icon: "gear", onClick: reopen })
+  ], { gap: "sm", align: "center" }) : Text("No choice made yet — see the banner below.", { variant: "small", tone: "muted" })
+], { gap: "md" })])
+
+banner = Show($decision == null, {
+  children: Card([Row([
+    Icon("cookie-bite", { size: "lg", color: "var(--rui-color-primary)" }),
+    StackItem(Column([
+      Text("We value your privacy", { variant: "body-heavy" }),
+      Text("We use cookies to improve your experience, analyse traffic and personalise content. Choose which cookies to allow.", { variant: "small", tone: "muted" })
+    ], { gap: "xs" }), { grow: 1 }),
+    Row([
+      Button("Customise", { variant: "ghost", icon: "sliders", onClick: () => { $prefsOpen = true } }),
+      Button("Reject all", { variant: "secondary", onClick: rejectAll }),
+      Button("Accept all", { variant: "primary", icon: "check", onClick: acceptAll })
+    ], { gap: "sm", wrap: true })
+    ], { gap: "md", align: "center", wrap: true })])
+})
+
+prefsModal = Modal("Cookie preferences", {
+  open: $prefsOpen, closeOnBackdrop: true, onClose: () => { $prefsOpen = false },
+  children: [Column(categories.map(c => Box([Row([
+    StackItem(Column([Text(c.label, { variant: "body-heavy" }), Text(c.desc, { variant: "small", tone: "muted" })], { gap: "xs" }), { grow: 1 }),
+    c.locked
+      ? Badge("Always on", { tone: "neutral", size: "sm", icon: "lock" })
+      : Switch(c.key, { value: $prefs[c.key], onChange: v => setPref(c.key, v) })
+  ], { align: "center", gap: "md" })], { padding: "sm", border: "subtle" })), { gap: "sm" })],
+  footer: [
+    Button("Reject all", { variant: "ghost", onClick: rejectAll }),
+    Button("Save preferences", { variant: "primary", icon: "floppy-disk", onClick: savePrefs })
+  ]
+})
