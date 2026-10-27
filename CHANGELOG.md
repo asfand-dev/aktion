@@ -10,6 +10,7 @@ Each entry is dated and summarises what was added, changed, or fixed.
 ### Error Locations for Hosts
 
 - Errors thrown by an Aktion program now carry the `.aktion` file, line and column where they happened, plus the chain of functions they unwound through. They are available as `location` and `frames` in `$util.onError` and through the new `getAktionErrorInfo(error)`.
+- A program's `$util.onError` sink now also fires for those formerly log-only failures (a failing component, effect, `$http` callback or top-level statement), once per error, with `source` naming where it happened.
 - Added `element.errorHook`, which lets the embedding page see errors the runtime used to only log: component, effect, `$http` callback and top-level failures. It receives the original error and, when the app is built with devtools on, `sourceText(file)` so a reporter can show the lines around the failure.
 - **Breaking:** `ErrorBoundary`'s `onError` now receives the original error instead of a generic "[render error in X]" message when a built-in component failed to render.
 - The `error` event's `errors` entries now include the module `file` for compiled and linked programs.
