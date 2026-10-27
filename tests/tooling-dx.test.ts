@@ -133,7 +133,7 @@ describe("Vite plugin source map", () => {
     return plugin.transform.handler.call(mockCtx as never, code, id);
   }
 
-  it("emits a v3 map with sourcesContent and non-empty mappings", async () => {
+  it("emits a v3 map with sourcesContent and honestly no mappings", async () => {
     const code = `aktion = Stack([])\n`;
     const result = await runTransform(code, "/proj/app.aktion");
     expect(result).not.toBeNull();
@@ -141,10 +141,8 @@ describe("Vite plugin source map", () => {
     expect(map.version).toBe(3);
     expect(map.sources).toEqual(["/proj/app.aktion"]);
     expect(map.sourcesContent).toEqual([code]);
-    expect(map.mappings.length).toBeGreaterThan(0);
-    // One mapping segment per generated line.
-    const generatedLines = result!.code.split("\n").length;
-    expect(map.mappings.split(";").length).toBe(generatedLines);
+    // The module is a JSON blob of the AST: no generated line corresponds to a source line.
+    expect(map.mappings).toBe("");
   });
 
   it("returns null for non-aktion ids", async () => {

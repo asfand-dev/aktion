@@ -698,7 +698,7 @@ export function emitBuiltins(input: BuiltinsInput): BuiltinsOutput {
     ["style", "readonly style: StyleNamespace"],
     ["rules", "readonly rules: RulesNamespace"],
     ["derived", "derived<T>(fn: () => T): T"],
-    ["onError", "onError(fn: ((info: { readonly error: unknown; readonly source: string }) => unknown) | null): void"],
+    ["onError", "onError(fn: ((info: { readonly error: unknown; readonly source: string; readonly location?: { readonly file: string; readonly line: number; readonly column: number; readonly function?: string }; readonly frames?: readonly { readonly file: string; readonly line: number; readonly column: number; readonly function?: string }[] }) => unknown) | null): void"],
     ["onNavigate", "onNavigate(fn: ((info: NavigationInfo) => boolean | string | void) | null): void"],
     ["onRequest", "onRequest(fn: (request: HttpInterceptedRequest) => Partial<HttpInterceptedRequest> | void): void"],
     ["onResponse", "onResponse(fn: (response: HttpInterceptedResponse, retry: () => Promise<HttpInterceptedResponse>) => HttpInterceptedResponse | void | Promise<HttpInterceptedResponse | void>): void"],

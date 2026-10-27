@@ -14,6 +14,7 @@
  * - `Show(when, children, fallback?)` — sugar over `if`.
  */
 
+import { recallRenderError } from "../../runtime/error-info.js";
 import type { ComponentSpec, RenderHelpers } from "../types.js";
 import { el, asArray, asString, renderIcon } from "../utils.js";
 import { normalisePath } from "../../runtime/router.js";
@@ -482,7 +483,7 @@ export const ErrorBoundary: ComponentSpec = {
     "Render a fallback subtree when rendering children fails. Pass a " +
     "`fallback` node (or omit it for a built-in friendly error card, which " +
     "shows a Retry button when `onRetry` is set); `onError(err)` fires with " +
-    "the error. Set `showDetails=true` to reveal the message inline (great in " +
+    "the original error. Set `showDetails=true` to reveal the message inline (great in " +
     "dev).",
   props: [
     { name: "fallback", type: "Node", optional: true },
@@ -507,9 +508,13 @@ export const ErrorBoundary: ComponentSpec = {
       // boundary handles each failure.
       const substituted = wrapper.querySelector(".rui-render-error");
       if (!substituted) return wrapper;
-      caught = new Error(substituted.textContent?.trim() || "render error");
+      // The renderer remembers the original error behind the placeholder; the
+      // text is only the fallback for a placeholder it did not make.
+      const original = recallRenderError(substituted);
+      caught = original ? original.error : new Error(substituted.textContent?.trim() || "render error");
     } catch (err) {
       caught = err;
+      helpers.reportError?.(err, "ErrorBoundary");
     }
 
     try { helpers.invoke(props.onError, caught); } catch { /* swallow */ }

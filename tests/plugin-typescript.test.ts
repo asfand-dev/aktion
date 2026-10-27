@@ -134,7 +134,7 @@ describe("transform of a mixed-language graph", () => {
     const { out, ctx } = await transform(`${entry}?import`, text);
     expect(ctx.errors.map((e) => e.message)).toEqual([]);
     const compiled = unpack(out!.code);
-    expect(compiled.path).toBe(entry);
+    expect(compiled.path).toBe("src/main.aktion.ts");
     // `source` is the PRINTED linked program — Aktion, not TypeScript.
     expect(compiled.source).not.toContain(": number");
     expect(compiled.source).toContain("$app(");
@@ -144,6 +144,16 @@ describe("transform of a mixed-language graph", () => {
     const screen = renderCompiled(compiled);
     await flush();
     expect(screen.shadowRoot.textContent).toContain("Entry: n=0");
+  });
+
+  it("emits project-relative module paths, never the build machine's absolute ones", async () => {
+    const text = ['import { Counter } from "./counter.aktion.ts"', 'export default $app(Counter({ title: "Entry" }))'].join("\n");
+    const entry = write("src/main.aktion.ts", text);
+    const { out } = await transform(`${entry}?import`, text);
+    const compiled = unpack(out!.code);
+    expect(compiled.program.sources).toContain("src/counter.aktion.ts");
+    expect(compiled.program.sources!.some((p) => p.startsWith("/"))).toBe(false);
+    expect(out!.code).not.toContain(dir);
   });
 
   it("`devtools: false` leaves `sourcesContent` out", async () => {

@@ -102,7 +102,7 @@ Defer rendering until an async `loader` resolves: show `fallback` while pending,
 ErrorBoundary(fallback?, onError?, showDetails?, onRetry?, children)
 ```
 
-Render a fallback subtree when rendering children fails. Pass a `fallback` node (or omit it for a built-in friendly error card, which shows a Retry button when `onRetry` is set); `onError(err)` fires with the error. Set `showDetails=true` to reveal the message inline (great in dev).
+Render a fallback subtree when rendering children fails. Pass a `fallback` node (or omit it for a built-in friendly error card, which shows a Retry button when `onRetry` is set); `onError(err)` fires with the original error. Set `showDetails=true` to reveal the message inline (great in dev).
 
 | prop | type / values | required | notes |
 | --- | --- | --- | --- |
