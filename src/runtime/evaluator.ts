@@ -54,6 +54,14 @@ import { createHeadManager, type HeadManager } from "./head.js";
 import { createI18n, type I18nConfig } from "./i18n.js";
 import { type ThemeNode } from "./builtins.js";
 import { Util } from "./util.js";
+import {
+  annotateError,
+  addErrorFrame,
+  notifyProgramHook,
+  reportRuntimeError,
+  type AktionErrorLocation,
+  type AktionErrorReport,
+} from "./error-info.js";
 import { Style, Rules, type Validator } from "./namespaces-extra.js";
 import { registerIcons } from "../icons/index.js";
 import { loadBuiltInThemeFonts, loadFonts } from "../theme/fonts.js";
@@ -1079,7 +1087,19 @@ export interface EvaluationContext {
    * before the default console logging. Lets a program report to a Sentry-style
    * sink or surface a toast without a bad row blanking the page.
    */
-  errorHook?: (info: { error: unknown; source: string }) => void;
+  errorHook?: (info: {
+    error: unknown;
+    source: string;
+    location?: AktionErrorLocation;
+    frames?: AktionErrorLocation[];
+  }) => void;
+  /**
+   * Host-side error sink (`element.errorHook`), set by the embedding element.
+   * Declared up-front like `coverage` so the context keeps one hidden class.
+   */
+  hostErrorSink?: (report: AktionErrorReport) => void;
+  /** `program.sources` of the planned program, to name the file of a `loc`. */
+  sources?: string[];
   /** Dispatch a custom event from an `emit("name", detail)` call. */
   onEmit?: (eventName: string, detail: unknown) => void;
   /**
@@ -1178,6 +1198,8 @@ export interface CreateContextOptions {
    * `EvaluationContext.coverageSourcePath`.
    */
   coverageSourcePath?: string;
+  /** Host sink for errors the runtime used to only log. See `EvaluationContext.hostErrorSink`. */
+  onRuntimeError?: (report: AktionErrorReport) => void;
   /**
    * Runtime safety budget for this context.
    *   - omitted (default): a fresh budget with `DEFAULT_RUNTIME_BUDGET` limits.
@@ -1225,6 +1247,8 @@ export function createContext(
     // property added after construction would turn that read megamorphic.
     coverage: undefined,
     coverageSourcePath: options.coverageSourcePath,
+    hostErrorSink: options.onRuntimeError,
+    sources: undefined,
     disposers: [],
     computedDerivations: [],
     timers: { timeouts: new Set(), intervals: new Set() },
@@ -1365,6 +1389,7 @@ function stateRefForArg(
  * build lazy bindings for every assignment so forward references resolve.
  */
 export function planProgram(program: Program, ctx: EvaluationContext): void {
+  ctx.sources = program.sources;
   // Attach the coverage recorder before anything is evaluated, so the very
   // first plan is measured. Registration is idempotent per AST, so a replan
   // (state hydration, hot edit, `registerComponents`) neither double-counts the
@@ -1778,8 +1803,9 @@ function runTopLevelImperativeStatements(program: Program, ctx: EvaluationContex
       // Runtime-budget aborts must propagate so the host can surface them.
       if (err instanceof RuntimeBudgetError) throw err;
       // A user `throw` (or any other error) shouldn't tear down planning.
-      // eslint-disable-next-line no-console
-      console.error("[aktion] top-level statement threw", err);
+      reportRuntimeError(ctx, err, {
+        loc: stmt.loc, source: "top-level", kind: "top-level", message: "[aktion] top-level statement threw",
+      });
     }
   }
 }
@@ -2801,6 +2827,7 @@ function runStatementInBlock(stmt: Statement, ctx: EvaluationContext): void {
       throw new ContinueSignal();
     case "ThrowStatement": {
       const value = evaluate(stmt.argument, ctx);
+      annotateError(value, stmt.loc, ctx);
       throw value;
     }
     case "Return": {
@@ -3596,8 +3623,9 @@ function evaluateInvoke(
   try {
     return (callee as (...a: unknown[]) => unknown).apply(undefined, positional);
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error(`[aktion] call expression threw`, err);
+    reportRuntimeError(ctx, err, {
+      loc: expr.loc, source: "call", kind: "action", message: `[aktion] call expression threw`,
+    });
     return null;
   }
 }
@@ -3613,8 +3641,9 @@ function evaluateNew(
   try {
     return Reflect.construct(callee as new (...a: unknown[]) => unknown, positional);
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error(`[aktion] \`new\` threw`, err);
+    reportRuntimeError(ctx, err, {
+      loc: (expr as { loc?: SourceLocation }).loc, source: "new", kind: "action", message: `[aktion] \`new\` threw`,
+    });
     return null;
   }
 }
@@ -3758,6 +3787,7 @@ function evaluateBlock(
           return result;
         case "ThrowStatement": {
           const value = evaluate(stmt.argument, ctx);
+          annotateError(value, stmt.loc, ctx);
           throw value;
         }
         case "EffectDeclaration": {
@@ -4093,8 +4123,12 @@ function evaluateMethodCall(
     if (err instanceof RangeError || err instanceof RuntimeBudgetError) throw err;
     // Don't crash the render — surface the failure via the host console
     // so authors can still see what went wrong.
-    // eslint-disable-next-line no-console
-    console.error(`[aktion] method "${expr.method}" threw`, err);
+    reportRuntimeError(ctx, err, {
+      loc: (expr as { loc?: SourceLocation }).loc,
+      source: expr.method,
+      kind: "action",
+      message: `[aktion] method "${expr.method}" threw`,
+    });
     return null;
   }
 }
@@ -4214,7 +4248,7 @@ function evaluateComponentCall(
     return undefined;
   }
   if (callee === "setTimeout" || callee === "setInterval") {
-    return evaluateTimerCall(callee, args, ctx);
+    return evaluateTimerCall(callee, args, ctx, loc);
   }
   if (callee === "clearTimeout" || callee === "clearInterval") {
     const handle = args[0] ? evaluate(args[0], ctx) : undefined;
@@ -4267,8 +4301,7 @@ function evaluateComponentCall(
     try {
       return fn(...evaluated);
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error(`[aktion] global "${callee}" threw`, err);
+      reportRuntimeError(ctx, err, { loc, source: callee, kind: "action", message: `[aktion] global "${callee}" threw` });
       return null;
     }
   }
@@ -4294,8 +4327,7 @@ function evaluateComponentCall(
       try {
         return fn(...evaluated);
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error(`[aktion] global "${callee}" threw`, err);
+        reportRuntimeError(ctx, err, { loc, source: callee, kind: "action", message: `[aktion] global "${callee}" threw` });
         return null;
       }
     }
@@ -4855,6 +4887,9 @@ export function evaluateUserComponent(
   try {
     const value = evaluateBlock(decl.body, ctx, { stateAsDeclaration: true });
     return { value, effects: effectsFrame, hooks: hookScope.cursor };
+  } catch (err) {
+    addErrorFrame(err, decl, ctx);
+    throw err;
   } finally {
     ctx.activeComponentDecls.pop();
     ctx.hookScope = prevHookScope;
@@ -4894,12 +4929,12 @@ function runActionDeclSync(
   try {
     // Route genuine errors (not control-flow signals) through the program's
     // `$onError(fn)` hook before they propagate to the default logging.
-    if (!ctx.errorHook) return runDeclBodySync(decl.params, decl.body, args, ctx);
+    if (!ctx.errorHook) return runDeclBodySync(decl.params, decl.body, args, ctx, decl);
     try {
-      return runDeclBodySync(decl.params, decl.body, args, ctx);
+      return runDeclBodySync(decl.params, decl.body, args, ctx, decl);
     } catch (err) {
       if (err instanceof ReturnSignal || err instanceof BreakSignal || err instanceof ContinueSignal) throw err;
-      try { ctx.errorHook({ error: err, source: decl.name ?? "action" }); } catch { /* hook must never crash the runner */ }
+      notifyProgramHook(ctx, err, decl.name ?? "action");
       throw err;
     }
   } finally {
@@ -4983,6 +5018,7 @@ function runDeclBodySync(
   body: BlockExpr,
   args: unknown[],
   ctx: EvaluationContext,
+  fn?: { name?: string; loc?: SourceLocation },
 ): unknown {
   // Give this call its own scope frame for non-`$` locals. We snapshot the
   // entire `loopVars` map now and restore it wholesale when the body returns,
@@ -5016,6 +5052,11 @@ function runDeclBodySync(
   }
   try {
     return evaluateBlock(body, ctx, { stateAsDeclaration: ctx.state.isRendering() });
+  } catch (err) {
+    if (fn && !(err instanceof ReturnSignal || err instanceof BreakSignal || err instanceof ContinueSignal)) {
+      addErrorFrame(err, fn, ctx);
+    }
+    throw err;
   } finally {
     ctx.loopVars.clear();
     for (const [name, value] of savedLoopVars) ctx.loopVars.set(name, value);
@@ -5240,7 +5281,7 @@ function invokeHookDecl(
 ): unknown {
   if (ctx.coverage) recordCoverageFunction(ctx.coverage, decl.loc);
   const args = evaluateCallArgs(argExprs, ctx);
-  return runDeclBodySync(decl.params, decl.body, args, ctx);
+  return runDeclBodySync(decl.params, decl.body, args, ctx, decl);
 }
 
 let warnedHookOutsideComponent = false;
@@ -5428,6 +5469,7 @@ function evaluateTimerCall(
   callee: "setTimeout" | "setInterval",
   args: Expression[],
   ctx: EvaluationContext,
+  loc?: SourceLocation,
 ): unknown {
   const callback = args[0] ? evaluate(args[0], ctx) : null;
   if (typeof callback !== "function") return null;
@@ -5442,8 +5484,9 @@ function evaluateTimerCall(
     try {
       fn(...extra);
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error(`[aktion] ${callee} callback threw`, err);
+      reportRuntimeError(ctx, err, {
+        loc, source: callee, kind: "action", message: `[aktion] ${callee} callback threw`,
+      });
     } finally {
       ctx.notify?.();
     }

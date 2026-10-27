@@ -438,6 +438,7 @@ surfaces from the *generated prompt*, build it via
 | `streaming`   | `boolean`                     | Reflects the `streaming` attribute.                                                    |
 | `showErrors`  | `boolean`                     | Reflects the `showerrors` attribute.                                                   |
 | `route`       | `string` (read-only)          | Current path tracked by the router (e.g. `"/users/42"`).                               |
+| `errorHook`   | `((info) => void) \| null`    | Host hook for errors the runtime catches and would otherwise only log (a failing component, effect, `$http` callback, handler or top-level statement). `info` is `{ error, source, kind, location, frames, sourceText(file) }`: the original error, where it came from in the `.aktion` source, and the module text for context lines (`undefined` when built with `devtools: false`). Runs before the console line, which is still written. |
 
 ### Methods
 
@@ -512,12 +513,18 @@ the components the element actually renders.
 | Event                | Detail                                        | When it fires                                                                  |
 | -------------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
 | `assistant-message`  | `{ message: string }`                         | When an action or lambda calls `$emit("assistant-message", { message: "..." })`. |
-| `error`              | `{ errors: ParseError[] }`                    | After each render whose source had parse errors.                               |
+| `error`              | `{ errors: { line, column, message, file? }[] }` | After each render whose source had parse errors. `file` names the module of a compiled or linked program. |
 | `route-change`       | `{ path, previousPath, source }`              | When the current hash path changes. `source` is `"init" \| "hashchange" \| "navigate" \| "external"`. |
 | `<custom-name>`      | User-defined `{ ... }`                        | When script calls `$emit("name", { ... })` inside an action / effect body.       |
 
 The `error` event always fires regardless of `showerrors`, so host apps
 can log or report errors even when the in-page banner is suppressed.
+
+Errors thrown while the program runs are a separate channel: set
+`element.errorHook` to receive them, or call `getAktionErrorInfo(error)` on an
+error you caught yourself to read `{ location, frames }` — the `.aktion` file,
+line and column of the throw, and one frame per user function it unwound
+through. `$util.onError` receives the same `location` and `frames`.
 
 ### Runtime safety limits
 
@@ -2199,8 +2206,11 @@ export default { plugins: [aktion()] };
 
 The plugin emits a source map that carries the original `.aktion` path and its
 contents (`sourcesContent`), so the file shows up in the browser's Sources
-panel and runtime frames resolve to your `.aktion` module rather than the
-generated JSON blob.
+panel. It maps no lines: the module is a JSON blob of the AST, so a JavaScript
+stack frame cannot point into your `.aktion` file. Errors thrown by the program
+carry the `.aktion` file, line and column through `getAktionErrorInfo(error)`
+and `element.errorHook` instead. Module paths in the emitted program are
+relative to the project root.
 
 ```jsonc
 // tsconfig.json — resolve `import app from "./app.aktion"`

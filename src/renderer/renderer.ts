@@ -65,6 +65,7 @@ import {
   type RenderHelpers,
 } from "../library/types.js";
 import { nowMs } from "../devtools/hook.js";
+import { reportVia, rememberRenderError, type RuntimeErrorSink } from "../runtime/error-info.js";
 import type {
   ComponentPropRecord,
   ComponentRenderRecord,
@@ -95,6 +96,11 @@ export interface RenderOptions {
   onAssistantMessage?: (message: string) => void;
   /** Optional override for `helpers.openUrl(url)` (defaults to `window.open`). */
   onOpenUrl?: (url: string) => void;
+  /**
+   * Where errors the renderer swallows (a throwing library component or
+   * handler) are reported. Unset, they are only logged.
+   */
+  onRuntimeError?: RuntimeErrorSink;
   /**
    * Evaluation context used to expand user-declared `component` calls
    * (per-instance state isolation, lazy body evaluation, §7). The host
@@ -639,8 +645,9 @@ export class Renderer {
         try {
           this.options.unmountInstanceEffects(instanceKey);
         } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error(`[aktion] unmountInstanceEffects threw for ${instanceKey}`, err);
+          reportVia(this.options.onRuntimeError, err, {
+            source: instanceKey, kind: "effect", message: `[aktion] unmountInstanceEffects threw for ${instanceKey}`,
+          });
         }
       }
     }
@@ -651,8 +658,9 @@ export class Renderer {
         try {
           this.options.unmountInstanceHooks(instanceKey);
         } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error(`[aktion] unmountInstanceHooks threw for ${instanceKey}`, err);
+          reportVia(this.options.onRuntimeError, err, {
+            source: instanceKey, kind: "render", message: `[aktion] unmountInstanceHooks threw for ${instanceKey}`,
+          });
         }
       }
     }
@@ -718,8 +726,9 @@ export class Renderer {
         try {
           this.options.unmountInstanceEffects(instanceKey);
         } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error(`[aktion] unmountInstanceEffects threw for ${instanceKey}`, err);
+          reportVia(this.options.onRuntimeError, err, {
+            source: instanceKey, kind: "effect", message: `[aktion] unmountInstanceEffects threw for ${instanceKey}`,
+          });
         }
         this.instancesWithEffects.delete(instanceKey);
       }
@@ -732,8 +741,9 @@ export class Renderer {
         try {
           this.options.unmountInstanceHooks(instanceKey);
         } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error(`[aktion] unmountInstanceHooks threw for ${instanceKey}`, err);
+          reportVia(this.options.onRuntimeError, err, {
+            source: instanceKey, kind: "render", message: `[aktion] unmountInstanceHooks threw for ${instanceKey}`,
+          });
         }
         this.instancesWithHooks.delete(instanceKey);
       }
@@ -851,8 +861,9 @@ export class Renderer {
     try {
       dispose();
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("[aktion] disposer threw", err);
+      reportVia(this.options.onRuntimeError, err, {
+        source: "disposer", kind: "render", message: "[aktion] disposer threw",
+      });
     }
   }
 
@@ -1170,14 +1181,19 @@ export class Renderer {
           const result = callable(...args);
           if (result && typeof (result as Promise<unknown>).then === "function") {
             (result as Promise<unknown>).catch((err) => {
-              // eslint-disable-next-line no-console
-              console.error("[aktion] handler rejected", err);
+              reportVia(this.options.onRuntimeError, err, {
+                source: "handler", kind: "action", message: "[aktion] handler rejected",
+              });
             });
           }
         } catch (err) {
-          // eslint-disable-next-line no-console
-          console.error("[aktion] handler threw", err);
+          reportVia(this.options.onRuntimeError, err, {
+            source: "handler", kind: "action", message: "[aktion] handler threw",
+          });
         }
+      },
+      reportError: (err, source) => {
+        reportVia(this.options.onRuntimeError, err, { source, kind: "render", message: `[aktion] failed to render ${source}` });
       },
       setState: (name, value) => {
         this.writeState(name, value);
@@ -1280,11 +1296,13 @@ export class Renderer {
           { source: node.source, explicitKey: node.explicitKey, props: this.libraryProps(spec, node, overrides) },
         );
       }
-      // eslint-disable-next-line no-console
-      console.error(`[aktion] failed to render ${spec.name}`, err);
+      reportVia(this.options.onRuntimeError, err, {
+        source: spec.name, kind: "render", message: `[aktion] failed to render ${spec.name}`,
+      });
       const fallback = document.createElement("div");
       fallback.className = "rui-render-error";
       fallback.textContent = `[render error in ${spec.name}]`;
+      rememberRenderError(fallback, err);
       return fallback;
     }
   }

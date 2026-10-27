@@ -130,6 +130,14 @@ import {
 } from "./devtools/introspect.js";
 import { INSTANCE_ATTR, OWNER_ATTR } from "./renderer/renderer.js";
 import { VERSION } from "./version.js";
+import {
+  getAktionErrorInfo,
+  reportRuntimeError,
+  type AktionErrorInfo,
+  type AktionErrorKind,
+  type AktionErrorMeta,
+  type AktionErrorReport,
+} from "./runtime/error-info.js";
 
 const ATTRIBUTE_THEME = "theme";
 const ATTRIBUTE_STREAMING = "streaming";
@@ -362,6 +370,15 @@ export class AktionElement extends HTMLElement {
   private library: ComponentLibrary = defaultLibrary;
   private currentUIProvider?: UIProvider;
   private readonly http = new HttpRuntime();
+  /**
+   * Host hook for every error the runtime catches and would otherwise only
+   * log: a failing component, effect, `$http` callback, handler or top-level
+   * statement. Receives the original error, where it came from in the `.aktion`
+   * source (`location`, `frames`) and `sourceText(file)` for context lines.
+   * Runs before the console line, which is still written. Set it to `null` to
+   * stop reporting.
+   */
+  errorHook: ((info: AktionElementErrorInfo) => void) | null = null;
   private readonly effectRunner: EffectRunner;
   private renderer: Renderer;
   private context: EvaluationContext;
@@ -453,7 +470,7 @@ export class AktionElement extends HTMLElement {
    */
   private srcDiagnostics: string[] = [];
   /** The same `src` diagnostics with their positions, for the `error` event. */
-  private srcErrors: Array<{ line: number; column: number; message: string }> = [];
+  private srcErrors: Array<{ line: number; column: number; message: string; file?: string }> = [];
   /**
    * Monotonic token guarding overlapping `src` loads. A rapid `src` change
    * (or a reconnect mid-fetch) bumps the token so a stale in-flight load
@@ -583,8 +600,10 @@ export class AktionElement extends HTMLElement {
       coverageSourcePath: this.compiledSourceId ?? undefined,
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
+      onRuntimeError: this.deliverError,
     });
     this.renderer = new Renderer({
+      onRuntimeError: this.sinkError,
       library: this.library,
       state: this.state,
       router: this.router,
@@ -1150,7 +1169,9 @@ export class AktionElement extends HTMLElement {
     // runs — the banner + `error` event surface them with any parse errors.
     const linkErrors = result.diagnostics.filter((d) => d.severity !== "warning");
     this.srcDiagnostics = linkErrors.map((d) => (d.line > 0 ? `Line ${d.line}: ${d.message}` : d.message));
-    this.srcErrors = linkErrors.map((d) => ({ line: d.line, column: d.column, message: d.message }));
+    this.srcErrors = linkErrors.map((d) => ({
+      line: d.line, column: d.column, message: d.message, file: d.path ?? entryUrl,
+    }));
   }
 
   /** A `src` load is stale if a newer one started or the element detached. */
@@ -2011,6 +2032,27 @@ export class AktionElement extends HTMLElement {
     });
   }
 
+  /** Sink handed to the renderer and effect runner, which have no context of their own. */
+  private readonly sinkError = (err: unknown, meta: AktionErrorMeta): void => {
+    reportRuntimeError(this.context, err, meta);
+  };
+
+  /** Pass a report to `errorHook`, adding `sourceText` for the module it names. */
+  private readonly deliverError = (report: AktionErrorReport): void => {
+    const hook = this.errorHook;
+    if (!hook) return;
+    const contents = this.compiledSourcesContent;
+    const paths = this.devtoolsProgram?.sources;
+    const sourceText = (file: string): string | undefined => {
+      if (!contents) return undefined;
+      const index = paths ? paths.indexOf(file) : (file === this.compiledSourceId ? 0 : -1);
+      return index >= 0 ? contents[index] : undefined;
+    };
+    try {
+      hook({ ...report, sourceText });
+    } catch { /* a host hook must never crash the runtime */ }
+  };
+
   /** Report a survivable runtime failure to the DevTools error log. */
   private reportDevtoolsError(phase: string, message: string, subject?: string): void {
     if (!isDevtoolsActive()) return;
@@ -2353,8 +2395,9 @@ export class AktionElement extends HTMLElement {
             return;
           }
           this.reportDevtoolsError("render", errorMessage(err), "$app entry point");
-          // eslint-disable-next-line no-console
-          console.error("[aktion] entry point evaluation error", err);
+          reportRuntimeError(this.context, err, {
+            source: "$app entry point", kind: "render", message: "[aktion] entry point evaluation error",
+          });
         }
       }
 
@@ -2387,6 +2430,7 @@ export class AktionElement extends HTMLElement {
           this.handleRuntimeBudgetError(err);
           return;
         }
+        this.deliverError({ ...errorInfoOf(err), error: err, source: "render", kind: "render" });
         throw err;
       }
       // Strict mode only: remember what handlers wrote on the live DOM since
@@ -2496,6 +2540,7 @@ export class AktionElement extends HTMLElement {
     }
     this.updateErrorBanner();
     this.reportDevtoolsError("budget", err.message, err.kind);
+    this.deliverError({ ...errorInfoOf(err), error: err, source: err.kind, kind: "budget" });
     if (!this.streaming) {
       this.dispatchEvent(new CustomEvent("error", {
         detail: { errors: [{ line: 0, column: 0, message: err.message }] },
@@ -2584,6 +2629,7 @@ export class AktionElement extends HTMLElement {
       coverageSourcePath: this.compiledSourceId ?? undefined,
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
+      onRuntimeError: this.deliverError,
     });
 
     // Linked / compiled programs inject their pre-parsed AST here, skipping the
@@ -2671,7 +2717,13 @@ export class AktionElement extends HTMLElement {
     // A `src` program's link diagnostics (an unresolved import, a JavaScript-
     // semantics rule of an `.aktion.js` module) travel with the parse errors,
     // as the banner already shows them.
-    const errors = [...program.errors, ...this.srcErrors];
+    // A mounted compiled program names its entry module, so a parse error of
+    // the entry can say which file the line belongs to.
+    const entryFile = this.compiledSourceId ?? undefined;
+    const errors = [
+      ...program.errors.map((e) => (entryFile ? { ...e, file: entryFile } : e)),
+      ...this.srcErrors,
+    ];
     if (errors.length > 0 && !this.streaming) {
       this.dispatchEvent(new CustomEvent("error", {
         detail: { errors },
@@ -2833,3 +2885,14 @@ export function defineElement(): void {
     customElements.define(AktionElement.tagName, AktionElement);
   }
 }
+
+/** What {@link AktionElement.errorHook} receives. */
+export interface AktionElementErrorInfo extends AktionErrorInfo {
+  error: unknown;
+  source: string;
+  kind: AktionErrorKind;
+  /** Original text of a module named by `location` / `frames`, or `undefined` when the build dropped sources (`devtools: false`). */
+  sourceText(file: string): string | undefined;
+}
+
+const errorInfoOf = (err: unknown): AktionErrorInfo => getAktionErrorInfo(err) ?? { frames: [] };

@@ -97,7 +97,7 @@ describe("Vitest's automocker (vi.mock without a factory)", () => {
       expect(Object.keys(mocked).filter((key) => key !== "__esModule").sort(), type).toEqual(["base", "default", "remaining"]);
       expect(mocked.remaining, type).toBe(mod.remaining);
       expect(mocked.base, type).toBe(mod.base);
-      expect((mocked.default as { path?: unknown }).path, type).toBe(join(dir, "src/api.aktion.ts"));
+      expect((mocked.default as { path?: unknown }).path, type).toBe("src/api.aktion.ts");
     }
   });
 

@@ -152,7 +152,7 @@ const utilMembers: readonly NamespaceMember[] = [
   method("throttleFn", "throttleFn(fn, wait?)", "Wrap a function to fire at most once per `wait` ms (leading + one trailing)."),
   // Computed + program hooks
   method("derived", "derived(fn)", "Computed reactive value — recomputes from the atoms the lambda reads."),
-  method("onError", "onError(fn)", "Program-level error sink — fires with { error, source } when an action throws."),
+  method("onError", "onError(fn)", "Program-level error sink — fires with { error, source, location, frames } when an action throws; location and frames give the .aktion file, line and column."),
   method("onNavigate", "onNavigate(fn)", "Navigation guard: return false to block, a path string to redirect, anything else to allow."),
   method("onRequest", "onRequest(fn)", "HTTP request interceptor — a partial return merges over every outgoing request (headers shallow-merged), or mutate the request and return nothing. Runs synchronously: a returned Promise is ignored."),
   method("onResponse", "onResponse(fn)", "HTTP response interceptor — return a full replacement response (it replaces, it does not merge), `return retry()` to re-issue once, or nothing to pass it through (the client awaits what you return; `await` inside the body does not suspend)."),
