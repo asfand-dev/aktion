@@ -36412,14 +36412,14 @@ function reportRuntimeError(ctx, err, meta) {
       }
     }
   }
-  console.error(meta.message ?? `[aktion] ${meta.kind} error in ${meta.source}`, err);
+  console.error("%s", meta.message ?? `[aktion] ${meta.kind} error in ${meta.source}`, err);
 }
 function reportVia(sink, err, meta) {
   if (sink) {
     sink(err, meta);
     return;
   }
-  console.error(meta.message ?? `[aktion] ${meta.kind} error in ${meta.source}`, err);
+  console.error("%s", meta.message ?? `[aktion] ${meta.kind} error in ${meta.source}`, err);
 }
 const MAX_GUARD_REDIRECTS = 8;
 function normalisePath(raw) {

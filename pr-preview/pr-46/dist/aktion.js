@@ -29537,14 +29537,14 @@ function Ot(t, e, r) {
     } catch {
     }
   }
-  console.error(r.message ?? `[aktion] ${r.kind} error in ${r.source}`, e);
+  console.error("%s", r.message ?? `[aktion] ${r.kind} error in ${r.source}`, e);
 }
 function Er(t, e, r) {
   if (t) {
     t(e, r);
     return;
   }
-  console.error(r.message ?? `[aktion] ${r.kind} error in ${r.source}`, e);
+  console.error("%s", r.message ?? `[aktion] ${r.kind} error in ${r.source}`, e);
 }
 const az = 8;
 function At(t) {
