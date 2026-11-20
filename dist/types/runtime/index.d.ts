@@ -10,3 +10,5 @@ export { storage, type CookieOptions, type StorageNamespace, type StorageRoot } 
 export { consoleNs, type ConsoleNamespace } from './console.js';
 export { createToastManager, type ToastManager, type ToastItem, type ToastOptions, } from './toast.js';
 export { EffectRunner, type EffectRunnerOptions, } from './effects.js';
+export { getAktionErrorInfo } from './error-info.js';
+export type { AktionErrorInfo, AktionErrorKind, AktionErrorLocation, AktionErrorReport, } from './error-info.js';

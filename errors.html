@@ -384,9 +384,9 @@ $app(ErrorBoundary(RiskyWidget(), {
         it. Register a program-level sink with <code>$util.onError(fn)</code>
         instead.
       </p>
-<pre><code>$util.onError(({ error, source }) =&gt; {
+<pre><code>$util.onError(({ error, source, location }) =&gt; {
   $toast.error("Something went wrong")
-  $console.error(`${source}: ${error}`)
+  $console.error(`${source}: ${error} at ${location.file}:${location.line}`)
 })</code></pre>
       <p>
         <code>source</code> is the name of the declaration that threw, or
@@ -394,7 +394,17 @@ $app(ErrorBoundary(RiskyWidget(), {
         <em>before</em> the default logging and does <strong>not</strong> swallow
         the error &mdash; it still propagates afterwards. Only one hook is
         active at a time; a second <code>$util.onError</code> call replaces the
-        first.
+        first. <code>location</code> and <code>frames</code> give the
+        <code>.aktion</code> file, line and column of the throw and the
+        functions it unwound through.
+      </p>
+      <p>
+        The embedding page can see the same errors, and the ones the runtime
+        only logs (a failing library component, effect, <code>$http</code>
+        callback or top-level statement), through
+        <code>element.errorHook</code>. <code>ErrorBoundary</code>'s
+        <code>onError</code> receives the original error, not a generic
+        message.
       </p>
 
       <h2 id="silent">Silent by design &mdash; symptom to cause</h2>

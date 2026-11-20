@@ -14217,7 +14217,7 @@ const utilMembers = [
   method("throttleFn", "throttleFn(fn, wait?)", "Wrap a function to fire at most once per `wait` ms (leading + one trailing)."),
   // Computed + program hooks
   method("derived", "derived(fn)", "Computed reactive value — recomputes from the atoms the lambda reads."),
-  method("onError", "onError(fn)", "Program-level error sink — fires with { error, source } when an action throws."),
+  method("onError", "onError(fn)", "Program-level error sink — fires with { error, source, location, frames } when an action throws; location and frames give the .aktion file, line and column."),
   method("onNavigate", "onNavigate(fn)", "Navigation guard: return false to block, a path string to redirect, anything else to allow."),
   method("onRequest", "onRequest(fn)", "HTTP request interceptor — a partial return merges over every outgoing request (headers shallow-merged), or mutate the request and return nothing. Runs synchronously: a returned Promise is ignored."),
   method("onResponse", "onResponse(fn)", "HTTP response interceptor — return a full replacement response (it replaces, it does not merge), `return retry()` to re-issue once, or nothing to pass it through (the client awaits what you return; `await` inside the body does not suspend)."),
@@ -36332,6 +36332,95 @@ const NotificationBell = {
     return root;
   }
 };
+const renderErrors = /* @__PURE__ */ new WeakMap();
+const rememberRenderError = (placeholder, err) => {
+  renderErrors.set(placeholder, err);
+};
+const recallRenderError = (placeholder) => renderErrors.has(placeholder) ? { error: renderErrors.get(placeholder) } : void 0;
+const infos = /* @__PURE__ */ new WeakMap();
+const programNotified = /* @__PURE__ */ new WeakSet();
+const hostNotified = /* @__PURE__ */ new WeakSet();
+let lastPrimitive = null;
+const isObject$1 = (value) => typeof value === "object" && value !== null || typeof value === "function";
+function getAktionErrorInfo(err) {
+  return isObject$1(err) ? infos.get(err) : void 0;
+}
+function locate(loc, ctx, fn) {
+  const place = {
+    file: ctx.sources?.[loc.source ?? 0] ?? ctx.coverageSourcePath ?? "<inline>",
+    line: loc.line,
+    column: loc.column
+  };
+  if (fn) place.function = fn.replace(/^__a\d+_/, "");
+  return place;
+}
+function annotateError(err, loc, ctx) {
+  if (!loc) return;
+  if (!isObject$1(err)) {
+    lastPrimitive = { value: err, info: { location: locate(loc, ctx), frames: [] }, program: false, host: false };
+    return;
+  }
+  const info = infos.get(err);
+  if (!info) infos.set(err, { location: locate(loc, ctx), frames: [] });
+  else if (!info.location) info.location = locate(loc, ctx);
+}
+function addErrorFrame(err, fn, ctx) {
+  if (!fn.loc) return;
+  const frame = locate(fn.loc, ctx, fn.name);
+  if (!isObject$1(err)) {
+    if (lastPrimitive && Object.is(lastPrimitive.value, err)) lastPrimitive.info.frames.push(frame);
+    return;
+  }
+  const info = infos.get(err);
+  if (info) info.frames.push(frame);
+  else infos.set(err, { frames: [frame] });
+}
+function notifyProgramHook(ctx, err, source) {
+  if (!ctx.errorHook) return;
+  if (!firstNotice(err, programNotified, "program")) return;
+  const info = getAktionErrorInfo(err) ?? takePrimitiveInfo(err);
+  try {
+    ctx.errorHook({ error: err, source, ...info ? { location: info.location, frames: info.frames } : {} });
+  } catch {
+  }
+}
+function firstNotice(err, seen, sink) {
+  if (isObject$1(err)) {
+    if (seen.has(err)) return false;
+    seen.add(err);
+    return true;
+  }
+  if (lastPrimitive && Object.is(lastPrimitive.value, err)) {
+    if (lastPrimitive[sink]) return false;
+    lastPrimitive[sink] = true;
+  }
+  return true;
+}
+function takePrimitiveInfo(err) {
+  return lastPrimitive && Object.is(lastPrimitive.value, err) ? lastPrimitive.info : void 0;
+}
+function reportRuntimeError(ctx, err, meta) {
+  annotateError(err, meta.loc, ctx);
+  notifyProgramHook(ctx, err, meta.source);
+  const sink = ctx.hostErrorSink;
+  if (sink) {
+    if (firstNotice(err, hostNotified, "host")) {
+      const info = getAktionErrorInfo(err) ?? takePrimitiveInfo(err) ?? { frames: [] };
+      try {
+        sink({ error: err, source: meta.source, kind: meta.kind, location: info.location, frames: info.frames });
+      } catch {
+      }
+    }
+  }
+  console.error("%s", meta.message ?? `[aktion] ${meta.kind} error in ${meta.source}`, err);
+}
+function reportVia(sink, err, meta) {
+  if (sink) {
+    sink(err, meta);
+    return;
+  }
+  console.error("%s", meta.message ?? `[aktion] ${meta.kind} error in ${meta.source}`, err);
+}
 const MAX_GUARD_REDIRECTS = 8;
 function normalisePath(raw) {
   if (!raw) return "/";
@@ -37191,7 +37280,7 @@ const Lazy = {
 };
 const ErrorBoundary = {
   name: "ErrorBoundary",
-  description: "Render a fallback subtree when rendering children fails. Pass a `fallback` node (or omit it for a built-in friendly error card, which shows a Retry button when `onRetry` is set); `onError(err)` fires with the error. Set `showDetails=true` to reveal the message inline (great in dev).",
+  description: "Render a fallback subtree when rendering children fails. Pass a `fallback` node (or omit it for a built-in friendly error card, which shows a Retry button when `onRetry` is set); `onError(err)` fires with the original error. Set `showDetails=true` to reveal the message inline (great in dev).",
   props: [
     { name: "fallback", type: "Node", optional: true },
     { name: "onError", type: "callable", optional: true },
@@ -37208,9 +37297,11 @@ const ErrorBoundary = {
       }
       const substituted = wrapper.querySelector(".rui-render-error");
       if (!substituted) return wrapper;
-      caught = new Error(substituted.textContent?.trim() || "render error");
+      const original = recallRenderError(substituted);
+      caught = original ? original.error : new Error(substituted.textContent?.trim() || "render error");
     } catch (err) {
       caught = err;
+      helpers.reportError?.(err, "ErrorBoundary");
     }
     try {
       helpers.invoke(props.onError, caught);
@@ -46207,7 +46298,11 @@ function createHttpResource(config, ctx) {
           try {
             resource.onDone(resource);
           } catch (err) {
-            console.error("[aktion] Http onDone callback threw", err);
+            reportRuntimeError(ctx, err, {
+              source: "onDone",
+              kind: "http-callback",
+              message: "[aktion] Http onDone callback threw"
+            });
           }
         }
       }
@@ -46482,7 +46577,11 @@ function createMutationResource(baseConfig, ctx) {
             try {
               resource.onDone(resource);
             } catch (err) {
-              console.error("[aktion] $mutation onDone callback threw", err);
+              reportRuntimeError(ctx, err, {
+                source: "onDone",
+                kind: "http-callback",
+                message: "[aktion] $mutation onDone callback threw"
+              });
             }
           }
         }
@@ -51123,6 +51222,8 @@ function createContext(state, options = {}) {
     // property added after construction would turn that read megamorphic.
     coverage: void 0,
     coverageSourcePath: options.coverageSourcePath,
+    hostErrorSink: options.onRuntimeError,
+    sources: void 0,
     disposers: [],
     computedDerivations: [],
     timers: { timeouts: /* @__PURE__ */ new Set(), intervals: /* @__PURE__ */ new Set() },
@@ -51194,6 +51295,7 @@ function stateRefForArg(expr, ctx) {
   return null;
 }
 function planProgram(program, ctx) {
+  ctx.sources = program.sources;
   if (isEnabled()) {
     ctx.coverage = registerProgram(program, ctx.coverageSourcePath);
   }
@@ -51405,7 +51507,12 @@ function runTopLevelImperativeStatements(program, ctx) {
         continue;
       }
       if (err instanceof RuntimeBudgetError) throw err;
-      console.error("[aktion] top-level statement threw", err);
+      reportRuntimeError(ctx, err, {
+        loc: stmt.loc,
+        source: "top-level",
+        kind: "top-level",
+        message: "[aktion] top-level statement threw"
+      });
     }
   }
 }
@@ -52116,6 +52223,7 @@ function runStatementInBlock(stmt, ctx) {
       throw new ContinueSignal();
     case "ThrowStatement": {
       const value = evaluate(stmt.argument, ctx);
+      annotateError(value, stmt.loc, ctx);
       throw value;
     }
     case "Return": {
@@ -52656,7 +52764,12 @@ function evaluateInvoke(expr, ctx) {
   try {
     return callee.apply(void 0, positional);
   } catch (err) {
-    console.error(`[aktion] call expression threw`, err);
+    reportRuntimeError(ctx, err, {
+      loc: expr.loc,
+      source: "call",
+      kind: "action",
+      message: `[aktion] call expression threw`
+    });
     return null;
   }
 }
@@ -52667,7 +52780,12 @@ function evaluateNew(expr, ctx) {
   try {
     return Reflect.construct(callee, positional);
   } catch (err) {
-    console.error(`[aktion] \`new\` threw`, err);
+    reportRuntimeError(ctx, err, {
+      loc: expr.loc,
+      source: "new",
+      kind: "action",
+      message: `[aktion] \`new\` threw`
+    });
     return null;
   }
 }
@@ -52735,6 +52853,7 @@ function evaluateBlock(block, ctx, options) {
           return result;
         case "ThrowStatement": {
           const value = evaluate(stmt.argument, ctx);
+          annotateError(value, stmt.loc, ctx);
           throw value;
         }
         case "EffectDeclaration": {
@@ -52970,7 +53089,12 @@ function evaluateMethodCall(expr, ctx) {
     return fn.apply(target, callArgs);
   } catch (err) {
     if (err instanceof RangeError || err instanceof RuntimeBudgetError) throw err;
-    console.error(`[aktion] method "${expr.method}" threw`, err);
+    reportRuntimeError(ctx, err, {
+      loc: expr.loc,
+      source: expr.method,
+      kind: "action",
+      message: `[aktion] method "${expr.method}" threw`
+    });
     return null;
   }
 }
@@ -53020,7 +53144,7 @@ function evaluateComponentCall(callee, args, ctx, loc, positional = false) {
     return void 0;
   }
   if (callee === "setTimeout" || callee === "setInterval") {
-    return evaluateTimerCall(callee, args, ctx);
+    return evaluateTimerCall(callee, args, ctx, loc);
   }
   if (callee === "clearTimeout" || callee === "clearInterval") {
     const handle = args[0] ? evaluate(args[0], ctx) : void 0;
@@ -53054,7 +53178,7 @@ function evaluateComponentCall(callee, args, ctx, loc, positional = false) {
     try {
       return fn(...evaluated2);
     } catch (err) {
-      console.error(`[aktion] global "${callee}" threw`, err);
+      reportRuntimeError(ctx, err, { loc, source: callee, kind: "action", message: `[aktion] global "${callee}" threw` });
       return null;
     }
   }
@@ -53066,7 +53190,7 @@ function evaluateComponentCall(callee, args, ctx, loc, positional = false) {
       try {
         return fn(...evaluated2);
       } catch (err) {
-        console.error(`[aktion] global "${callee}" threw`, err);
+        reportRuntimeError(ctx, err, { loc, source: callee, kind: "action", message: `[aktion] global "${callee}" threw` });
         return null;
       }
     }
@@ -53357,6 +53481,9 @@ function evaluateUserComponent(node, ctx, instanceKey) {
   try {
     const value = evaluateBlock(decl.body, ctx, { stateAsDeclaration: true });
     return { value, effects: effectsFrame, hooks: hookScope.cursor };
+  } catch (err) {
+    addErrorFrame(err, decl, ctx);
+    throw err;
   } finally {
     ctx.activeComponentDecls.pop();
     ctx.hookScope = prevHookScope;
@@ -53373,15 +53500,12 @@ function runActionDeclSync(decl, args, ctx) {
   );
   if (shadowsBuiltin) ctx.activeComponentDecls.push(decl.name);
   try {
-    if (!ctx.errorHook) return runDeclBodySync(decl.params, decl.body, args, ctx);
+    if (!ctx.errorHook) return runDeclBodySync(decl.params, decl.body, args, ctx, decl);
     try {
-      return runDeclBodySync(decl.params, decl.body, args, ctx);
+      return runDeclBodySync(decl.params, decl.body, args, ctx, decl);
     } catch (err) {
       if (err instanceof ReturnSignal || err instanceof BreakSignal || err instanceof ContinueSignal) throw err;
-      try {
-        ctx.errorHook({ error: err, source: decl.name ?? "action" });
-      } catch {
-      }
+      notifyProgramHook(ctx, err, decl.name ?? "action");
       throw err;
     }
   } finally {
@@ -53417,7 +53541,7 @@ function runOptimistic(fnExpr, ctx) {
     throw err;
   }
 }
-function runDeclBodySync(params, body, args, ctx) {
+function runDeclBodySync(params, body, args, ctx, fn) {
   const savedLoopVars = new Map(ctx.loopVars);
   for (let i = 0; i < params.length; i += 1) {
     const param = params[i];
@@ -53439,6 +53563,11 @@ function runDeclBodySync(params, body, args, ctx) {
   }
   try {
     return evaluateBlock(body, ctx, { stateAsDeclaration: ctx.state.isRendering() });
+  } catch (err) {
+    if (fn && !(err instanceof ReturnSignal || err instanceof BreakSignal || err instanceof ContinueSignal)) {
+      addErrorFrame(err, fn, ctx);
+    }
+    throw err;
   } finally {
     ctx.loopVars.clear();
     for (const [name, value] of savedLoopVars) ctx.loopVars.set(name, value);
@@ -53566,7 +53695,7 @@ function evaluateIdHook(args, ctx, loc) {
 function invokeHookDecl(decl, argExprs, ctx) {
   if (ctx.coverage) recordFunction(ctx.coverage, decl.loc);
   const args = evaluateCallArgs(argExprs, ctx);
-  return runDeclBodySync(decl.params, decl.body, args, ctx);
+  return runDeclBodySync(decl.params, decl.body, args, ctx, decl);
 }
 let warnedHookOutsideComponent = false;
 function warnHookOutsideComponent(hookName, loc) {
@@ -53676,7 +53805,7 @@ function applyAssignOp(op, current, next) {
       return next;
   }
 }
-function evaluateTimerCall(callee, args, ctx) {
+function evaluateTimerCall(callee, args, ctx, loc) {
   const callback = args[0] ? evaluate(args[0], ctx) : null;
   if (typeof callback !== "function") return null;
   const fn = callback;
@@ -53689,7 +53818,12 @@ function evaluateTimerCall(callee, args, ctx) {
     try {
       fn(...extra);
     } catch (err) {
-      console.error(`[aktion] ${callee} callback threw`, err);
+      reportRuntimeError(ctx, err, {
+        loc,
+        source: callee,
+        kind: "action",
+        message: `[aktion] ${callee} callback threw`
+      });
     } finally {
       ctx.notify?.();
     }
@@ -54730,7 +54864,11 @@ class Renderer {
         try {
           this.options.unmountInstanceEffects(instanceKey);
         } catch (err) {
-          console.error(`[aktion] unmountInstanceEffects threw for ${instanceKey}`, err);
+          reportVia(this.options.onRuntimeError, err, {
+            source: instanceKey,
+            kind: "effect",
+            message: `[aktion] unmountInstanceEffects threw for ${instanceKey}`
+          });
         }
       }
     }
@@ -54740,7 +54878,11 @@ class Renderer {
         try {
           this.options.unmountInstanceHooks(instanceKey);
         } catch (err) {
-          console.error(`[aktion] unmountInstanceHooks threw for ${instanceKey}`, err);
+          reportVia(this.options.onRuntimeError, err, {
+            source: instanceKey,
+            kind: "render",
+            message: `[aktion] unmountInstanceHooks threw for ${instanceKey}`
+          });
         }
       }
     }
@@ -54792,7 +54934,11 @@ class Renderer {
         try {
           this.options.unmountInstanceEffects(instanceKey);
         } catch (err) {
-          console.error(`[aktion] unmountInstanceEffects threw for ${instanceKey}`, err);
+          reportVia(this.options.onRuntimeError, err, {
+            source: instanceKey,
+            kind: "effect",
+            message: `[aktion] unmountInstanceEffects threw for ${instanceKey}`
+          });
         }
         this.instancesWithEffects.delete(instanceKey);
       }
@@ -54803,7 +54949,11 @@ class Renderer {
         try {
           this.options.unmountInstanceHooks(instanceKey);
         } catch (err) {
-          console.error(`[aktion] unmountInstanceHooks threw for ${instanceKey}`, err);
+          reportVia(this.options.onRuntimeError, err, {
+            source: instanceKey,
+            kind: "render",
+            message: `[aktion] unmountInstanceHooks threw for ${instanceKey}`
+          });
         }
         this.instancesWithHooks.delete(instanceKey);
       }
@@ -54890,7 +55040,11 @@ class Renderer {
     try {
       dispose();
     } catch (err) {
-      console.error("[aktion] disposer threw", err);
+      reportVia(this.options.onRuntimeError, err, {
+        source: "disposer",
+        kind: "render",
+        message: "[aktion] disposer threw"
+      });
     }
   }
   /**
@@ -55121,12 +55275,23 @@ class Renderer {
           const result = callable(...args);
           if (result && typeof result.then === "function") {
             result.catch((err) => {
-              console.error("[aktion] handler rejected", err);
+              reportVia(this.options.onRuntimeError, err, {
+                source: "handler",
+                kind: "action",
+                message: "[aktion] handler rejected"
+              });
             });
           }
         } catch (err) {
-          console.error("[aktion] handler threw", err);
+          reportVia(this.options.onRuntimeError, err, {
+            source: "handler",
+            kind: "action",
+            message: "[aktion] handler threw"
+          });
         }
+      },
+      reportError: (err, source) => {
+        reportVia(this.options.onRuntimeError, err, { source, kind: "render", message: `[aktion] failed to render ${source}` });
       },
       setState: (name, value) => {
         this.writeState(name, value);
@@ -55214,10 +55379,15 @@ class Renderer {
           { source: node.source, explicitKey: node.explicitKey, props: this.libraryProps(spec, node, overrides) }
         );
       }
-      console.error(`[aktion] failed to render ${spec.name}`, err);
+      reportVia(this.options.onRuntimeError, err, {
+        source: spec.name,
+        kind: "render",
+        message: `[aktion] failed to render ${spec.name}`
+      });
       const fallback = document.createElement("div");
       fallback.className = "rui-render-error";
       fallback.textContent = `[render error in ${spec.name}]`;
+      rememberRenderError(fallback, err);
       return fallback;
     }
   }
@@ -55403,7 +55573,7 @@ class EffectRunner {
           try {
             fn();
           } catch (err) {
-            logCleanupError(mountKey, err);
+            logCleanupError(getCtx(), mountKey, decl, err);
           }
         }
         this.emitEffect(mountKey, decl, "cleanup", reason, { cleanups: prior.length });
@@ -55417,7 +55587,12 @@ class EffectRunner {
           duration: nowMs() - start2,
           error: err instanceof Error ? err.message : String(err)
         });
-        console.error(`[aktion] effect "${mountKey}" failed`, err);
+        reportRuntimeError(getCtx(), err, {
+          loc: decl.loc,
+          source: mountKey,
+          kind: "effect",
+          message: `[aktion] effect "${mountKey}" failed`
+        });
       } finally {
         this.options.notify();
       }
@@ -55493,7 +55668,7 @@ class EffectRunner {
         try {
           fn();
         } catch (err) {
-          logCleanupError(name, err);
+          logCleanupError(mounted2.ctxRef(), name, mounted2.decl, err);
         }
       }
       this.emitEffect(name, mounted2.decl, "cleanup", "unmount", { cleanups: count });
@@ -55510,7 +55685,12 @@ class EffectRunner {
         this.emitEffect(name, mounted2.decl, "error", "unmount", {
           error: err instanceof Error ? err.message : String(err)
         });
-        console.error(`[aktion] effect "${name}" unmount body threw`, err);
+        reportRuntimeError(mounted2.ctxRef(), err, {
+          loc: mounted2.decl.loc,
+          source: name,
+          kind: "effect",
+          message: `[aktion] effect "${name}" unmount body threw`
+        });
       }
     }
     this.emitEffect(name, mounted2.decl, "unmount", "unmount");
@@ -55654,8 +55834,13 @@ function runStatement(stmt, ctx, mounted2, options) {
       return void 0;
   }
 }
-function logCleanupError(name, err) {
-  console.error(`[aktion] cleanup for effect "${name}" threw`, err);
+function logCleanupError(ctx, name, decl, err) {
+  reportRuntimeError(ctx, err, {
+    loc: decl.loc,
+    source: name,
+    kind: "effect",
+    message: `[aktion] cleanup for effect "${name}" threw`
+  });
 }
 function effectLabel(name) {
   const m = /^__effect_L(\d+)_C(\d+)$/.exec(name);
@@ -73448,6 +73633,15 @@ class AktionElement extends HTMLElement {
     __publicField(this, "library", defaultLibrary);
     __publicField(this, "currentUIProvider");
     __publicField(this, "http", new HttpRuntime());
+    /**
+     * Host hook for every error the runtime catches and would otherwise only
+     * log: a failing component, effect, `$http` callback, handler or top-level
+     * statement. Receives the original error, where it came from in the `.aktion`
+     * source (`location`, `frames`) and `sourceText(file)` for context lines.
+     * Runs before the console line, which is still written. Set it to `null` to
+     * stop reporting.
+     */
+    __publicField(this, "errorHook", null);
     __publicField(this, "effectRunner");
     __publicField(this, "renderer");
     __publicField(this, "context");
@@ -73611,6 +73805,26 @@ class AktionElement extends HTMLElement {
     __publicField(this, "devtoolsPendingRoute", null);
     /** Static security profile of the planned program, cached until it changes. */
     __publicField(this, "devtoolsSecurityCache", null);
+    /** Sink handed to the renderer and effect runner, which have no context of their own. */
+    __publicField(this, "sinkError", (err, meta) => {
+      reportRuntimeError(this.context, err, meta);
+    });
+    /** Pass a report to `errorHook`, adding `sourceText` for the module it names. */
+    __publicField(this, "deliverError", (report2) => {
+      const hook = this.errorHook;
+      if (!hook) return;
+      const contents = this.compiledSourcesContent;
+      const paths = this.devtoolsProgram?.sources;
+      const sourceText = (file) => {
+        if (!contents) return void 0;
+        const index = paths ? paths.indexOf(file) : file === this.compiledSourceId ? 0 : -1;
+        return index >= 0 ? contents[index] : void 0;
+      };
+      try {
+        hook({ ...report2, sourceText });
+      } catch {
+      }
+    });
     /** Whether the "state write during render" warning has already fired. */
     __publicField(this, "warnedStateWriteDuringRender", false);
     this.root = this.attachShadow({ mode: "open" });
@@ -73655,9 +73869,11 @@ class AktionElement extends HTMLElement {
       // ignores this.
       coverageSourcePath: this.compiledSourceId ?? void 0,
       notify: () => this.requestFullRender(),
-      onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail)
+      onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
+      onRuntimeError: this.deliverError
     });
     this.renderer = new Renderer({
+      onRuntimeError: this.sinkError,
       library: this.library,
       state: this.state,
       router: this.router,
@@ -74130,7 +74346,12 @@ class AktionElement extends HTMLElement {
     );
     const linkErrors = result.diagnostics.filter((d) => d.severity !== "warning");
     this.srcDiagnostics = linkErrors.map((d) => d.line > 0 ? `Line ${d.line}: ${d.message}` : d.message);
-    this.srcErrors = linkErrors.map((d) => ({ line: d.line, column: d.column, message: d.message }));
+    this.srcErrors = linkErrors.map((d) => ({
+      line: d.line,
+      column: d.column,
+      message: d.message,
+      file: d.path ?? entryUrl
+    }));
   }
   /** A `src` load is stale if a newer one started or the element detached. */
   isStaleSrcLoad(token) {
@@ -75122,7 +75343,11 @@ class AktionElement extends HTMLElement {
             return;
           }
           this.reportDevtoolsError("render", errorMessage(err), "$app entry point");
-          console.error("[aktion] entry point evaluation error", err);
+          reportRuntimeError(this.context, err, {
+            source: "$app entry point",
+            kind: "render",
+            message: "[aktion] entry point evaluation error"
+          });
         }
       }
       const changedPaths = this.pendingChangedPaths;
@@ -75140,6 +75365,7 @@ class AktionElement extends HTMLElement {
           this.handleRuntimeBudgetError(err);
           return;
         }
+        this.deliverError({ ...errorInfoOf(err), error: err, source: "render", kind: "render" });
         throw err;
       }
       const guarded = this.ensureMorphGuard();
@@ -75213,6 +75439,7 @@ class AktionElement extends HTMLElement {
     }
     this.updateErrorBanner();
     this.reportDevtoolsError("budget", err.message, err.kind);
+    this.deliverError({ ...errorInfoOf(err), error: err, source: err.kind, kind: "budget" });
     if (!this.streaming) {
       this.dispatchEvent(new CustomEvent("error", {
         detail: { errors: [{ line: 0, column: 0, message: err.message }] },
@@ -75271,7 +75498,8 @@ class AktionElement extends HTMLElement {
       // ignores this.
       coverageSourcePath: this.compiledSourceId ?? void 0,
       notify: () => this.requestFullRender(),
-      onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail)
+      onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
+      onRuntimeError: this.deliverError
     });
     const compiled = this.pendingCompiled;
     const retained = compiled === null && this.compiledProgram !== null ? { ...this.compiledProgram, errors: [...this.compiledProgram.errors] } : null;
@@ -75315,7 +75543,11 @@ class AktionElement extends HTMLElement {
     for (const error of program.errors) {
       this.reportDevtoolsError("plan", error.message, `line ${error.line}`);
     }
-    const errors = [...program.errors, ...this.srcErrors];
+    const entryFile = this.compiledSourceId ?? void 0;
+    const errors = [
+      ...program.errors.map((e) => entryFile ? { ...e, file: entryFile } : e),
+      ...this.srcErrors
+    ];
     if (errors.length > 0 && !this.streaming) {
       this.dispatchEvent(new CustomEvent("error", {
         detail: { errors },
@@ -75411,6 +75643,7 @@ function defineElement() {
     customElements.define(AktionElement.tagName, AktionElement);
   }
 }
+const errorInfoOf = (err) => getAktionErrorInfo(err) ?? { frames: [] };
 const coverage = {
   start,
   stop,

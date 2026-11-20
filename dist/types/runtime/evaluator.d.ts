@@ -4,6 +4,7 @@ import { StateStore } from './state.js';
 import { HttpRuntime, EndpointResource } from './http.js';
 import { DomManager } from './interop.js';
 import { HeadManager } from './head.js';
+import { AktionErrorLocation, AktionErrorReport } from './error-info.js';
 import { Router } from './router.js';
 import { ComponentLibrary } from '../library/types.js';
 import { ToastManager } from './toast.js';
@@ -483,7 +484,16 @@ export interface EvaluationContext {
     errorHook?: (info: {
         error: unknown;
         source: string;
+        location?: AktionErrorLocation;
+        frames?: AktionErrorLocation[];
     }) => void;
+    /**
+     * Host-side error sink (`element.errorHook`), set by the embedding element.
+     * Declared up-front like `coverage` so the context keeps one hidden class.
+     */
+    hostErrorSink?: (report: AktionErrorReport) => void;
+    /** `program.sources` of the planned program, to name the file of a `loc`. */
+    sources?: string[];
     /** Dispatch a custom event from an `emit("name", detail)` call. */
     onEmit?: (eventName: string, detail: unknown) => void;
     /**
@@ -584,6 +594,8 @@ export interface CreateContextOptions {
      * `EvaluationContext.coverageSourcePath`.
      */
     coverageSourcePath?: string;
+    /** Host sink for errors the runtime used to only log. See `EvaluationContext.hostErrorSink`. */
+    onRuntimeError?: (report: AktionErrorReport) => void;
     /**
      * Runtime safety budget for this context.
      *   - omitted (default): a fresh budget with `DEFAULT_RUNTIME_BUDGET` limits.

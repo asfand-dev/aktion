@@ -3,6 +3,7 @@ import { DeltaOp } from './tooling/index.js';
 import { ComponentSpec, UIProvider } from './library/types.js';
 import { PromptOptions } from './prompt/generator.js';
 import { ThemeInput } from './theme/index.js';
+import { AktionErrorInfo, AktionErrorKind } from './runtime/error-info.js';
 import { HttpInterceptors, HttpRequest, HttpResponse } from './runtime/http.js';
 export type { HttpInterceptors, HttpRequest, HttpResponse };
 export declare class AktionElement extends HTMLElement {
@@ -13,6 +14,15 @@ export declare class AktionElement extends HTMLElement {
     private library;
     private currentUIProvider?;
     private readonly http;
+    /**
+     * Host hook for every error the runtime catches and would otherwise only
+     * log: a failing component, effect, `$http` callback, handler or top-level
+     * statement. Receives the original error, where it came from in the `.aktion`
+     * source (`location`, `frames`) and `sourceText(file)` for context lines.
+     * Runs before the console line, which is still written. Set it to `null` to
+     * stop reporting.
+     */
+    errorHook: ((info: AktionElementErrorInfo) => void) | null;
     private readonly effectRunner;
     private renderer;
     private context;
@@ -499,6 +509,10 @@ export declare class AktionElement extends HTMLElement {
      * A no-op when nothing is pending.
      */
     private flushDevtoolsRoute;
+    /** Sink handed to the renderer and effect runner, which have no context of their own. */
+    private readonly sinkError;
+    /** Pass a report to `errorHook`, adding `sourceText` for the module it names. */
+    private readonly deliverError;
     /** Report a survivable runtime failure to the DevTools error log. */
     private reportDevtoolsError;
     /**
@@ -600,3 +614,11 @@ export declare class AktionElement extends HTMLElement {
     private updateErrorBanner;
 }
 export declare function defineElement(): void;
+/** What {@link AktionElement.errorHook} receives. */
+export interface AktionElementErrorInfo extends AktionErrorInfo {
+    error: unknown;
+    source: string;
+    kind: AktionErrorKind;
+    /** Original text of a module named by `location` / `frames`, or `undefined` when the build dropped sources (`devtools: false`). */
+    sourceText(file: string): string | undefined;
+}

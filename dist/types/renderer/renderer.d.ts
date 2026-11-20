@@ -2,6 +2,7 @@ import { EvaluationContext, ScopedEffectDecl } from '../runtime/evaluator.js';
 import { StateStore } from '../runtime/state.js';
 import { Router } from '../runtime/router.js';
 import { ComponentLibrary } from '../library/types.js';
+import { RuntimeErrorSink } from '../runtime/error-info.js';
 import { ComponentRenderRecord } from '../devtools/protocol.js';
 /**
  * DOM attribute carrying the instance key of the library component that
@@ -22,6 +23,11 @@ export interface RenderOptions {
     onAssistantMessage?: (message: string) => void;
     /** Optional override for `helpers.openUrl(url)` (defaults to `window.open`). */
     onOpenUrl?: (url: string) => void;
+    /**
+     * Where errors the renderer swallows (a throwing library component or
+     * handler) are reported. Unset, they are only logged.
+     */
+    onRuntimeError?: RuntimeErrorSink;
     /**
      * Evaluation context used to expand user-declared `component` calls
      * (per-instance state isolation, lazy body evaluation, §7). The host

@@ -6153,7 +6153,7 @@ const utilMembers = [
   method("throttleFn", "throttleFn(fn, wait?)", "Wrap a function to fire at most once per `wait` ms (leading + one trailing)."),
   // Computed + program hooks
   method("derived", "derived(fn)", "Computed reactive value — recomputes from the atoms the lambda reads."),
-  method("onError", "onError(fn)", "Program-level error sink — fires with { error, source } when an action throws."),
+  method("onError", "onError(fn)", "Program-level error sink — fires with { error, source, location, frames } when an action throws; location and frames give the .aktion file, line and column."),
   method("onNavigate", "onNavigate(fn)", "Navigation guard: return false to block, a path string to redirect, anything else to allow."),
   method("onRequest", "onRequest(fn)", "HTTP request interceptor — a partial return merges over every outgoing request (headers shallow-merged), or mutate the request and return nothing. Runs synchronously: a returned Promise is ignored."),
   method("onResponse", "onResponse(fn)", "HTTP response interceptor — return a full replacement response (it replaces, it does not merge), `return retry()` to re-issue once, or nothing to pass it through (the client awaits what you return; `await` inside the body does not suspend)."),
@@ -28398,6 +28398,8 @@ const NotificationBell = {
     return root;
   }
 };
+const renderErrors = /* @__PURE__ */ new WeakMap();
+const recallRenderError = (placeholder) => renderErrors.has(placeholder) ? { error: renderErrors.get(placeholder) } : void 0;
 function normalisePath(raw) {
   if (!raw) return "/";
   let value = String(raw);
@@ -28975,7 +28977,7 @@ const Lazy = {
 };
 const ErrorBoundary = {
   name: "ErrorBoundary",
-  description: "Render a fallback subtree when rendering children fails. Pass a `fallback` node (or omit it for a built-in friendly error card, which shows a Retry button when `onRetry` is set); `onError(err)` fires with the error. Set `showDetails=true` to reveal the message inline (great in dev).",
+  description: "Render a fallback subtree when rendering children fails. Pass a `fallback` node (or omit it for a built-in friendly error card, which shows a Retry button when `onRetry` is set); `onError(err)` fires with the original error. Set `showDetails=true` to reveal the message inline (great in dev).",
   props: [
     { name: "fallback", type: "Node", optional: true },
     { name: "onError", type: "callable", optional: true },
@@ -28992,9 +28994,11 @@ const ErrorBoundary = {
       }
       const substituted = wrapper.querySelector(".rui-render-error");
       if (!substituted) return wrapper;
-      caught = new Error(substituted.textContent?.trim() || "render error");
+      const original = recallRenderError(substituted);
+      caught = original ? original.error : new Error(substituted.textContent?.trim() || "render error");
     } catch (err) {
       caught = err;
+      helpers.reportError?.(err, "ErrorBoundary");
     }
     try {
       helpers.invoke(props.onError, caught);
