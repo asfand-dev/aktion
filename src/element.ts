@@ -417,6 +417,8 @@ export class AktionElement extends HTMLElement {
    * runnable `currentResponse`.
    */
   private compiledSourcesContent: readonly string[] | null = null;
+  /** `CompiledProgram.sourceNames` of the mounted program: the names error locations carry. */
+  private compiledSourceNames: readonly string[] | null = null;
   private renderScheduled = false;
   /** True when the program text changed and the runtime needs a re-plan. */
   private programDirty = true;
@@ -598,6 +600,7 @@ export class AktionElement extends HTMLElement {
       // program to. A linked multi-file program carries its own `sources` and
       // ignores this.
       coverageSourcePath: this.compiledSourceId ?? undefined,
+      sourceNames: this.compiledSourceNames ?? undefined,
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
       onRuntimeError: this.deliverError,
@@ -1060,6 +1063,7 @@ export class AktionElement extends HTMLElement {
     this.pendingCompiled = { ...compiled.program, errors: [...compiled.program.errors] };
     this.compiledProgram = compiled.program;
     this.compiledSourcesContent = compiled.sourcesContent ?? null;
+    this.compiledSourceNames = compiled.sourceNames ?? null;
     this.programDirty = true;
     this.state.rebind([]);
     this.renderer.reset();
@@ -1095,6 +1099,7 @@ export class AktionElement extends HTMLElement {
     this.compiledSourceId = null;
     this.compiledProgram = null;
     this.compiledSourcesContent = null;
+    this.compiledSourceNames = null;
   }
 
   /** Current `src` attribute value, or `null` when none is set. */
@@ -1215,6 +1220,7 @@ export class AktionElement extends HTMLElement {
     // earlier must not be re-planned in its place.
     this.compiledProgram = null;
     this.compiledSourcesContent = null;
+    this.compiledSourceNames = null;
     this.programDirty = true;
     this.scheduleRender();
   }
@@ -2042,10 +2048,10 @@ export class AktionElement extends HTMLElement {
     const hook = this.errorHook;
     if (!hook) return;
     const contents = this.compiledSourcesContent;
-    const paths = this.devtoolsProgram?.sources;
+    const names = this.compiledSourceNames ?? this.devtoolsProgram?.sources;
     const sourceText = (file: string): string | undefined => {
       if (!contents) return undefined;
-      const index = paths ? paths.indexOf(file) : (file === this.compiledSourceId ? 0 : -1);
+      const index = names ? names.indexOf(file) : (file === this.compiledSourceId ? 0 : -1);
       return index >= 0 ? contents[index] : undefined;
     };
     try {
@@ -2627,6 +2633,7 @@ export class AktionElement extends HTMLElement {
       // program to. A linked multi-file program carries its own `sources` and
       // ignores this.
       coverageSourcePath: this.compiledSourceId ?? undefined,
+      sourceNames: this.compiledSourceNames ?? undefined,
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
       onRuntimeError: this.deliverError,
@@ -2719,7 +2726,7 @@ export class AktionElement extends HTMLElement {
     // as the banner already shows them.
     // A mounted compiled program names its entry module, so a parse error of
     // the entry can say which file the line belongs to.
-    const entryFile = this.compiledSourceId ?? undefined;
+    const entryFile = this.compiledSourceNames?.[0] ?? this.compiledSourceId ?? undefined;
     const errors = [
       ...program.errors.map((e) => (entryFile ? { ...e, file: entryFile } : e)),
       ...this.srcErrors,

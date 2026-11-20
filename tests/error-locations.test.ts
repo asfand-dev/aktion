@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "../src/index.js";
 import { getAktionErrorInfo, type AktionElementErrorInfo, type ComponentSpec } from "../src/index.js";
-import { render } from "../src/testing/index.js";
+import { coverage, render } from "../src/testing/index.js";
 import { linkProgram, type ModuleResolver } from "../src/compiler/linker.js";
 import { COMPILED_PROGRAM_VERSION, compileLite, defineCompiledProgram } from "../src/compiler/runtime.js";
 import { linkProject } from "../src/compiler/index.js";
@@ -358,5 +358,37 @@ describe("a TypeScript module", () => {
     await click(el, "Go");
     expect(reports).toHaveLength(1);
     expect(reports[0]!.location).toMatchObject({ file: "app.aktion.ts", line: 3, column: 3 });
+  });
+
+  it("reports error locations under `sourceNames` while coverage keeps naming modules by `program.sources`", async () => {
+    const files = {
+      "/proj/src/app.aktion": [
+        'import { boom } from "./util.aktion"',
+        'export default $app(Button("Go", { onClick: () => { boom() } }))',
+      ].join("\n"),
+      "/proj/src/util.aktion": ['export function boom() {', '  throw new Error("x")', "}"].join("\n"),
+    };
+    const linked = link(files, "/proj/src/app.aktion");
+    const compiled = defineCompiledProgram({
+      ...linked,
+      sourceNames: linked.program.sources!.map((p) => p.slice("/proj/".length)),
+    });
+    coverage.reset();
+    coverage.start();
+    try {
+      el = create();
+      el.errorHook = (info) => reports.push(info);
+      el.mountCompiled(compiled);
+      await settle();
+      await click(el, "Go");
+      expect(reports).toHaveLength(1);
+      expect(reports[0]!.location).toMatchObject({ file: "src/util.aktion", line: 2, column: 3 });
+      expect(reports[0]!.sourceText?.("src/util.aktion")).toContain("throw new Error");
+      coverage.stop();
+      expect(coverage.report().files.map((f) => f.path).sort()).toEqual(["/proj/src/app.aktion", "/proj/src/util.aktion"]);
+    } finally {
+      coverage.stop();
+      coverage.reset();
+    }
   });
 });

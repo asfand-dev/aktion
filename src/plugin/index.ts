@@ -994,13 +994,11 @@ function emitModule(
   runtimeModuleId: string,
   options: { sourcesContent: boolean; display: (id: string) => string },
 ): string {
-  // Module paths in the payload are project-relative, so error locations and
-  // the `error` event never carry the build machine's absolute paths.
-  const program = result.program.sources
-    ? { ...result.program, sources: result.program.sources.map(options.display) }
-    : result.program;
-  path = options.display(path);
-  const programLiteral = JSON.stringify(JSON.stringify(program, omitDeclarationKeyword));
+  // `program.sources` and `path` stay as linked: coverage reports and DevTools
+  // name modules by them. Error locations use the project-relative
+  // `sourceNames`, so a build machine's absolute paths never reach a report.
+  const sourceNames = (result.program.sources ?? [path]).map(options.display);
+  const programLiteral = JSON.stringify(JSON.stringify(result.program, omitDeclarationKeyword));
   const contents = options.sourcesContent
     ? `, sourcesContent: ${JSON.stringify(result.modules.map((m) => m.originalSource))}`
     : "";
@@ -1010,7 +1008,8 @@ function emitModule(
     `const program = /*#__PURE__*/ JSON.parse(${programLiteral});\n` +
     `const source = ${JSON.stringify(runnableSource(result, entrySource))};\n` +
     `export default /*#__PURE__*/ defineCompiledProgram({ ` +
-    `__aktionCompiled: ${COMPILED_PROGRAM_VERSION}, program, source, path: ${JSON.stringify(path)}${contents} });\n`
+    `__aktionCompiled: ${COMPILED_PROGRAM_VERSION}, program, source, path: ${JSON.stringify(path)}, ` +
+    `sourceNames: ${JSON.stringify(sourceNames)}${contents} });\n`
   );
 }
 

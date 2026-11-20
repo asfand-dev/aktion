@@ -67,14 +67,16 @@ async function transform(
 }
 
 /** Rebuild the `CompiledProgram` the generated module default-exports. */
-function unpack(moduleCode: string): CompiledProgram & { sourcesContent?: string[] } {
+function unpack(moduleCode: string): CompiledProgram & { sourcesContent?: string[]; sourceNames: string[] } {
   const programLiteral = /JSON\.parse\((".*")\);\nconst source/s.exec(moduleCode)![1]!;
   const program = JSON.parse(JSON.parse(programLiteral) as string) as Program;
   const source = JSON.parse(/const source = (".*");\nexport default/s.exec(moduleCode)![1]!) as string;
-  const path = JSON.parse(/path: (".*?")(?:, sourcesContent| \})/s.exec(moduleCode)![1]!) as string;
+  const path = JSON.parse(/path: (".*?"), sourceNames/s.exec(moduleCode)![1]!) as string;
+  const sourceNames = JSON.parse(/sourceNames: (\[.*?\])(?:, sourcesContent| \})/s.exec(moduleCode)![1]!) as string[];
   const contents = /sourcesContent: (\[.*\]) \}\);/s.exec(moduleCode);
   return {
-    ...defineCompiledProgram({ __aktionCompiled: 1, program, source, path }),
+    ...defineCompiledProgram({ __aktionCompiled: 1, program, source, path, sourceNames }),
+    sourceNames,
     ...(contents ? { sourcesContent: JSON.parse(contents[1]!) as string[] } : {}),
   };
 }
@@ -134,7 +136,7 @@ describe("transform of a mixed-language graph", () => {
     const { out, ctx } = await transform(`${entry}?import`, text);
     expect(ctx.errors.map((e) => e.message)).toEqual([]);
     const compiled = unpack(out!.code);
-    expect(compiled.path).toBe("src/main.aktion.ts");
+    expect(compiled.path).toBe(entry);
     // `source` is the PRINTED linked program — Aktion, not TypeScript.
     expect(compiled.source).not.toContain(": number");
     expect(compiled.source).toContain("$app(");
@@ -146,14 +148,16 @@ describe("transform of a mixed-language graph", () => {
     expect(screen.shadowRoot.textContent).toContain("Entry: n=0");
   });
 
-  it("emits project-relative module paths, never the build machine's absolute ones", async () => {
+  it("names modules project-relative in `sourceNames`, while `path` and `program.sources` stay as linked", async () => {
     const text = ['import { Counter } from "./counter.aktion.ts"', 'export default $app(Counter({ title: "Entry" }))'].join("\n");
     const entry = write("src/main.aktion.ts", text);
     const { out } = await transform(`${entry}?import`, text);
     const compiled = unpack(out!.code);
-    expect(compiled.program.sources).toContain("src/counter.aktion.ts");
-    expect(compiled.program.sources!.some((p) => p.startsWith("/"))).toBe(false);
-    expect(out!.code).not.toContain(dir);
+    // Coverage reports and DevTools name modules by `path` / `program.sources`; error locations by `sourceNames`.
+    expect(compiled.path).toBe(entry);
+    expect(compiled.program.sources).toContain(join(dir, "src/counter.aktion.ts"));
+    expect(compiled.sourceNames).toEqual(compiled.program.sources!.map((p) => p.slice(dir.length + 1)));
+    expect(compiled.sourceNames.some((p) => p.startsWith("/"))).toBe(false);
   });
 
   it("`devtools: false` leaves `sourcesContent` out", async () => {

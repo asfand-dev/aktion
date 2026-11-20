@@ -12,6 +12,13 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 * **runtime:** attach .aktion file, line and column to runtime errors and add an element error hook ([#46](https://github.com/asfand-dev/aktion/issues/46)) ([3467bf9](https://github.com/asfand-dev/aktion/commit/3467bf9ba538b4f1b6e7f9a943f954b65cd23392))
 
+## 2026-11-20
+
+### Coverage Names Restored After Error Locations
+
+- Fixed a regression in 0.12.0: the Vite plugin wrote project-relative module paths into `CompiledProgram.path` and `program.sources`, so coverage reports named modules inside the project root `src/app.aktion` while modules outside it (a shared library) kept their absolute paths. A coverage filter that tests for `<project>/src/` then dropped the project's own modules, and its line and function coverage fell far below the real figure.
+- `path` and `program.sources` are absolute again, as in 0.11.0, and DevTools and coverage name modules by them. The project-relative names now travel in a new optional `CompiledProgram.sourceNames`, index-aligned with `program.sources`, which is what error locations, the `error` event's `file` and `errorHook`'s `sourceText(file)` use. A compiled program without `sourceNames` (an older build) falls back to `program.sources`, so error locations keep working there.
+
 ## 2026-10-27
 
 ### Error Locations for Hosts
