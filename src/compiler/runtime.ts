@@ -85,6 +85,16 @@ export interface CompiledProgram {
    * from older compilers omit it and DevTools falls back to `source`.
    */
   readonly sourcesContent?: readonly string[];
+  /**
+   * Project-relative name of every module, indexed like `program.sources` (a
+   * single-file program has one entry). Runtime error locations and the
+   * `errorHook` report use these names, so a build machine's absolute paths
+   * never reach an error report. `path` and `program.sources` stay as linked
+   * (absolute for the Vite plugin) because coverage reports and DevTools name
+   * modules by them. Optional: without it, error locations fall back to
+   * `program.sources`.
+   */
+  readonly sourceNames?: readonly string[];
 }
 
 /**

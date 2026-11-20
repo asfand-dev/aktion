@@ -1099,7 +1099,7 @@ export interface EvaluationContext {
    */
   hostErrorSink?: (report: AktionErrorReport) => void;
   /** `program.sources` of the planned program, to name the file of a `loc`. */
-  sources?: string[];
+  sources?: readonly string[];
   /** Dispatch a custom event from an `emit("name", detail)` call. */
   onEmit?: (eventName: string, detail: unknown) => void;
   /**
@@ -1177,6 +1177,12 @@ export interface EvaluationContext {
    * multi-file program, whose own `Program.sources` is authoritative.
    */
   coverageSourcePath?: string;
+  /**
+   * Module names error locations are reported under, indexed like
+   * `Program.sources` (`CompiledProgram.sourceNames`). Falls back to
+   * `Program.sources` when absent.
+   */
+  sourceNames?: readonly string[];
 }
 
 /**
@@ -1198,6 +1204,8 @@ export interface CreateContextOptions {
    * `EvaluationContext.coverageSourcePath`.
    */
   coverageSourcePath?: string;
+  /** See `EvaluationContext.sourceNames`. */
+  sourceNames?: readonly string[];
   /** Host sink for errors the runtime used to only log. See `EvaluationContext.hostErrorSink`. */
   onRuntimeError?: (report: AktionErrorReport) => void;
   /**
@@ -1247,6 +1255,7 @@ export function createContext(
     // property added after construction would turn that read megamorphic.
     coverage: undefined,
     coverageSourcePath: options.coverageSourcePath,
+    sourceNames: options.sourceNames,
     hostErrorSink: options.onRuntimeError,
     sources: undefined,
     disposers: [],
@@ -1389,7 +1398,7 @@ function stateRefForArg(
  * build lazy bindings for every assignment so forward references resolve.
  */
 export function planProgram(program: Program, ctx: EvaluationContext): void {
-  ctx.sources = program.sources;
+  ctx.sources = ctx.sourceNames ?? program.sources;
   // Attach the coverage recorder before anything is evaluated, so the very
   // first plan is measured. Registration is idempotent per AST, so a replan
   // (state hydration, hot edit, `registerComponents`) neither double-counts the
