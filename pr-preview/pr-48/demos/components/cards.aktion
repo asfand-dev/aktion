@@ -1,0 +1,77 @@
+// Cards — 10 reusable card & KPI components.
+$app(Column([header, Grid(demos, { columns: { base: 1, lg: 2 }, gap: "lg" })], { gap: "lg", padding: "md" }))
+
+header = PageHeader("Cards & KPIs", { subtitle: "10 reusable card components", badge: Badge("Components", { tone: "primary", icon: "id-card" }) })
+function Demo(name, desc, body) { return Card([SectionHeader(name, { eyebrow: "COMPONENT", subtitle: desc }), body]) }
+
+// 1 — KPI with trend + delta
+function MetricCard(label, value, { icon = "chart-line", trend = "up", delta = "+0%", tone = "primary" } = {}) {
+  return StatCard(label, { value, icon, trend, delta, tone })
+}
+
+// 2 — KPI with an inline sparkline
+function SparkStat(label, value, { data = [3, 5, 4, 6, 7, 9], tone = "success" } = {}) {
+  return StatCard(label, { value, spark: data, tone, icon: "wave-square" })
+}
+
+// 3 — user profile card
+function ProfileCardX(name, { role = "", bio = "", tags = [], avatarSrc } = {}) {
+  return ProfileCard(name, { role, avatarSrc, bio, tags, actions: [Button("Follow", { variant: "primary", size: "sm", icon: "user-plus" }), Button("Message", { variant: "ghost", size: "sm", icon: "envelope" })] })
+}
+
+// 4 — product card with rating and add action
+function ItemCard(name, { price = 0, img, rating = 4.5, onAdd } = {}) {
+  return Card([
+    Image(img, { alt: name, ratio: "4:3", fit: "cover" }),
+    Text(name, { variant: "body-heavy" }),
+    Row([Rating(rating, { readonly: true, size: "sm" }), Spacer(), Text($util.format(price, "currency", "USD"), { variant: "body-heavy", tone: "primary" })], { align: "center" }),
+    Button("Add to cart", { variant: "primary", icon: "cart-plus", fullWidth: true, onClick: onAdd || (() => {}) })
+  ], { variant: "outlined" })
+}
+
+// 5 — pricing tier
+function PricingTier(plan, { price = "$0", period = "/mo", description = "", features = [], featured = false } = {}) {
+  return PricingCard(plan, { price, period, description, features, featured, badge: featured ? "Popular" : null, action: Button(featured ? "Start trial" : "Choose plan", { variant: featured ? "primary" : "secondary", fullWidth: true }) })
+}
+
+// 6 — icon + title + description info card
+function InfoCard(title, { desc = "", icon = "circle-info", tone = "primary" } = {}) {
+  return Box([Row([Icon(icon, { size: "lg", color: "var(--rui-color-primary)" }), Column([Text(title, { variant: "body-heavy" }), Text(desc, { variant: "small", tone: "muted" })], { gap: "xs" })], { gap: "md", align: "start" })], { padding: "md", border: "subtle", background: "surface" })
+}
+
+// 7 — article / media preview
+function MediaArticle(title, { img, desc = "", tags = [], meta = "" } = {}) {
+  return MediaCard(title, { imageSrc: img, description: desc, tags, meta, badge: Badge("Article", { tone: "info", size: "sm" }) })
+}
+
+// 8 — completion ring KPI
+function KpiRing(label, { value = 70, tone = "primary", caption } = {}) {
+  return Card([SectionHeader(label, { eyebrow: "PROGRESS" }), Center([ProgressRing(value, { tone, size: "lg", caption: caption || `${value}%`, label: "bullseye" })])])
+}
+
+// 9 — gauge KPI card
+function GaugeCard(label, { value = 80, min = 0, max = 100, tone = "success", caption = "" } = {}) {
+  return Card([SectionHeader(label, { eyebrow: "GAUGE" }), Center([Gauge(value, { min, max, tone, caption, size: "lg" })])])
+}
+
+// 10 — value + sparkline + delta badge
+function StatTrendCard(label, value, { data = [10, 12, 9, 14, 18, 22], delta = "+18%", tone = "success" } = {}) {
+  return Box([Column([
+    Row([Text(label, { variant: "small-heavy", tone: "muted" }), Spacer(), Badge(delta, { tone, size: "sm", icon: "arrow-trend-up" })], { align: "center" }),
+    Text(value, { variant: "title" }),
+    Sparkline(data, { tone })
+  ], { gap: "sm" })], { padding: "md", border: "subtle", background: "surface" })
+}
+
+demos = [
+  Demo("MetricCard", "KPI with trend + delta", Grid([MetricCard("Revenue", "$48.2k", { icon: "sack-dollar", delta: "+12%" }), MetricCard("Churn", "1.8%", { icon: "user-minus", trend: "down", delta: "-0.3%", tone: "success" })], { columns: 2, gap: "md" })),
+  Demo("SparkStat", "KPI with inline sparkline", Grid([SparkStat("Signups", "1,204"), SparkStat("MRR", "$22k", { data: [12, 14, 13, 18, 20, 24], tone: "primary" })], { columns: 2, gap: "md" })),
+  Demo("ProfileCardX", "User profile card", ProfileCardX("Ada Lovelace", { role: "Engineering Lead", bio: "Building the future of computing.", tags: ["compilers", "math"] })),
+  Demo("ItemCard", "Product card with rating", ItemCard("Aurora Hoodie", { price: 78, img: "https://picsum.photos/seed/hoodie/480/360", rating: 4.5 })),
+  Demo("PricingTier", "Pricing tier", Grid([PricingTier("Starter", { price: "$0", description: "For individuals", features: ["3 projects", "Community support"] }), PricingTier("Pro", { price: "$29", description: "For teams", features: ["Unlimited projects", "Priority support", "SSO"], featured: true })], { columns: 2, gap: "md" })),
+  Demo("InfoCard", "Icon + title + description", Column([InfoCard("Secure by default", { desc: "End-to-end encryption on every plan.", icon: "shield-halved" }), InfoCard("Lightning fast", { desc: "Sub-50ms responses worldwide.", icon: "bolt" })], { gap: "sm" })),
+  Demo("MediaArticle", "Article preview card", MediaArticle("Designing for streaming UIs", { img: "https://picsum.photos/seed/article/480/300", desc: "How to build interfaces that reveal as data arrives.", tags: ["design", "ux"], meta: "5 min read" })),
+  Demo("KpiRing", "Completion ring KPI", KpiRing("Onboarding", { value: 72 })),
+  Demo("GaugeCard", "Gauge KPI", GaugeCard("Uptime", { value: 99, min: 90, max: 100, caption: "30-day" })),
+  Demo("StatTrendCard", "Value + sparkline + delta", StatTrendCard("Active users", "2,184"))
+]

@@ -1,0 +1,108 @@
+// Travel Planner — build a day-by-day itinerary with a packing checklist and trip countdown.
+// Starting point for: trip apps, conference agendas, wedding planners.
+// Uses: $store({ persist }), Tabs per day, Sortable packing list, CountdownTimer, $form, animate.
+$app(Column([header, kpis, body], { gap: "lg", padding: "md" }))
+
+trip = $store({
+  persist: "travel.plan",
+  name: "Tokyo, Japan",
+  start: "2026-07-10",
+  days: [
+    { id: "d1", label: "Day 1 — Arrive", stops: [
+      { id: "t1", time: "15:30", what: "Land at Haneda, grab a Suica card" },
+      { id: "t2", time: "18:00", what: "Check in — Shinjuku hotel" },
+      { id: "t3", time: "20:00", what: "Ramen at Omoide Yokocho" }
+    ] },
+    { id: "d2", label: "Day 2 — Old Tokyo", stops: [
+      { id: "t4", time: "09:00", what: "Senso-ji temple before the crowds" },
+      { id: "t5", time: "12:30", what: "Street food in Asakusa" },
+      { id: "t6", time: "16:00", what: "Sumida river cruise" }
+    ] },
+    { id: "d3", label: "Day 3 — Day trip", stops: [
+      { id: "t7", time: "08:15", what: "Shinkansen to Hakone" },
+      { id: "t8", time: "11:00", what: "Open-air museum + onsen" }
+    ] }
+  ],
+  packing: [
+    { id: "p1", item: "Passport + JR Pass", done: true },
+    { id: "p2", item: "Power adapter (Type A)", done: false },
+    { id: "p3", item: "Comfortable walking shoes", done: false },
+    { id: "p4", item: "Pocket wifi reservation", done: false },
+    { id: "p5", item: "Cash — many places skip cards", done: false }
+  ],
+  addStop:    (s, dayId, stop) => { s.days = s.days.map(d => d.id == dayId ? { ...d, stops: [...d.stops, stop] } : d) },
+  removeStop: (s, dayId, stopId) => { s.days = s.days.map(d => d.id == dayId ? { ...d, stops: d.stops.filter(t => t.id != stopId) } : d) },
+  togglePack: (s, id) => { s.packing = s.packing.map(p => p.id == id ? { ...p, done: !p.done } : p) },
+  addPack:    (s, item) => { s.packing = [...s.packing, { id: $util.uuid(), item, done: false }] },
+  reorderPack: (s, from, to) => {
+    const next = [...s.packing]
+    const moved = next.splice(from, 1)[0]
+    next.splice(to, 0, moved)
+    s.packing = next
+  }
+})
+
+$activeDay = "d1"
+$newStopTime = "12:00"
+$newStopWhat = ""
+$newPackItem = ""
+
+packedCount = trip.packing.filter(p => p.done).length
+totalStops = $util.sum(trip.days.map(d => d.stops.length))
+
+header = PageHeader(`Trip: ${trip.name}`, {
+  subtitle: `Departing ${$util.formatDate(trip.start, "MMM D, YYYY")} · everything saved locally`,
+  badge: Badge(`${totalStops} stops planned`, { tone: "primary", icon: "plane-departure" })
+})
+
+kpis = Grid([
+  Card([Center([Column([
+    Eyebrow("DEPARTURE IN"),
+    CountdownTimer(`${trip.start}T09:00:00`, { endLabel: "Bon voyage!" })
+  ], { gap: "sm", align: "center" })], { minHeight: "80px" })]),
+  StatCard("Days planned", { value: String(trip.days.length), icon: "calendar-days", tone: "info" }),
+  StatCard("Packing", { value: `${packedCount}/${trip.packing.length}`, icon: "suitcase-rolling", tone: packedCount == trip.packing.length ? "success" : "warning" })
+], { columns: { base: 1, sm: 3 }, gap: "md" })
+
+stopRow = (d, t) => Row([
+  Badge(t.time, { tone: "info", size: "sm", icon: "clock" }),
+  StackItem(Text(t.what, { variant: "body" }), { grow: 1 }),
+  IconButton("trash", { label: "Remove stop", variant: "ghost", size: "sm", onClick: () => trip.removeStop(d.id, t.id) })
+], { gap: "sm", align: "center", key: t.id })
+
+dayPane = d => Column([
+  Show(d.stops.length > 0, {
+    fallback: EmptyState("Free day", { description: "Add a stop below — or keep it spontaneous.", icon: "umbrella-beach" }),
+    children: Column(d.stops.map(t => stopRow(d, t)), { gap: "sm" })
+  }),
+  Separator("horizontal"),
+  Row([
+    StackItem(TimePicker(`time-${d.id}`, { value: $newStopTime, onChange: v => { $newStopTime = v } }), { basis: "140px" }),
+    StackItem(Input(`what-${d.id}`, { placeholder: "What's the plan?", value: $newStopWhat, onChange: v => { $newStopWhat = v } }), { grow: 1 }),
+    Button("Add", { variant: "primary", size: "sm", icon: "plus", disabled: !$newStopWhat, onClick: () => {
+      trip.addStop(d.id, { id: $util.uuid(), time: $newStopTime, what: $newStopWhat })
+      $newStopWhat = ""
+    } })
+  ], { gap: "sm", align: "center" })
+], { gap: "md" })
+
+itinerary = Card([
+  SectionHeader("Itinerary", { eyebrow: "DAY BY DAY" }),
+  Tabs(trip.days.map(d => TabItem(d.id, { label: d.label, children: [dayPane(d)] })), { defaultValue: $activeDay })
+], { animate: "fade-up" })
+
+packRow = p => Row([
+  Checkbox(`pack-${p.id}`, { label: p.item, value: p.done, onChange: () => trip.togglePack(p.id) })
+], { key: p.id, align: "center" })
+
+packingCard = Card([
+  SectionHeader("Packing list", { eyebrow: "DRAG TO REORDER", subtitle: `${packedCount} of ${trip.packing.length} packed` }),
+  Progress(trip.packing.length > 0 ? Math.round((packedCount / trip.packing.length) * 100) : 0, { max: 100, tone: "success" }),
+  Sortable(trip.packing.map(p => packRow(p)), { onReorder: (from, to) => trip.reorderPack(from, to) }),
+  Row([
+    StackItem(Input("newPack", { placeholder: "e.g. Sunscreen", value: $newPackItem }), { grow: 1 }),
+    Button("Add", { variant: "secondary", size: "sm", icon: "plus", disabled: !$newPackItem, onClick: () => { trip.addPack($newPackItem); $newPackItem = "" } })
+  ], { gap: "sm", align: "center" })
+], { animate: { preset: "fade-up", delay: 80 } })
+
+body = Grid([itinerary, packingCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })

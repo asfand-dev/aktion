@@ -1,0 +1,127 @@
+// Invoice Builder — add line items, auto-total with tax & discount, preview a clean invoice.
+// Uses: $store({ persist, history }) for the document, $util.currency, QRCode pay link, ConfirmDialog.
+$app(Column([header, meta, itemsCard, body, confirmReset], { gap: "lg", padding: "md" }))
+
+inv = $store({
+  persist: "invoice.doc",
+  history: 30,
+  invNo: "INV-1042",
+  issued: "2026-06-04",
+  due: "2026-06-18",
+  from: "Aurora Studio\n14 Maple Street\nPortland, OR 97201",
+  client: "Globex Corp\nAttn: Accounts Payable\n500 Market St, San Francisco",
+  taxPct: 8,
+  discount: 0,
+  notes: "Payment due within 14 days. Thank you for your business!",
+  items: [
+    { id: "i1", desc: "UI/UX design — landing page", qty: 18, price: 95 },
+    { id: "i2", desc: "Frontend build (Aktion)", qty: 24, price: 110 },
+    { id: "i3", desc: "Brand assets & icon set", qty: 1, price: 650 }
+  ],
+  setItem:    (s, id, field, val) => { s.items = s.items.map(it => it.id == id ? { ...it, [field]: val } : it) },
+  addItem:    (s) => { s.items = [...s.items, { id: $util.uuid(), desc: "", qty: 1, price: 0 }] },
+  removeItem: (s, id) => { s.items = s.items.filter(it => it.id != id) },
+  clearItems: (s) => { s.items = [] }
+})
+
+$confirmOpen = false
+
+money = n => $util.currency(n, "USD")
+lineTotal = it => (Number(it.qty) || 0) * (Number(it.price) || 0)
+subtotal = $util.sum(inv.items.map(it => lineTotal(it)))
+taxable = Math.max(0, subtotal - (Number(inv.discount) || 0))
+tax = taxable * (Number(inv.taxPct) || 0) / 100
+total = taxable + tax
+payLink = `https://pay.example.com/${inv.invNo}?amount=${Math.round(total * 100)}`
+
+function printInvoice() { window.print() }
+
+header = PageHeader("Invoice Builder", {
+  subtitle: `${inv.invNo} · ${inv.items.length} line items · autosaved`,
+  badge: Badge(money(total), { tone: "primary", icon: "file-invoice-dollar" }),
+  actions: [
+    Button("Undo", { variant: "ghost", icon: "rotate-left", size: "sm", onClick: () => inv.undo(), disabled: !inv.canUndo }),
+    Button("Clear lines", { variant: "ghost", icon: "broom", size: "sm", onClick: () => { $confirmOpen = true } }),
+    Button("Print / PDF", { onClick: printInvoice, variant: "secondary", icon: "print" })
+  ]
+})
+
+confirmReset = ConfirmDialog("Remove every line item?", {
+  open: $confirmOpen,
+  message: "The biller, client and totals settings stay. Undo can bring the lines back.",
+  tone: "danger",
+  confirmLabel: "Clear lines",
+  onConfirm: () => { inv.clearItems(); $confirmOpen = false },
+  onCancel: () => { $confirmOpen = false }
+})
+
+meta = Grid([
+  Card([SectionHeader("From", { eyebrow: "BILLER" }), TextArea("from", { value: inv.from, rows: 4 })]),
+  Card([SectionHeader("Bill to", { eyebrow: "CLIENT" }), TextArea("client", { value: inv.client, rows: 4 })]),
+  Card([SectionHeader("Details", { eyebrow: "META" }),
+    FormControl("Invoice #", { field: Input("invNo", { value: inv.invNo }) }),
+    Grid([
+      FormControl("Issued", { field: DatePicker("issued", { value: inv.issued }) }),
+      FormControl("Due", { field: DatePicker("due", { value: inv.due }) })
+    ], { columns: 2, gap: "sm" })
+  ])
+], { columns: { base: 1, lg: 3 }, gap: "lg" })
+
+itemHead = Row([
+  StackItem(Text("Description", { variant: "small-heavy", tone: "muted" }), { grow: 1 }),
+  StackItem(Text("Qty", { variant: "small-heavy", tone: "muted" }), { basis: "80px" }),
+  StackItem(Text("Unit price", { variant: "small-heavy", tone: "muted" }), { basis: "120px" }),
+  StackItem(Text("Amount", { variant: "small-heavy", tone: "muted" }), { basis: "110px" }),
+  Box([Text("", { variant: "small" })], { padding: "xs" })
+], { gap: "sm", align: "center" })
+
+itemRow = it => Row([
+  StackItem(Input(`desc-${it.id}`, { value: it.desc, placeholder: "Service or product", onChange: v => inv.setItem(it.id, "desc", v) }), { grow: 1 }),
+  StackItem(NumberInput(`qty-${it.id}`, { value: it.qty, min: 0, step: 1, onChange: v => inv.setItem(it.id, "qty", Number(v)) }), { basis: "130px" }),
+  StackItem(NumberInput(`price-${it.id}`, { value: it.price, min: 0, step: 0.5, onChange: v => inv.setItem(it.id, "price", Number(v)) }), { basis: "130px" }),
+  StackItem(Text(money(lineTotal(it)), { variant: "body-heavy" }), { basis: "110px" }),
+  IconButton("trash", { label: "Remove line", variant: "ghost", size: "sm", onClick: () => inv.removeItem(it.id) })
+], { gap: "sm", align: "center", key: it.id })
+
+itemsCard = Card([
+  SectionHeader("Line items", { eyebrow: "WORK", actions: [Button("Add line", { onClick: () => inv.addItem(), variant: "ghost", size: "sm", icon: "plus" })] }),
+  itemHead,
+  Separator("horizontal"),
+  Show(inv.items.length > 0, {
+    fallback: EmptyState("No line items", { description: "Add your first billable line.", icon: "list" }),
+    children: Column(inv.items.map(it => itemRow(it)), { gap: "sm" })
+  })
+])
+
+totalsCard = Card([
+  SectionHeader("Totals", { eyebrow: "SUMMARY" }),
+  FormControl("Discount (flat $)", { field: NumberInput("discount", { value: inv.discount, min: 0, step: 5 }) }),
+  FormControl("Tax rate", { field: Slider("taxPct", { min: 0, max: 25, step: 0.5, value: inv.taxPct, showValue: true }) }),
+  Separator("horizontal"),
+  DescriptionList([
+    DescriptionItem("Subtotal", { value: money(subtotal) }),
+    DescriptionItem("Discount", { value: `− ${money(Number(inv.discount) || 0)}` }),
+    DescriptionItem("Tax", { value: `${money(tax)} (${inv.taxPct}%)` })
+  ], { columns: 1 }),
+  Separator("horizontal"),
+  Row([StackItem(Text("Total due", { variant: "large-heavy" }), { grow: 1 }), Text(money(total), { variant: "title", tone: "primary" })], { align: "center" })
+])
+
+preview = Card([
+  SectionHeader(inv.invNo, { subtitle: `Issued ${inv.issued} · Due ${inv.due}`, eyebrow: "PREVIEW" }),
+  Table([
+    Col("Description", { values: inv.items.map(it => it.desc || "—") }),
+    Col("Qty", { align: "right", values: inv.items.map(it => String(it.qty)) }),
+    Col("Unit", { align: "right", values: inv.items.map(it => money(Number(it.price) || 0)) }),
+    Col("Amount", { align: "right", values: inv.items.map(it => Text(money(lineTotal(it)), { variant: "body-heavy" })) })
+  ], { striped: true }),
+  Row([
+    StackItem(Callout("info", { title: "Notes", description: inv.notes, icon: "circle-info", compact: true }), { grow: 1 }),
+    Column([
+      QRCode(payLink, { size: 110 }),
+      Text("Scan to pay", { variant: "small", tone: "muted" })
+    ], { gap: "xs", align: "center" })
+  ], { gap: "md", align: "center", wrap: true })
+])
+
+body = Grid([preview, totalsCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })

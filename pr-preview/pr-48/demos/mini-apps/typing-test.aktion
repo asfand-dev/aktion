@@ -1,0 +1,115 @@
+// Typing Speed Test — 30 seconds against the clock: live WPM, accuracy and a best-score board.
+// Standalone widget for: skills training, onboarding games, productivity dashboards.
+// Uses: $effect("every") timing, $store({ persist }) best scores, Metric countUp recap, Confetti on a PB.
+$app(Column([header, stage], { gap: "lg", padding: "md" }))
+
+SENTENCES = [
+  "The quick brown fox jumps over the lazy dog while the band plays on.",
+  "Typing fast is less about speed and more about steady, accurate rhythm.",
+  "Ship small changes often and let the feedback guide the next step.",
+  "A clean desk and a warm drink make the keyboard feel twice as fast.",
+  "Practice a little every day and the numbers will take care of themselves."
+]
+DURATION = 30
+
+best = $store({
+  persist: "typing.best",
+  wpm: 0,
+  accuracy: 0,
+  record: (s, wpm, acc) => { if (wpm > s.wpm) { s.wpm = wpm; s.accuracy = acc } }
+})
+
+$target = SENTENCES[0]
+$typed = ""
+$timeLeft = DURATION
+$running = false
+$done = false
+$newRecord = false
+
+function pickSentence() {
+  $target = SENTENCES[Math.floor(Math.random() * SENTENCES.length)]
+}
+
+correctChars = $typed.split("").filter((ch, i) => i < $target.length && ch == $target[i]).length
+accuracy = $typed.length > 0 ? Math.round((correctChars / $typed.length) * 100) : 100
+elapsed = DURATION - $timeLeft
+liveWpm = elapsed > 0 ? Math.round((correctChars / 5) / (elapsed / 60)) : 0
+
+$effect(() => {
+  if ($running && !$done) {
+    if ($timeLeft > 1) { $timeLeft = $timeLeft - 1 }
+    else { finish() }
+  }
+}, ["every(1000)"])
+
+function onType(v) {
+  if ($done) return
+  if (!$running && v.length > 0) $running = true
+  $typed = v
+  if (v == $target) {
+    // finished the sentence early — chain another one
+    $typed = ""
+    pickSentence()
+  }
+}
+
+function finish() {
+  $running = false
+  $done = true
+  $newRecord = liveWpm > best.wpm && liveWpm > 0
+  best.record(liveWpm, accuracy)
+}
+
+function restart() {
+  pickSentence()
+  $typed = ""
+  $timeLeft = DURATION
+  $running = false
+  $done = false
+  $newRecord = false
+}
+
+header = PageHeader("Typing Speed Test", {
+  subtitle: `${DURATION} seconds · finish a sentence and a new one appears`,
+  badge: Badge(best.wpm > 0 ? `Best: ${best.wpm} WPM` : "No record yet", { tone: best.wpm > 0 ? "primary" : "neutral", icon: "keyboard" })
+})
+
+charSpan = (ch, i) => Text(ch, {
+  variant: "large-heavy",
+  tone: i >= $typed.length ? "muted" : $typed[i] == ch ? "success" : "danger"
+})
+
+liveStats = Row([
+  Badge(`${$timeLeft}s`, { tone: $timeLeft <= 10 ? "danger" : "neutral", icon: "clock" }),
+  Badge(`${liveWpm} WPM`, { tone: "primary", icon: "gauge-high" }),
+  Badge(`${accuracy}% accurate`, { tone: accuracy >= 95 ? "success" : accuracy >= 85 ? "warning" : "danger", icon: "bullseye" })
+], { gap: "sm", wrap: true })
+
+testCard = Card([
+  liveStats,
+  Box([Row($target.split("").map((ch, i) => charSpan(ch, i)), { gap: "none", wrap: true })], { padding: "md", border: "subtle", background: "surface" }),
+  TextArea("typed", {
+    value: $typed,
+    onChange: onType,
+    rows: 3,
+    placeholder: "Start typing here — the timer starts on your first keystroke…"
+  }),
+  Progress(Math.round((elapsed / DURATION) * 100), { max: 100, tone: "primary" })
+], { animate: "fade-up" })
+
+recap = Card([
+  Show($newRecord, { children: Confetti({ fire: true, count: 100 }) }),
+  SuccessState($newRecord ? "New personal best!" : "Time's up", {
+    description: $newRecord ? "You beat your previous record." : "Solid run — one more?",
+    icon: $newRecord ? "trophy" : "flag-checkered",
+    actions: [Button("Go again", { variant: "primary", icon: "rotate-right", onClick: restart })]
+  }),
+  Separator("horizontal", { label: "this run" }),
+  MetricStrip([
+    Metric(String(liveWpm), { label: "Words / minute", countUp: true }),
+    Metric(`${accuracy}%`, { label: "Accuracy", countUp: true }),
+    Metric(String(best.wpm), { label: "All-time best", gradient: false, countUp: true })
+  ])
+], { animate: "zoom" })
+
+stage = $done ? recap : testCard
