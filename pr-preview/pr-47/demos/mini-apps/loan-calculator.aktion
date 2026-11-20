@@ -1,0 +1,93 @@
+// Loan / Mortgage Calculator — enter an amount, interest rate and term, then
+// see the monthly payment, total interest and a payoff balance chart plus a
+// first-year amortization schedule. Starting point for: any finance calculator.
+// Uses: Slider + NumberInput, amortization math, StatCard, LineChart, Table.
+$app(Column([header, Grid([inputs, summary], { columns: { base: 1, md: 2 }, gap: "lg", alignItems: "start" }), chartCard, scheduleCard], { gap: "lg", padding: "md" }))
+
+$amount = 320000
+$rate = 5.5
+$years = 30
+
+months = $years * 12
+monthlyRate = $rate / 100 / 12
+
+// Standard amortization payment formula (handles 0% gracefully).
+payment = monthlyRate == 0
+  ? $amount / months
+  : ($amount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -months))
+
+totalPaid = payment * months
+totalInterest = totalPaid - $amount
+
+money = n => $util.currency(n, "USD")
+
+// Build the payoff balance per year for the chart.
+function balanceSeries() {
+  let balance = $amount
+  const labels = ["0"]
+  const values = [Math.round(balance)]
+  for (let m = 1; m <= months; m += 1) {
+    const interest = balance * monthlyRate
+    balance = balance + interest - payment
+    if (balance < 0) balance = 0
+    if (m % 12 == 0) { labels.push(String(m / 12)); values.push(Math.round(balance)) }
+  }
+  return { labels, values }
+}
+series = balanceSeries()
+
+// First 12 payments broken into principal vs interest.
+function firstYear() {
+  let balance = $amount
+  const rows = []
+  for (let m = 1; m <= Math.min(12, months); m += 1) {
+    const interest = balance * monthlyRate
+    const principal = payment - interest
+    balance = balance + interest - payment
+    rows.push({ m, principal, interest, balance: balance < 0 ? 0 : balance })
+  }
+  return rows
+}
+schedule = firstYear()
+
+header = PageHeader("Loan Calculator", {
+  subtitle: "Monthly payments, total interest & payoff schedule",
+  badge: Badge(`${money(payment)}/mo`, { tone: "primary", icon: "money-bill-trend-up" })
+})
+
+inputs = Card([
+  SectionHeader("Loan terms", { eyebrow: "INPUTS" }),
+  FormControl("Loan amount", { field: NumberInput("amount", { value: $amount, min: 1000, step: 5000 }) }),
+  FormControl(`Interest rate — ${$rate}%`, { field: Slider("rate", { min: 0, max: 20, step: 0.1, value: $rate, showValue: true }) }),
+  FormControl(`Term — ${$years} ${$util.plural($years, "year")}`, { field: Slider("years", { min: 1, max: 40, step: 1, value: $years, showValue: true }) }),
+  Row([
+    Button("15-year", { variant: "ghost", size: "sm", onClick: () => { $years = 15 } }),
+    Button("30-year", { variant: "ghost", size: "sm", onClick: () => { $years = 30 } })
+  ], { gap: "sm" })
+], { animate: "fade-up" })
+
+summary = Card([
+  SectionHeader("Summary"),
+  Grid([
+    StatCard("Monthly payment", { value: money(payment), icon: "calendar-day", tone: "primary" }),
+    StatCard("Total interest", { value: money(totalInterest), icon: "percent", tone: "warning" }),
+    StatCard("Total paid", { value: money(totalPaid), icon: "sack-dollar", tone: "info" }),
+    StatCard("Principal", { value: money($amount), icon: "building-columns", tone: "success" })
+  ], { columns: 2, gap: "md" }),
+  Callout("info", { title: `Interest is ${$util.percent(totalInterest / totalPaid)} of what you pay`, description: "A shorter term raises the monthly payment but slashes total interest.", icon: "lightbulb", compact: true })
+], { animate: { preset: "fade-up", delay: 80 } })
+
+chartCard = Card([
+  SectionHeader("Remaining balance", { eyebrow: "PAYOFF", subtitle: "Loan balance at the end of each year" }),
+  LineChart(series.labels, { series: [Series("Balance", { values: series.values })], filled: true, title: "Balance over time" })
+])
+
+scheduleCard = Card([
+  SectionHeader("First-year amortization", { eyebrow: "SCHEDULE" }),
+  Table([
+    Col("Month", schedule.map(r => String(r.m)), { align: "right" }),
+    Col("Principal", schedule.map(r => money(r.principal)), { align: "right" }),
+    Col("Interest", schedule.map(r => money(r.interest)), { align: "right" }),
+    Col("Balance", schedule.map(r => money(r.balance)), { align: "right" })
+  ], { striped: true })
+])

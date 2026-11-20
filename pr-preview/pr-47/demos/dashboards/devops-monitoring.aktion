@@ -1,0 +1,304 @@
+// DevOps Monitoring — an SRE control room for the Northwind platform: a live incident
+// banner you can acknowledge, SLO KPIs and an error-budget gauge computed from the fleet,
+// latency/throughput trends on a switchable window, a filterable service grid with a
+// dependency drawer, an incident queue, deploy audit trail and on-call escalation.
+// Starting point for: any observability, uptime, SLO or on-call console.
+// Uses: $store (persisted alert rules + incident state), Gauge, LineChart, BarChart, DataGrid,
+//       FilterPill, Drawer + Tree + Switch, Timeline, ActivityLog, Steps, ConfirmDialog.
+$app(Column([banner, header, controls, kpis, chartsRow, trafficRow, servicesCard, incidentCard, opsRow, detailDrawer, pageDialog], { gap: "lg", padding: "md" }))
+
+$env = "prod"
+$timeWindow = "1h"
+$health = "all"
+$q = ""
+$openService = null
+$pageOpen = false
+$picked = []
+$sort = { key: "Error %", direction: "desc" }
+$lastSync = $util.formatDate($util.now(), "time")
+
+// ---- Data ------------------------------------------------------------------
+environments = {
+  prod: { label: "Production", region: "eu-central-1", mult: 1, traffic: 1, slo: 99.9 },
+  staging: { label: "Staging", region: "eu-west-1", mult: 1.55, traffic: 0.14, slo: 99.5 }
+}
+env = environments[$env]
+
+fleet = [
+  { id: "edge-router", team: "Platform", owner: "Daniel Mbeki", tier: "Tier 1", p99: 96, errorPct: 0.002, rps: 9240, deploy: "2026-08-07", deps: ["auth-service", "search-gateway", "checkout-api"] },
+  { id: "auth-service", team: "Platform", owner: "Daniel Mbeki", tier: "Tier 1", p99: 186, errorPct: 0.005, rps: 4410, deploy: "2026-08-05", deps: ["postgres-primary", "redis-cache"] },
+  { id: "checkout-api", team: "Payments", owner: "Rita Okonjo", tier: "Tier 1", p99: 412, errorPct: 0.042, rps: 1840, deploy: "2026-08-06", deps: ["ledger-service", "fraud-scoring", "postgres-primary"] },
+  { id: "ledger-service", team: "Payments", owner: "Rita Okonjo", tier: "Tier 1", p99: 268, errorPct: 0.011, rps: 2260, deploy: "2026-08-04", deps: ["postgres-primary", "kafka-events"] },
+  { id: "search-gateway", team: "Discovery", owner: "Tomas Lindqvist", tier: "Tier 2", p99: 934, errorPct: 0.186, rps: 3120, deploy: "2026-08-07", deps: ["catalog-index", "redis-cache"] },
+  { id: "notify-worker", team: "Platform", owner: "Daniel Mbeki", tier: "Tier 2", p99: 640, errorPct: 0.063, rps: 780, deploy: "2026-08-03", deps: ["kafka-events", "smtp-relay"] },
+  { id: "media-encoder", team: "Content", owner: "Priya Raman", tier: "Tier 3", p99: 1520, errorPct: 0.074, rps: 240, deploy: "2026-07-29", deps: ["object-store", "kafka-events"] },
+  { id: "billing-cron", team: "Finance Ops", owner: "Hannah Weiss", tier: "Tier 3", p99: 2260, errorPct: 0.019, rps: 40, deploy: "2026-07-31", deps: ["ledger-service", "postgres-primary"] }
+]
+
+healthOf = e => e >= 0.15 ? "critical" : e >= 0.05 ? "degraded" : "healthy"
+healthTone = h => h == "critical" ? "danger" : h == "degraded" ? "warning" : "success"
+sevTone = s => s == "SEV1" ? "danger" : s == "SEV2" ? "warning" : "info"
+depIcon = d => $util.contains(d, "postgres") || $util.contains(d, "redis") ? "database" : $util.contains(d, "kafka") ? "layer-group" : $util.contains(d, "store") || $util.contains(d, "index") ? "box-archive" : "cube"
+
+// Shared infrastructure that sits outside the service fleet.
+platformDeps = { "postgres-primary": "healthy", "redis-cache": "healthy", "kafka-events": "healthy", "catalog-index": "critical", "smtp-relay": "degraded", "object-store": "healthy", "fraud-scoring": "healthy" }
+
+services = fleet.map(s => ({ ...s, p99: Math.round(s.p99 * env.mult), rps: Math.round(s.rps * env.traffic), errorPct: $util.round(s.errorPct * env.mult, 3), health: healthOf($util.round(s.errorPct * env.mult, 3)) }))
+
+totalRps = $util.sum(services.map(s => s.rps))
+errorRate = $util.round($util.sum(services.map(s => s.rps * s.errorPct)) / totalRps, 3)
+availability = $util.round(100 - errorRate, 3)
+p99Fleet = Math.round($util.sum(services.map(s => s.p99 * s.rps)) / totalRps)
+budgetTotal = $util.round(100 - env.slo, 3)
+budgetUsed = $util.clamp($util.round((errorRate / budgetTotal) * 100, 1), 0, 100)
+budgetLeft = $util.round(100 - budgetUsed, 1)
+budgetMinutes = Math.round((budgetTotal / 100) * 28 * 24 * 60)
+budgetTone = budgetLeft < 25 ? "danger" : budgetLeft < 60 ? "warning" : "success"
+
+ops = $store({
+  incidents: [
+    { id: "INC-4821", title: "Elevated 5xx on search-gateway", service: "search-gateway", severity: "SEV1", status: "open", opened: "2026-08-07T08:41", owner: "Tomas Lindqvist", note: "Catalog index shard 3 is returning 503s behind the read path." },
+    { id: "INC-4820", title: "Encoder queue backlog above 20 minutes", service: "media-encoder", severity: "SEV2", status: "acked", opened: "2026-08-07T07:02", owner: "Priya Raman", note: "Two encoder pods evicted after a node drain; the backlog is draining." },
+    { id: "INC-4819", title: "Notification retries spiking", service: "notify-worker", severity: "SEV3", status: "open", opened: "2026-08-07T05:55", owner: "Daniel Mbeki", note: "The SMTP relay rate-limits us during the 06:00 digest send." },
+    { id: "INC-4816", title: "Checkout p99 regression after deploy", service: "checkout-api", severity: "SEV2", status: "resolved", opened: "2026-08-06T21:14", owner: "Rita Okonjo", note: "Rolled back 2026.8.6-rc2; latency settled back under 450 ms." },
+    { id: "INC-4812", title: "Postgres primary failover", service: "ledger-service", severity: "SEV1", status: "resolved", opened: "2026-08-05T16:38", owner: "Hannah Weiss", note: "Automatic failover completed in 41 s with no data loss." }
+  ],
+  setStatus: (s, id, status) => { s.incidents = s.incidents.map(i => i.id == id ? { ...i, status } : i) }
+})
+
+alerts = $store({
+  persist: "sre.alert-rules",
+  muted: ["billing-cron:saturation"],
+  toggle: (s, key, on) => { s.muted = on ? s.muted.filter(k => k != key) : [...s.muted, key] }
+})
+
+ruleTemplates = [
+  { key: "latency", label: "p99 above the SLO for 5 minutes", channel: "PagerDuty · service primary" },
+  { key: "errors", label: "5xx rate above 1% for 2 minutes", channel: "PagerDuty · service primary" },
+  { key: "saturation", label: "CPU saturation above 85% for 10 minutes", channel: "Slack · #sre-alerts" },
+  { key: "burn", label: "Error budget burning faster than 6×", channel: "Slack · #release-train" }
+]
+ruleId = (svc, key) => `${svc}:${key}`
+ruleOn = (svc, key) => !alerts.muted.includes(ruleId(svc, key))
+
+deployLog = [
+  { service: "search-gateway", actor: "Tomas Lindqvist", title: "search-gateway 2026.8.7-rc4 → canary 25%", description: "Shard-aware retries behind a flag. Rollback armed.", time: "2026-08-07 08:12", icon: "rocket", tone: "warning", meta: "4f2a91c · eu-central-1" },
+  { service: "edge-router", actor: "Daniel Mbeki", title: "edge-router 2026.8.7 → 100%", description: "HTTP/3 upgrade path enabled for all regions.", time: "2026-08-07 07:48", icon: "code-branch", tone: "success", meta: "9b17ee0 · eu-central-1" },
+  { service: "checkout-api", actor: "Rita Okonjo", title: "checkout-api rolled back to 2026.8.5", description: "Reverted the pricing cache rewrite after a p99 regression.", time: "2026-08-06 22:03", icon: "rotate-left", tone: "danger", meta: "c30d4a8 · rollback" },
+  { service: "auth-service", actor: "Daniel Mbeki", title: "auth-service 2026.8.5 → 100%", description: "Session store moved to the replicated Redis cluster.", time: "2026-08-05 14:20", icon: "shield-halved", tone: "success", meta: "17aa5f2 · eu-central-1" },
+  { service: "ledger-service", actor: "Rita Okonjo", title: "ledger-service 2026.8.4 → 100%", description: "Double-entry reconciliation job moved off the primary.", time: "2026-08-04 11:05", icon: "code-branch", tone: "success", meta: "e884b19 · eu-central-1" },
+  { service: "notify-worker", actor: "Daniel Mbeki", title: "notify-worker 2026.8.3 → 100%", description: "Digest batching raised from 200 to 500 recipients.", time: "2026-08-03 09:36", icon: "envelope", tone: "success", meta: "22c9d71 · eu-central-1" },
+  { service: "media-encoder", actor: "Priya Raman", title: "media-encoder 2026.7.29 → 100%", description: "AV1 ladder added for the 1080p tier.", time: "2026-07-29 16:41", icon: "microchip", tone: "success", meta: "5de0c34 · eu-west-1" },
+  { service: "billing-cron", actor: "Hannah Weiss", title: "billing-cron 2026.7.31 → 100%", description: "Nightly invoice run split into ten shards.", time: "2026-07-31 03:14", icon: "clock", tone: "success", meta: "a1f7b62 · eu-central-1" }
+]
+
+// ---- Derived series --------------------------------------------------------
+windows = {
+  "1h": { step: 5, unit: "m", label: "last hour", drift: 1, shape: [0.94, 0.98, 1.05, 1.11, 1.04, 0.97, 1.02, 1.16, 1.24, 1.12, 1.03, 0.99], load: [0.88, 0.92, 0.97, 1.03, 1.09, 1.13, 1.16, 1.1, 1.01, 0.95, 0.91, 0.89] },
+  "6h": { step: 30, unit: "m", label: "last 6 hours", drift: 1.09, shape: [0.82, 0.88, 0.95, 1.09, 1.22, 1.31, 1.18, 1.02, 0.94, 1.07, 1.15, 1.06], load: [0.64, 0.71, 0.83, 0.96, 1.12, 1.28, 1.34, 1.21, 1.05, 0.93, 0.86, 0.9] },
+  "24h": { step: 2, unit: "h", label: "last 24 hours", drift: 1.24, shape: [0.71, 0.68, 0.74, 0.9, 1.14, 1.36, 1.48, 1.29, 1.11, 0.98, 0.86, 0.79], load: [0.41, 0.35, 0.46, 0.74, 1.08, 1.36, 1.51, 1.42, 1.19, 0.92, 0.68, 0.52] }
+}
+win = windows[$timeWindow]
+lastIdx = win.shape.length - 1
+labels = win.shape.map((f, i) => i == lastIdx ? "now" : `-${(lastIdx - i) * win.step}${win.unit}`)
+
+p99Series = win.shape.map(f => Math.round(p99Fleet * f * win.drift))
+p95Series = win.shape.map(f => Math.round(p99Fleet * 0.62 * f))
+p50Series = win.shape.map(f => Math.round(p99Fleet * 0.27 * (1 + (f - 1) * 0.4)))
+reqSeries = win.load.map(f => Math.round(totalRps * f))
+errSeries = win.load.map((f, i) => $util.round(totalRps * f * (errorRate / 100) * win.shape[i], 2))
+
+p99Delta = $util.round(((p99Series[lastIdx] - p99Series[0]) / p99Series[0]) * 100, 1)
+errDelta = $util.round(((errSeries[lastIdx] - errSeries[0]) / errSeries[0]) * 100, 1)
+signed = n => n > 0 ? `+${n}%` : `${n}%`
+
+firing = ops.incidents.filter(i => i.status == "open")
+acked = ops.incidents.filter(i => i.status == "acked")
+resolved = ops.incidents.filter(i => i.status == "resolved")
+active = ops.incidents.filter(i => i.status != "resolved")
+
+matchesQuery = s => $q == "" || $util.contains($util.lowercase(`${s.id} ${s.team} ${s.owner}`), $util.lowercase($q))
+visible = services.filter(s => ($health == "all" || s.health == $health) && matchesQuery(s))
+selected = services.find(s => s.id == $openService)
+offenders = $util.slice($util.sort(services, "errorPct", "desc"), 0, 5)
+
+// ---- Actions ---------------------------------------------------------------
+function refresh() { $lastSync = $util.formatDate($util.now(), "time"); $toast.success(`Telemetry re-scraped for ${env.label}`) }
+function ackIncident(id) { ops.setStatus(id, "acked"); $toast.info(`${id} acknowledged — paging stopped`) }
+function resolveIncident(id) { ops.setStatus(id, "resolved"); $toast.success(`${id} resolved`) }
+function reopenIncident(id) { ops.setStatus(id, "open"); $toast.warning(`${id} reopened`) }
+function openService(id) { $openService = id }
+function closeService() { $openService = null }
+function silenceSelected() {
+  for (let id of $picked) { for (let r of ruleTemplates) { alerts.toggle(ruleId(id, r.key), false) } }
+  $toast.warning(`Alert rules silenced for ${$util.plural($picked.length, "service")}`)
+  $picked = []
+}
+function exportReport() { $toast.info(`SLO report queued for ${env.label} · ${win.label}`) }
+function declareIncident() { $toast.info("Incident template opened in the on-call runbook") }
+
+// ---- Sections --------------------------------------------------------------
+function incidentBanner() {
+  if (firing.length > 0) return Banner(`${firing[0].severity} · ${firing[0].title}`, { message: `${$util.plural(firing.length, "alert")} unacknowledged · ${firing[0].service} · commander ${firing[0].owner}`, tone: "danger", icon: "tower-broadcast", action: Button("Acknowledge", { variant: "primary", size: "sm", icon: "hand", onClick: () => ackIncident(firing[0].id) }) })
+  if (acked.length > 0) return Banner(`Mitigation in progress · ${acked[0].id}`, { message: `${acked[0].title} — acknowledged by ${acked[0].owner}. Paging is paused.`, tone: "warning", icon: "screwdriver-wrench", action: Button("Resolve", { variant: "secondary", size: "sm", icon: "check", onClick: () => resolveIncident(acked[0].id) }) })
+  return Banner("All services within SLO", { message: `No open incidents in ${env.label}. ${budgetLeft}% of the error budget is still available.`, tone: "success", icon: "shield-halved" })
+}
+banner = incidentBanner()
+
+header = PageHeader("Service reliability", {
+  breadcrumbs: ["Platform", "Reliability", env.label],
+  subtitle: `${env.label} · ${env.region} · ${services.length} services · last synced ${$lastSync}`,
+  status: Badge(firing.length > 0 ? `${firing.length} firing` : "Stable", { tone: firing.length > 0 ? "danger" : "success", icon: firing.length > 0 ? "bell" : "circle-check" }),
+  actions: [Select("env", { items: [SelectItem("prod", "Production"), SelectItem("staging", "Staging")], value: $env, label: "Environment", labelHidden: true }), Button("Refresh", { variant: "secondary", size: "sm", icon: "arrows-rotate", onClick: refresh })]
+})
+
+controls = Toolbar({
+  left: [Text("Window", { variant: "small-heavy", tone: "muted" }), ToggleGroup("window", { items: [{ value: "1h", label: "1h" }, { value: "6h", label: "6h" }, { value: "24h", label: "24h" }], value: $timeWindow, size: "sm", label: "Metrics time window" })],
+  right: [StatusDot(`Streaming · ${win.label}`, { tone: "success", pulse: true }), Button("Export SLO report", { variant: "secondary", size: "sm", icon: "file-arrow-down", onClick: exportReport })]
+})
+
+kpis = Stats([
+  StatCard("Availability", { value: `${availability}%`, trend: availability >= env.slo ? "up" : "down", delta: `${$util.round(availability - env.slo, 3)} pts vs SLO`, icon: "heart-pulse", tone: availability >= env.slo ? "success" : "danger", hint: `Target ${env.slo}%` }),
+  StatCard("p99 latency", { value: `${p99Fleet} ms`, trend: p99Delta > 0 ? "up" : "down", delta: signed(p99Delta), icon: "stopwatch", tone: p99Delta > 10 ? "warning" : "primary", hint: "Traffic-weighted", spark: p99Series }),
+  StatCard("Error rate", { value: `${errorRate}%`, trend: errDelta > 0 ? "up" : "down", delta: signed(errDelta), icon: "triangle-exclamation", tone: errorRate > budgetTotal ? "danger" : "info", hint: "5xx of all requests" }),
+  StatCard("Error budget left", { value: `${budgetLeft}%`, trend: budgetLeft > 50 ? "up" : "down", delta: `${budgetUsed}% burned`, icon: "gauge-high", tone: budgetTone, hint: `${budgetMinutes} min / 28 days` })
+], { layout: "grid", columns: 4 })
+
+latencyCard = Card([
+  SectionHeader("Latency percentiles", { eyebrow: "LATENCY", subtitle: `${env.label} · ${win.label} · ${labels.length} samples` }),
+  LineChart(labels, { series: [Series("p50", { values: p50Series }), Series("p95", { values: p95Series }), Series("p99", { values: p99Series })], yAxisLabel: "ms", height: 230, ariaLabel: `Request latency percentiles over the ${win.label}` })
+])
+
+budgetCard = Card([
+  SectionHeader("Error budget", { eyebrow: "28-DAY WINDOW", status: Pill(`${env.slo}% SLO`, { tone: "corporate" }) }),
+  Center([Gauge(budgetLeft, { min: 0, max: 100, unit: "%", tone: budgetTone, size: "lg", caption: `${budgetUsed}% burned · ${$util.round(errorRate / budgetTotal, 2)}× burn rate`, thresholds: [{ value: 0, tone: "danger" }, { value: 25, tone: "warning" }, { value: 60, tone: "success" }], showRange: true, ariaLabel: "Error budget remaining" })]),
+  Progress(budgetUsed, { max: 100, label: "Budget consumed", tone: budgetTone, showValue: true }),
+  DescriptionList([
+    DescriptionItem("Availability", `${availability}%`, { icon: "heart-pulse" }),
+    DescriptionItem("Downtime allowed", `${budgetMinutes} min`, { icon: "hourglass-half" }),
+    DescriptionItem("Open incidents", String(active.length), { icon: "fire" })
+  ], { columns: 1 })
+])
+
+chartsRow = Grid([GridItem(latencyCard, { span: "2/3" }), GridItem(budgetCard, { span: "1/3" })], { columns: 12, gap: "lg", alignItems: "start" })
+
+throughputCard = Card([
+  SectionHeader("Throughput & errors", { eyebrow: "TRAFFIC", subtitle: `${$util.format(totalRps, "compact")} req/s across ${services.length} services` }),
+  LineChart(labels, { series: [Series("Requests/s", { values: reqSeries }), Series("5xx/s", { values: errSeries })], filled: true, height: 230, ariaLabel: `Requests and server errors per second over the ${win.label}` })
+])
+
+burnCard = Card([
+  SectionHeader("Budget burn by service", { eyebrow: "TOP 5", subtitle: "Share of requests returning 5xx" }),
+  BarChart(offenders.map(s => s.id), { series: [Series("Error %", { values: offenders.map(s => s.errorPct) })], horizontal: true, height: 230, yAxisLabel: "% of requests", ariaLabel: "Error rate by service, top five consumers" })
+])
+
+trafficRow = Grid([GridItem(throughputCard, { span: "2/3" }), GridItem(burnCard, { span: "1/3" })], { columns: 12, gap: "lg", alignItems: "start" })
+
+countOf = h => h == "all" ? services.length : services.filter(s => s.health == h).length
+healthOptions = [
+  { key: "all", label: "All services", icon: "layer-group" },
+  { key: "healthy", label: "Healthy", icon: "circle-check" },
+  { key: "degraded", label: "Degraded", icon: "triangle-exclamation" },
+  { key: "critical", label: "Critical", icon: "fire" }
+]
+function healthPill(o) {
+  return FilterPill(o.label, { active: $health == o.key, count: countOf(o.key), icon: o.icon, onToggle: () => { $health = $health == o.key ? "all" : o.key } })
+}
+
+serviceGrid = DataGrid([
+  Col("Service", visible.map(s => s.id), { sortable: true, width: "170px" }),
+  Col("Team", visible.map(s => s.team), { sortable: true, filterable: true }),
+  Col("Health", visible.map(s => StatusDot($util.capitalize(s.health), { tone: healthTone(s.health), pulse: s.health == "critical" }))),
+  Col("p99 (ms)", visible.map(s => s.p99), { format: "number", align: "right", sortable: true }),
+  Col("Error %", visible.map(s => s.errorPct), { format: "number", align: "right", sortable: true, headerTooltip: "Share of requests answered with a 5xx" }),
+  Col("Last deploy", visible.map(s => s.deploy), { sortable: true, headerTooltip: "Date of the last production rollout" }),
+  Col("Details", visible.map(s => IconButton("arrow-right", { label: `Open ${s.id} details`, size: "sm", onClick: () => openService(s.id) })), { align: "right" })
+], {
+  rowIds: visible.map(s => s.id), sort: $sort, selectable: true, selectedIds: $picked, perPage: 5,
+  density: "compact", striped: true, exportable: true, exportFilename: "service-health.csv",
+  onRowClick: (i, row, id) => openService(id),
+  toolbar: Toolbar({ right: [Button(`Silence alert rules (${$picked.length})`, { variant: "secondary", size: "sm", icon: "bell-slash", disabled: $picked.length == 0, onClick: silenceSelected })] })
+})
+
+servicesCard = Card([
+  SectionHeader("Service health", { eyebrow: "FLEET", subtitle: `${visible.length} of ${services.length} services shown · ${env.region}`, status: Pill(`${countOf("critical")} critical`, { tone: countOf("critical") > 0 ? "critical" : "neutral" }) }),
+  Toolbar({ left: healthOptions.map(o => healthPill(o)), searchable: true, searchPlaceholder: "Search service, team or owner…", searchValue: $q }),
+  Show(visible.length > 0, { fallback: EmptyState("No services match", { description: "Clear the health filter or widen the search.", icon: "magnifying-glass" }), children: serviceGrid })
+])
+
+function incidentItem(i) {
+  return TimelineItem(`${i.id} · ${i.title}`, {
+    time: `${$util.replace(i.opened, "T", " ")} UTC`,
+    description: i.note,
+    icon: i.status == "acked" ? "screwdriver-wrench" : "fire",
+    tone: sevTone(i.severity),
+    content: [Row([
+      Badge(i.severity, { tone: sevTone(i.severity), size: "sm" }), Pill(i.service, { tone: "neutral", icon: "cube" }), PersonChip(i.owner, { role: "Incident commander", size: "sm" }), Spacer(),
+      Button("Acknowledge", { variant: "secondary", size: "sm", icon: "hand", disabled: i.status == "acked", onClick: () => ackIncident(i.id) }),
+      Button("Resolve", { variant: "primary", size: "sm", icon: "check", onClick: () => resolveIncident(i.id) })
+    ], { gap: "sm", align: "center", wrap: true })]
+  })
+}
+
+incidentCard = Card([
+  SectionHeader("Incident queue", { eyebrow: "ON-CALL", subtitle: `${firing.length} firing · ${acked.length} acknowledged · ${resolved.length} resolved`, actions: [Button("Declare incident", { variant: "primary", size: "sm", icon: "plus", onClick: declareIncident })] }),
+  Show(active.length > 0, { fallback: EmptyState("No active incidents", { description: "Everything on this rotation is acknowledged and resolved.", icon: "circle-check" }), children: Timeline(active.map(i => incidentItem(i))) }),
+  Separator("horizontal", { label: "Resolved" }),
+  List(resolved.map(i => ListItem(`${i.id} · ${i.title}`, {
+    description: `${i.service} · opened ${$util.replace(i.opened, "T", " ")} UTC · closed by ${i.owner}`, icon: "circle-check", tone: "success",
+    trailing: [Badge(i.severity, { tone: sevTone(i.severity), size: "sm" }), Button("Reopen", { variant: "ghost", size: "sm", icon: "rotate-left", onClick: () => reopenIncident(i.id) })]
+  })), { divided: true, emptyLabel: "Nothing resolved on this shift yet" })
+])
+
+deployCard = Card([
+  SectionHeader("Deploy trail", { eyebrow: "CHANGE LOG", subtitle: `${deployLog.length} releases in the last 10 days`, status: Pill("Auto-rollback armed", { tone: "success", icon: "shield-halved" }) }),
+  ActivityLog(deployLog, { variant: "audit" })
+])
+
+oncallCard = Card([
+  SectionHeader("On-call rotation", { eyebrow: "ESCALATION", subtitle: "Platform primary · 2026-08-07 08:00 → 20:00 UTC" }),
+  Row([PersonChip("Daniel Mbeki", { role: "Primary · Platform", status: "online", avatarSrc: "https://picsum.photos/seed/oncall-daniel-mbeki/96/96" }), Spacer(), Pill("PagerDuty synced", { tone: "success", icon: "link" })], { align: "center", gap: "sm", wrap: true }),
+  Steps([
+    { title: "Primary — Daniel Mbeki", details: "Paged immediately · acknowledges within 5 minutes", status: "active" },
+    { title: "Secondary — Rita Okonjo", details: "Paged after 10 minutes without an acknowledgement", status: "pending" },
+    { title: "Engineering manager — Hannah Weiss", details: "Paged after 20 minutes, or immediately on any SEV1", status: "pending" },
+    { title: "Incident commander bridge", details: "Opened automatically once a SEV1 is declared", status: "pending" }
+  ]),
+  Buttons([Button("Page on-call", { variant: "danger", icon: "tower-broadcast", onClick: () => { $pageOpen = true } }), Button("View runbook", { variant: "secondary", icon: "book-open", onClick: () => $toast.info("Runbook: northwind/sre/handbook.md") })])
+])
+
+opsRow = Grid([deployCard, oncallCard], { columns: { base: 1, lg: 2 }, gap: "lg", alignItems: "start" })
+
+// ---- Service drawer --------------------------------------------------------
+function depHealth(d) {
+  const svc = services.find(x => x.id == d)
+  return svc ? svc.health : platformDeps[d]
+}
+
+function serviceDetail(s) {
+  const deploys = deployLog.filter(d => d.service == s.id)
+  return [Column([
+    Row([StatusDot($util.capitalize(s.health), { tone: healthTone(s.health), pulse: s.health != "healthy" }), Spacer(), Badge(s.tier, { tone: "info", size: "sm" }), Pill(s.team, { tone: "neutral", icon: "users" })], { align: "center", gap: "sm", wrap: true }),
+    Stats([{ label: "p99", value: `${s.p99} ms` }, { label: "Error rate", value: `${s.errorPct}%`, tone: healthTone(s.health) }, { label: "Throughput", value: `${$util.format(s.rps, "compact")}/s` }], { layout: "strip" }),
+    SectionHeader("Dependencies", { eyebrow: "TOPOLOGY", subtitle: `${s.deps.length} downstream services` }),
+    Tree([TreeNode(s.id, { icon: "cube", expanded: true, children: s.deps.map(d => TreeNode(d, { icon: depIcon(d), badge: depHealth(d) })) })], { ariaLabel: `${s.id} dependency tree` }),
+    SectionHeader("Recent deploys", { eyebrow: "CHANGE LOG" }),
+    Show(deploys.length > 0, { fallback: Text("No releases in the last 10 days.", { variant: "small", tone: "muted" }), children: Timeline(deploys.map(d => TimelineItem(d.title, { time: d.time, description: d.description, icon: d.icon, tone: d.tone }))) }),
+    SectionHeader("Alert rules", { eyebrow: "PAGING", subtitle: "Toggles are stored with this workspace" }),
+    Column(ruleTemplates.map(r => Switch(`${s.id}-${r.key}`, { label: r.label, description: r.channel, value: ruleOn(s.id, r.key), onChange: (on) => alerts.toggle(ruleId(s.id, r.key), on) })), { gap: "sm" })
+  ], { gap: "lg" })]
+}
+
+detailDrawer = Drawer(selected ? selected.id : "Service", {
+  open: $openService != null, side: "right", width: "560px", onClose: closeService,
+  children: selected ? serviceDetail(selected) : [EmptyState("No service selected", { icon: "cube" })],
+  footer: [Button("Close", { variant: "ghost", onClick: closeService }), Button("Open dashboards", { variant: "primary", icon: "chart-line", onClick: () => $toast.info(`Grafana board opened for ${selected ? selected.id : "the fleet"}`) })]
+})
+
+pageDialog = ConfirmDialog("Page the on-call engineer?", {
+  open: $pageOpen,
+  message: `This pages Daniel Mbeki through PagerDuty and opens an incident bridge for ${env.label}. Use it only when a user-facing SLO is at risk.`,
+  confirmLabel: "Page now", cancelLabel: "Cancel", tone: "danger", icon: "tower-broadcast",
+  onConfirm: () => { $pageOpen = false; $toast.success("Paged Daniel Mbeki · incident bridge opened") },
+  onCancel: () => { $pageOpen = false }
+})

@@ -1,0 +1,351 @@
+// Atlas Knowledge Search — an internal RAG assistant over Helix Robotics' handbook,
+// tickets, wiki and code. Search, scope filters, citations and feedback all really work;
+// the model is MOCKED — no network, just canned per-document claims and a setTimeout delay.
+// Starting point for: any retrieval-augmented answer surface with sources and citations.
+// Uses: SearchBar + scope filters, Markdown answer + citation Badges, ProgressRing, Drawer, FollowUpBlock, $store, BarChart.
+$app(Column([Header(), SearchPanel(), SplitView([Rail()], [Workspace()], { primaryWidth: "300px" }), IndexHealth(), SourceDrawer()], { gap: "lg", padding: "md" }))
+
+// ---- Mocked corpus ---------------------------------------------------------
+sourceIcon = { docs: "file-lines", tickets: "ticket", wiki: "book-open", code: "code" }
+sourceTone = { docs: "info", tickets: "warning", wiki: "primary", code: "success" }
+sourceName = { docs: "Handbook", tickets: "Tickets", wiki: "Wiki", code: "Code" }
+
+library = [
+  { id: "d1", title: "Runbook — rotating the ingest service API key", source: "docs", owner: "Priya Raman", team: "Platform", updated: "2026-07-28", path: "handbook/platform/ingest-key-rotation.md", chunks: 24, version: 7, access: "Engineering", next: "What happens if an ingest key is revoked early?", related: ["d4", "d3"], keywords: ["api", "api key", "keys", "rotate", "rotation", "ingest", "secret", "secrets", "credential", "helixctl", "expiry"],
+    snippet: "Ingest API keys expire 90 days after issue. Mint the replacement with helixctl, keep both keys live for 30 minutes, then revoke the old one.",
+    claim: "Rotate with `helixctl secrets rotate --service ingest`: it mints the replacement **before** revoking the previous key, and both stay valid for a 30-minute overlap window.",
+    body: ["Every ingest API key carries a hard 90-day expiry stamped at issue time. The runbook is scheduled as a recurring platform chore seven days before expiry, so a key is never rotated under incident pressure.", "The command issues the successor, publishes it to the edge, waits out the overlap window and only then revokes the predecessor. Record the rotation in the Vault audit log within 24 hours to satisfy SEC-002."] },
+  { id: "d2", title: "INC-4821 — ingest returns 401 for six minutes after rotation", source: "tickets", owner: "Marcus Feld", team: "Platform", updated: "2026-07-30", path: "tickets/INC-4821", chunks: 9, version: 2, access: "Engineering", next: "How long is the edge auth cache TTL?", related: ["d1", "d4"], keywords: ["401", "incident", "ingest", "rotation", "rotate", "api key", "keys", "cache", "outage", "postmortem", "edge"],
+    snippet: "Producers saw 401s for six minutes after the July rotation because the edge auth cache holds resolved keys for five minutes.",
+    claim: "INC-4821 traced post-rotation 401s to a five-minute edge auth cache; the fix is to warm the successor key before cutover, tracked as ENG-3390.",
+    body: ["At 09:04 UTC on 2026-07-28 four ingest producers began returning 401. The rotation had completed cleanly, but the edge auth cache had not yet expired its copy of the predecessor key set.", "Mitigation was a manual cache flush at 09:10. The durable fix, ENG-3390, warms the successor into the edge cache before cutover so the overlap window does the work it was designed for."] },
+  { id: "d3", title: "SEC-002 — secrets management standard", source: "wiki", owner: "Dana Okafor", team: "Security", updated: "2026-05-14", path: "wiki/security/SEC-002", chunks: 31, version: 12, access: "All staff", next: "Which credentials are exempt from SEC-002?", related: ["d1", "d6"], keywords: ["secret", "secrets", "credential", "credentials", "policy", "standard", "rotation", "rotate", "keys", "vault", "audit", "compliance"],
+    snippet: "All production credentials live in Vault, rotate at least every 90 days, and are never written into a repository, a ticket or a chat thread.",
+    claim: "Standard SEC-002 caps every production credential at a 90-day life and requires the rotation to land in the Vault audit log within 24 hours.",
+    body: ["SEC-002 is the binding standard for every production credential at Helix Robotics. Credentials are issued by Vault, scoped to a single service identity, and never committed to a repository or pasted into a ticket.", "Exemptions are granted only by the security duty officer and lapse after three months. Two are currently live, both for legacy partner integrations that cannot yet accept short-lived tokens."] },
+  { id: "d4", title: "services/ingest/auth/rotation.go", source: "code", owner: "Priya Raman", team: "Platform", updated: "2026-07-26", path: "services/ingest/auth/rotation.go", chunks: 14, version: 41, access: "Engineering", next: "Where is overlapWindow configured?", related: ["d1", "d2"], keywords: ["rotation", "rotate", "keys", "api", "ingest", "overlap", "revoke", "vault", "edge", "golang"],
+    snippet: "RotateKey issues the successor, publishes it to the edge, waits for overlapWindow and only then revokes the predecessor.",
+    claim: "`RotateKey` hard-codes `overlapWindow = 30 * time.Minute`, so shortening the overlap is a code change and not a configuration one.",
+    body: ["RotateKey is the only writer of ingest credentials. It is deliberately sequential — issue, publish, wait, revoke — with no early return between publish and revoke.", "The overlap window is a package constant rather than a config value, because a mis-set overlap is indistinguishable from an outage until producers start failing."],
+    code: ["const overlapWindow = 30 * time.Minute", "", "func (s *Service) RotateKey(ctx context.Context, svc string) (*Key, error) {", "    next, err := s.vault.Issue(ctx, svc, keyTTL)", "    if err != nil {", "        return nil, errors.Wrap(err, `issue successor`)", "    }", "    s.edge.Publish(ctx, next)", "    time.Sleep(overlapWindow)", "    return next, s.vault.Revoke(ctx, svc, next.Predecessor)", "}"] },
+  { id: "d5", title: "Vector index refresh and the embedding pipeline", source: "docs", owner: "Lena Vogt", team: "Atlas", updated: "2026-08-02", path: "handbook/atlas/index-refresh.md", chunks: 27, version: 5, access: "All staff", next: "When does the vector index refresh?", related: ["d8", "d9"], keywords: ["index", "vector", "embedding", "embeddings", "refresh", "sync", "pipeline", "nightly", "chunk", "chunks", "reindex", "atlas"],
+    snippet: "Atlas re-embeds changed documents every 15 minutes and rebuilds the whole vector index nightly at 02:15 UTC.",
+    claim: "Changed documents are re-embedded on a 15-minute incremental loop; the full rebuild runs nightly at 02:15 UTC and takes roughly 34 minutes.",
+    body: ["The incremental pass watches the change feed from each connector and re-embeds only the chunks whose text hash moved. A typical pass touches 40 to 120 chunks and finishes inside 90 seconds.", "A full rebuild is required only when the embedding model version changes. Rebuilds write into a shadow index and swap atomically, so search never sees a half-built collection."] },
+  { id: "d6", title: "REQ-2210 — read-only scope for platform tokens", source: "tickets", owner: "Marcus Feld", team: "Platform", updated: "2026-06-19", path: "tickets/REQ-2210", chunks: 7, version: 3, access: "Engineering", next: "Which services support scoped tokens?", related: ["d3", "d1"], keywords: ["token", "tokens", "scope", "scopes", "read-only", "permission", "permissions", "api", "keys", "access", "analytics"],
+    snippet: "Requests a read-only token scope so analytics jobs stop shipping write-capable ingest keys around the warehouse.",
+    claim: "REQ-2210 added a `read:ingest` scope so analytics jobs stop carrying write-capable keys; it shipped behind the `scoped-tokens` flag on 19 June 2026.",
+    body: ["Analytics jobs previously reused the same ingest credential as the producers, which meant a warehouse job held write authority it never exercised.", "The scoped-tokens flag is on for the analytics and reporting service identities. Rollout to partner integrations is blocked on the two SEC-002 exemptions."] },
+  { id: "d7", title: "On-call escalation matrix", source: "wiki", owner: "Dana Okafor", team: "Reliability", updated: "2025-11-03", path: "wiki/reliability/escalation", chunks: 18, version: 9, access: "All staff", next: "Who is the duty director this week?", related: ["d2", "d3"], keywords: ["oncall", "on-call", "escalation", "escalate", "incident", "page", "pager", "severity", "duty", "reliability"],
+    snippet: "Page the platform on-call first. Escalate to the service owner after 15 minutes without acknowledgement, then to the duty director at 30.",
+    claim: "Escalate to the service owner 15 minutes after an unacknowledged page and to the duty director at 30 — note this matrix has not been reviewed since November 2025.",
+    body: ["The first page always goes to the platform on-call rotation, regardless of which service is failing, so that triage starts from one place.", "Escalation is time-based rather than judgement-based: 15 minutes to the service owner, 30 minutes to the duty director, 60 minutes to the incident commander pool."] },
+  { id: "d8", title: "packages/retriever/rerank.ts", source: "code", owner: "Lena Vogt", team: "Atlas", updated: "2026-07-11", path: "packages/retriever/rerank.ts", chunks: 11, version: 22, access: "Engineering", next: "How many passages does Atlas keep per answer?", related: ["d5", "d9"], keywords: ["rerank", "reranker", "relevance", "score", "scoring", "retriever", "cross-encoder", "atlas", "candidates", "passage", "passages"],
+    snippet: "Reranks the top 50 dense candidates with a cross-encoder and keeps the best four passages per generated answer.",
+    claim: "The reranker pushes the top 50 dense candidates through a cross-encoder and keeps four passages, which moved answer relevance from 0.71 to 0.84 nDCG@10.",
+    body: ["Dense retrieval returns 50 candidates at k=50; the cross-encoder scores each query-passage pair and the top four survive into the prompt.", "Four is a latency decision, not a quality ceiling. Six passages scored 0.85 but pushed median response time past the 1.5 second product target."] },
+  { id: "d9", title: "Data residency for EU customer documents", source: "docs", owner: "Dana Okafor", team: "Security", updated: "2026-06-30", path: "handbook/security/eu-residency.md", chunks: 21, version: 4, access: "All staff", next: "Can Atlas cite an EU document from the US region?", related: ["d5", "d3"], keywords: ["residency", "region", "europe", "gdpr", "data", "customer", "documents", "retrieval", "boundary", "compliance", "atlas"],
+    snippet: "EU customer documents are embedded and retrieved inside eu-central-1; only the generated answer crosses the region boundary.",
+    claim: "EU customer documents never leave `eu-central-1` — embedding and retrieval both run in-region, and only the generated answer crosses the boundary with citations rewritten to region-local URLs.",
+    body: ["Connectors tag every document with the residency class of its owning tenant. EU-class documents are routed to the in-region embedding worker and stored in the eu-central-1 collection only.", "A cross-region answer may quote an EU passage but must link to the region-local citation URL, which is what the rewrite step in the answer assembler does."] }
+]
+
+leads = [
+  { keys: ["rotat", "secret", "creden", "api key"], text: "**Ingest API keys rotate on a 90-day cycle, replacement first.** `helixctl` mints the successor, publishes it to the edge, holds a 30-minute overlap and only then revokes the predecessor — which is also why a rotation can look like a partial outage for about five minutes if the edge cache is not warmed." },
+  { keys: ["embed", "vector", "index", "refresh", "sync", "chunk"], text: "**Atlas keeps the index warm with a 15-minute incremental loop and a nightly full rebuild at 02:15 UTC.** A full re-embed is only needed when the embedding model version changes; ordinary document edits are picked up on the incremental pass." },
+  { keys: ["escal", "on-call", "oncall", "incident", "page ", "duty"], text: "**Page the platform on-call first, then escalate on a 15/30-minute clock.** The service owner is pulled in after 15 minutes without an acknowledgement, and the duty director after 30." },
+  { keys: ["residen", "gdpr", "europ", "region"], text: "**EU customer documents stay inside `eu-central-1`.** Retrieval and embedding both run in-region; only the generated answer crosses the boundary, and its citations are rewritten to region-local URLs." },
+  { keys: ["rerank", "relevan", "quality", "passage"], text: "**Relevance comes from a cross-encoder rerank over the top 50 dense candidates.** Four passages survive into the prompt, which is what lifted answer relevance from 0.71 to 0.84 nDCG@10 in the Q3 evaluation." },
+  { keys: ["scope", "token", "permis", "read-only"], text: "**Scoped tokens shipped in June behind the `scoped-tokens` flag.** A `read:ingest` scope now covers analytics jobs so they stop carrying write-capable ingest keys." }
+]
+
+corpus = [{ label: "Handbook", indexed: 5128, coverage: 98, embedded: 98 }, { label: "Tickets", indexed: 9642, coverage: 94, embedded: 90 }, { label: "Wiki", indexed: 2317, coverage: 87, embedded: 74 }, { label: "Code", indexed: 1489, coverage: 71, embedded: 63 }]
+stopWords = ["the", "and", "for", "are", "how", "what", "when", "does", "did", "our", "was", "were", "can", "with", "from", "that", "this", "who", "why", "use", "using", "into", "about", "should", "must", "you", "get", "any", "all"]
+windowDays = { any: 100000, y2: 730, y1: 365, q1: 90 }
+windowLabel = { any: "Any time", y2: "Last 24 months", y1: "Last 12 months", q1: "Last 90 days" }
+windowItems = [{ value: "any", label: "Any time" }, { value: "y2", label: "Last 24 months" }, { value: "y1", label: "Last 12 months" }, { value: "q1", label: "Last 90 days" }]
+scopeItems = [{ value: "docs", label: "Handbook", icon: "file-lines" }, { value: "tickets", label: "Tickets", icon: "ticket" }, { value: "wiki", label: "Wiki", icon: "book-open" }, { value: "code", label: "Code", icon: "code" }]
+ownerItems = $util.unique(library.map(d => d.owner)).map(o => ({ value: o, label: o }))
+confTone = { high: "success", medium: "info", low: "warning", none: "neutral" }
+
+// ---- State -----------------------------------------------------------------
+$q = "How do we rotate the ingest API keys?"
+$draft = "How do we rotate the ingest API keys?"
+$sources = []
+$owners = []
+$window = "any"
+$pending = false
+$latency = 940
+$focus = null
+$openDoc = null
+$comment = ""
+$stars = 4
+$syncing = false
+$lastSync = "12 minutes ago"
+
+memory = $store({
+  persist: "atlas.knowledge.search",
+  recent: ["How do we rotate the ingest API keys?", "When does the vector index refresh?", "What is the on-call escalation clock?"],
+  saved: [],
+  feedback: [],
+  remember: (s, q) => { s.recent = [q, ...s.recent.filter(r => r != q)].slice(0, 6) },
+  save: (s, entry) => { s.saved = [entry, ...s.saved.filter(a => a.query != entry.query)].slice(0, 5) },
+  unsave: (s, q) => { s.saved = s.saved.filter(a => a.query != q) },
+  rate: (s, entry) => { s.feedback = [entry, ...s.feedback.filter(f => f.query != entry.query)].slice(0, 6) },
+  forget: (s) => { s.recent = [] }
+})
+
+// ---- Retrieval — the model is mocked, the filtering and ranking are real ----
+stem = t => t.length >= 6 ? t.slice(0, 5) : t
+ageDays = iso => Math.max(0, $util.diffDays(iso, $util.today()))
+inScope = d => ($sources.length == 0 || $sources.includes(d.source)) && ($owners.length == 0 || $owners.includes(d.owner)) && ageDays(d.updated) <= windowDays[$window]
+contextTokens = list => Math.round($util.sum(list.map(h => (h.doc.body.join(" ").length + h.doc.snippet.length + h.doc.title.length) / 4)))
+answerTokens = segs => Math.round($util.sum(segs.map(s => s.text.length / 4)))
+costOf = (ctx, out) => (ctx / 1000000) * 0.55 + (out / 1000000) * 2.2
+confidenceOf = list => list.length == 0 ? "none" : list[0].relevance >= 76 ? "high" : list[0].relevance >= 58 ? "medium" : "low"
+leadFor = list => (leads.find(l => l.keys.some(k => $util.lowercase($q).includes(k))) ?? { text: `**${list.length} documents** in the index speak to “${$q}”. The strongest claim from each ranked passage is consolidated below.` }).text
+answerOf = list => list.length == 0 ? [] : [{ text: leadFor(list), cites: list.slice(0, 2).map(h => h.doc.id) }, ...list.map(h => ({ text: h.doc.claim, cites: [h.doc.id] }))]
+
+function queryTerms() {
+  const flat = $util.replace($util.replace($util.replace($util.lowercase($q), "?", " "), ",", " "), ".", " ")
+  return flat.split(" ").map(t => t.trim()).filter(t => t.length > 2 && !stopWords.includes(t))
+}
+
+function scoreOf(d, ts) {
+  const title = $util.lowercase(d.title)
+  const keys = $util.lowercase(d.keywords.join(" "))
+  const text = $util.lowercase(d.snippet + " " + d.claim + " " + d.body.join(" "))
+  return $util.sum(ts.map(t => (title.includes(stem(t)) ? 3 : 0) + (keys.includes(stem(t)) ? 2 : 0) + (text.includes(stem(t)) ? 1 : 0)))
+}
+
+function hits() {
+  const ts = queryTerms()
+  const scored = library.filter(d => inScope(d)).map(d => ({ doc: d, score: scoreOf(d, ts) })).filter(r => r.score > 0)
+  return scored.sort((a, b) => b.score - a.score).slice(0, 4).map(r => ({ doc: r.doc, relevance: ts.length == 0 ? 0 : Math.min(97, Math.round((r.score / (ts.length * 6)) * 100)) }))
+}
+
+// ---- Actions ---------------------------------------------------------------
+function runSearch(text) {
+  const next = (text == null ? $draft : text).trim()
+  if (next.length == 0) return
+  $q = next
+  $draft = next
+  $focus = null
+  $pending = true
+  memory.remember(next)
+  setTimeout(() => {
+    $latency = 720 + Math.round($util.random() * 540)
+    $pending = false
+  }, 900)
+}
+
+function rerun(ms) {
+  if ($pending) return
+  $pending = true
+  setTimeout(() => {
+    $latency = 260 + Math.round($util.random() * 320)
+    $pending = false
+  }, ms)
+}
+
+function clearFilters() {
+  $sources = []
+  $owners = []
+  $window = "any"
+  rerun(340)
+}
+
+function removeChip(value) {
+  if (value == "window") $window = "any"
+  if ($util.startsWith(value, "src:")) $sources = $sources.filter(s => "src:" + s != value)
+  if ($util.startsWith(value, "own:")) $owners = $owners.filter(o => "own:" + o != value)
+  rerun(340)
+}
+
+activeChips = () => [...$sources.map(s => ({ label: sourceName[s], value: "src:" + s })), ...$owners.map(o => ({ label: o, value: "own:" + o })), ...($window == "any" ? [] : [{ label: windowLabel[$window], value: "window" }])]
+focusSource = id => { $focus = $focus == id ? null : id }
+
+function saveAnswer() {
+  const list = hits()
+  if (list.length == 0) return $toast.warning("Nothing to save — no document matched this scope.")
+  memory.save({ query: $q, sources: list.length, confidence: confidenceOf(list), at: $util.formatDate($util.now(), "MMM D, h:mm A") })
+  $toast.success("Answer pinned to your library")
+}
+
+function rate(helpful) {
+  memory.rate({ id: $util.uuid(), query: $q, helpful: helpful, comment: $comment.trim(), at: $util.formatDate($util.now(), "MMM D, h:mm A") })
+  $comment = ""
+  $toast.info(helpful ? "Logged as helpful — the reranker is retrained weekly." : "Logged. These passages will be down-weighted for this question.")
+}
+
+function resync() {
+  $syncing = true
+  setTimeout(() => {
+    $lastSync = "just now"
+    $syncing = false
+    $toast.success("Incremental pass complete — 118 chunks re-embedded")
+  }, 1100)
+}
+
+// ---- Sections --------------------------------------------------------------
+function Header() {
+  return PageHeader("Knowledge search", { subtitle: "Atlas · retrieval-augmented answers over the Helix Robotics corpus", breadcrumbs: ["Helix", "Atlas", "Search"], status: Badge("mock index", { tone: "warning", icon: "flask" }), actions: [Button("Clear scope", { variant: "ghost", size: "sm", icon: "filter-circle-xmark", onClick: clearFilters }), Button("Save answer", { variant: "primary", size: "sm", icon: "bookmark", onClick: saveAnswer, disabled: $pending })] })
+}
+
+function SearchPanel() {
+  const list = hits()
+  const ctx = contextTokens(list)
+  const out = answerTokens(answerOf(list))
+  const chips = activeChips()
+  const filters = [ToggleGroup("scope", { items: scopeItems, value: $sources, multiple: true, size: "sm", label: "Source type", onChange: v => { $sources = v; rerun(420) } }), Select("freshness", { items: windowItems, value: $window, label: "Updated", labelHidden: true, onChange: v => { $window = v; rerun(380) } }), MultiSelect("owners", { items: ownerItems, value: $owners, placeholder: "Any owner", label: "Owner", labelHidden: true, onChange: v => { $owners = v; rerun(380) } })]
+  return Card([
+    SearchBar("kb-search", { placeholder: "Ask the handbook, tickets, wiki and code…", value: $draft, shortcut: "/", submitLabel: "Search", loading: $pending, ariaLabel: "Search the Helix knowledge index", onChange: v => { $draft = v }, onSubmit: () => runSearch() }),
+    Toolbar({ left: filters, right: [Button("Run search", { variant: "primary", icon: "wand-magic-sparkles", size: "sm", loading: $pending, onClick: () => runSearch() })] }),
+    chips.length > 0 ? FilterChips(chips, { onRemove: removeChip, onClear: clearFilters, clearLabel: "Clear scope" }) : Text("Searching every source, any age, all owners.", { variant: "small", tone: "muted" }),
+    Stats([
+      { label: "Latency", value: $pending ? "…" : `${$latency} ms`, hint: "retrieve · rerank · synthesise" },
+      { label: "Passages", value: String(list.length * 3), hint: `from ${list.length} documents` },
+      { label: "Context tokens", value: $util.format(ctx, "compact"), hint: "helix-embed-3" },
+      { label: "Answer tokens", value: String(out), hint: "orbit-12b-instruct" },
+      { label: "Est. cost", value: "$" + costOf(ctx, out).toFixed(4), hint: "$0.55 in / $2.20 out per M" }
+    ], { layout: "strip" })
+  ])
+}
+
+function Rail() {
+  const recent = memory.recent.map(r => ListItem($util.truncate(r, 46), { icon: "clock-rotate-left", active: r == $q, onClick: () => runSearch(r) }))
+  const saved = memory.saved.map(a => ListItem($util.truncate(a.query, 38), { description: `${a.sources} sources · ${a.confidence} confidence · ${a.at}`, icon: "bookmark", onClick: () => runSearch(a.query), trailing: [IconButton("xmark", { label: "Remove saved answer", size: "xs", variant: "ghost", onClick: () => memory.unsave(a.query) })] }))
+  const signal = memory.feedback.map(f => TimelineItem($util.truncate(f.query, 34), { time: f.at, description: f.comment.length > 0 ? f.comment : (f.helpful ? "Marked helpful" : "Marked not helpful"), icon: f.helpful ? "thumbs-up" : "thumbs-down", tone: f.helpful ? "success" : "danger" }))
+  return Column([
+    Card([SectionHeader("Recent searches", { eyebrow: "HISTORY", actions: [ActionLink("Clear", { onClick: () => memory.forget(), icon: "eraser", disabled: recent.length == 0 })] }), recent.length > 0 ? List(recent, { divided: true }) : EmptyState("No searches yet", { icon: "magnifying-glass", description: "Ask a question to start the trail." })]),
+    Card([SectionHeader("Saved answers", { eyebrow: "LIBRARY", status: Badge(String(saved.length), { tone: "primary", size: "sm" }) }), saved.length > 0 ? List(saved, { divided: true }) : EmptyState("Nothing saved yet", { icon: "bookmark", description: "Pin an answer and it waits for you here." })]),
+    Card([SectionHeader("Recent feedback", { eyebrow: "SIGNAL", subtitle: "Local only — nothing leaves the browser." }), signal.length > 0 ? Timeline(signal) : Text("No ratings yet — rate an answer and it lands here.", { variant: "small", tone: "muted" })])
+  ], { gap: "lg" })
+}
+
+function Workspace() {
+  const list = hits()
+  return Column([AnswerCard(list), SourcesCard(list), FeedbackCard()], { gap: "lg" })
+}
+
+function AnswerCard(list) {
+  const conf = confidenceOf(list)
+  return Card([
+    SectionHeader("Generated answer", { eyebrow: "ORBIT-12B-INSTRUCT · TEMPERATURE 0.2", subtitle: `“${$q}”`, status: Badge(`${conf} confidence`, { tone: confTone[conf], icon: "shield-halved" }), actions: [Button("Save", { variant: "secondary", size: "xs", icon: "bookmark", onClick: saveAnswer }), Button("Re-run", { variant: "ghost", size: "xs", icon: "rotate", onClick: () => runSearch($q) })] }),
+    $pending ? Pending() : AnswerBody(list, conf)
+  ])
+}
+
+function Pending() {
+  return Column([
+    Row([Avatar("Atlas", { size: "sm" }), TypingIndicator("Atlas"), Text("reading passages and drafting a grounded answer…", { variant: "small", tone: "muted" })], { gap: "sm", align: "center", wrap: true }),
+    Skeleton({ variant: "paragraph", lines: 4 }),
+    Skeleton({ variant: "paragraph", lines: 3, live: false }),
+    Progress({ indeterminate: true, label: "Dense retrieval · cross-encoder rerank · synthesis", tone: "primary" })
+  ], { gap: "md" })
+}
+
+function AnswerBody(list, conf) {
+  if (list.length == 0) return EmptyState("No document matches that question in this scope", { icon: "magnifying-glass-minus", description: "Widen the source filter, drop the owner or date scope, then search again.", actions: [Button("Clear scope", { variant: "secondary", icon: "filter-circle-xmark", onClick: clearFilters })] })
+  const fresh = $util.min(list.map(h => ageDays(h.doc.updated)))
+  const meters = [Pill(`${list.length} sources cited`, { tone: "corporate", icon: "quote-left" }), Pill(`freshest source ${fresh}d old`, { tone: fresh <= 60 ? "success" : fresh <= 240 ? "warning" : "critical", icon: "clock" }), Pill(`top relevance ${list[0].relevance}%`, { tone: list[0].relevance >= 76 ? "success" : "warning", icon: "bullseye" }), Pill(`${$util.unique(list.map(h => h.doc.source)).length} source types`, { tone: "neutral", icon: "layer-group" })]
+  return Column([
+    conf == "low" ? Callout("warning", { title: "Low retrieval confidence", description: `The strongest passage only scores ${list[0].relevance}% against this question. Treat the answer as a lead and open the citations before acting on them.`, icon: "triangle-exclamation" }) : null,
+    fresh > 240 ? Callout("info", { title: "Sources are ageing", description: `The freshest cited document was last updated ${fresh} days ago, so the answer may describe a retired process.`, compact: true }) : null,
+    Prose(answerOf(list).map(s => Segment(s, list))),
+    Row(meters, { gap: "xs", wrap: true, align: "center" }),
+    FollowUpBlock($util.unique(list.slice(0, 3).map(h => h.doc.next)), { title: "Ask next", disabled: $pending, onSelect: m => runSearch(m) })
+  ], { gap: "md" })
+}
+
+Segment = (seg, list) => Column([Markdown(seg.text), Row(seg.cites.map(id => CiteChip(id, list)), { gap: "2xs", wrap: true, align: "center" })], { gap: "3xs" })
+
+function CiteChip(id, list) {
+  const index = list.findIndex(h => h.doc.id == id)
+  const doc = library.find(d => d.id == id)
+  if (index < 0 || doc == null) return null
+  return OnClick(Badge(`[${index + 1}] ${$util.truncate(doc.title, 32)}`, { tone: $focus == id ? "primary" : "neutral", size: "sm", icon: sourceIcon[doc.source] }), { onClick: () => focusSource(id) })
+}
+
+function SourcesCard(list) {
+  return Card([
+    SectionHeader("Sources", { eyebrow: "RETRIEVED PASSAGES", subtitle: `Reranked by helix-rerank-1 · ${list.length} of ${library.length} indexed documents survived the scope filter`, actions: [ActionLink("Clear highlight", { onClick: () => { $focus = null }, icon: "eraser", disabled: $focus == null })] }),
+    list.length == 0 ? EmptyState("Nothing retrieved", { icon: "box-open", description: "No indexed document matched both the question and the current scope." }) : Column(list.map((h, i) => SourceRow(h, i + 1)), { gap: "md" })
+  ])
+}
+
+function SourceRow(h, n) {
+  const d = h.doc
+  const lit = $focus == d.id
+  const head = Row([Badge(`[${n}]`, { tone: lit ? "primary" : "neutral", size: "sm" }), Icon(sourceIcon[d.source], { size: "sm", label: sourceName[d.source] }), Text(d.title, { variant: "body-heavy" }), lit ? StatusDot("cited above", { tone: "primary", pulse: true }) : null], { gap: "xs", align: "center", wrap: true })
+  const meta = Row([Pill(sourceName[d.source], { tone: sourceTone[d.source], icon: sourceIcon[d.source] }), Text(d.path, { variant: "small", tone: "muted" }), RelativeTime(d.updated), PersonChip(d.owner, { role: d.team, size: "sm" })], { gap: "xs", align: "center", wrap: true })
+  const acts = Column([Button("Open", { variant: "secondary", size: "xs", icon: "up-right-from-square", onClick: () => { $openDoc = d.id } }), Button(lit ? "Unpin" : "Highlight", { variant: "ghost", size: "xs", icon: "quote-left", onClick: () => focusSource(d.id) })], { gap: "2xs" })
+  return Card([Row([
+    ProgressRing(h.relevance, { size: "sm", caption: "match", tone: h.relevance >= 76 ? "success" : h.relevance >= 58 ? "primary" : "warning" }),
+    StackItem(Column([head, Text(d.snippet, { variant: "small", tone: "muted" }), meta], { gap: "2xs" }), { grow: 1 }),
+    acts
+  ], { gap: "md", align: "start" })], { variant: lit ? "elevated" : "outlined", padding: "md" })
+}
+
+function FeedbackCard() {
+  const mine = memory.feedback.find(f => f.query == $q)
+  return Card([
+    SectionHeader("Was this answer useful?", { eyebrow: "FEEDBACK", subtitle: "Ratings are stored per question and feed the weekly reranker refresh.", status: Badge(mine == null ? "unrated" : mine.helpful ? "helpful" : "not helpful", { tone: mine == null ? "neutral" : mine.helpful ? "success" : "danger", icon: mine == null ? "circle-question" : mine.helpful ? "thumbs-up" : "thumbs-down" }) }),
+    Row([
+      Button("Helpful", { variant: mine != null && mine.helpful ? "primary" : "secondary", size: "sm", icon: "thumbs-up", onClick: () => rate(true), disabled: $pending }),
+      Button("Not helpful", { variant: mine != null && !mine.helpful ? "danger" : "secondary", size: "sm", icon: "thumbs-down", onClick: () => rate(false), disabled: $pending }),
+      Spacer(),
+      Rating($stars, { max: 5, interactive: true, label: "Answer quality", size: "sm", onChange: v => { $stars = v } })
+    ], { gap: "sm", align: "center", wrap: true }),
+    FormControl("What was missing or wrong?", { field: TextArea("kb-comment", { value: $comment, rows: 2, placeholder: "e.g. the overlap window is 30 minutes in code, not 15 as the wiki claims", onChange: v => { $comment = v } }), hint: "Attached to this exact question and shown in the feedback rail." })
+  ])
+}
+
+function IndexHealth() {
+  const indexed = $util.sum(corpus.map(c => c.indexed))
+  const chunks = $util.sum(corpus.map(c => Math.round(c.indexed * 6.4)))
+  const coverage = Math.round($util.avg(corpus.map(c => c.coverage)))
+  const facts = DescriptionList([
+    DescriptionItem("Retriever", "dense k=50 → cross-encoder rerank → top 4", "magnifying-glass"),
+    DescriptionItem("Embedding model", "helix-embed-3 (1,024-dim)", "microchip"),
+    DescriptionItem("Answer model", "orbit-12b-instruct, 8k context", "robot"),
+    DescriptionItem("Full rebuild", "nightly 02:15 UTC · ~34 min", "moon"),
+    DescriptionItem("Residency", Pill("eu-central-1 in-region", { tone: "corporate", icon: "earth-europe" }), "shield-halved"),
+    DescriptionItem("Connectors", `${corpus.length} live · ${indexed} documents`, "plug")
+  ], { columns: 1 })
+  return Card([
+    SectionHeader("Index health", { eyebrow: "ATLAS PIPELINE", subtitle: "helix-embed-3 · 1,024 dimensions · 512-token chunks with 64-token overlap", status: Badge($syncing ? "syncing" : "healthy", { tone: $syncing ? "info" : "success", icon: $syncing ? "arrows-rotate" : "circle-check" }), actions: [Button("Resync now", { variant: "secondary", size: "sm", icon: "rotate", loading: $syncing, onClick: resync })] }),
+    Stats([
+      StatCard("Documents indexed", { value: $util.format(indexed, "compact"), icon: "database", trend: "up", delta: "+412 this week" }),
+      StatCard("Chunks embedded", { value: $util.format(chunks, "compact"), icon: "cubes", hint: "512 tokens each" }),
+      StatCard("Last incremental sync", { value: $lastSync, icon: "clock-rotate-left", tone: "success" }),
+      StatCard("Mean coverage", { value: `${coverage}%`, icon: "chart-pie", tone: coverage >= 90 ? "success" : "primary", hint: "weighted across connectors" })
+    ], { layout: "grid", columns: 4 }),
+    Grid([BarChart(corpus.map(c => c.label), { series: [Series("Indexed %", { values: corpus.map(c => c.coverage) }), Series("Re-embedded %", { values: corpus.map(c => c.embedded) })], height: 220, yAxisLabel: "% of connector corpus", ariaLabel: "Index and re-embedding coverage by source type" }), facts], { columns: { base: 1, lg: 2 }, gap: "lg" })
+  ])
+}
+
+function SourceDrawer() {
+  const doc = $openDoc == null ? null : library.find(d => d.id == $openDoc)
+  return Drawer("Source document", { open: $openDoc != null, side: "right", width: "560px", onClose: () => { $openDoc = null }, children: [doc == null ? Text("No document selected.", { tone: "muted" }) : DocDetail(doc)] })
+}
+
+function DocDetail(d) {
+  const related = d.related.map(id => library.find(x => x.id == id)).filter(x => x != null)
+  return Column([
+    Row([Icon(sourceIcon[d.source], { size: "lg", label: sourceName[d.source] }), StackItem(Column([Text(d.title, { variant: "large-heavy" }), Text(d.path, { variant: "small", tone: "muted" })], { gap: "3xs" }), { grow: 1 }), Pill(sourceName[d.source], { tone: sourceTone[d.source] })], { gap: "sm", align: "center" }),
+    DescriptionList([
+      DescriptionItem("Owner", PersonChip(d.owner, { role: d.team, size: "sm" })),
+      DescriptionItem("Last updated", `${$util.formatDate(d.updated, "MMM D, YYYY")} · ${ageDays(d.updated)} days ago`),
+      DescriptionItem("Chunks", `${d.chunks} chunks · 512 tokens each`),
+      DescriptionItem("Access", d.access),
+      DescriptionItem("Retrieval id", `${d.id}@v${d.version}`),
+      DescriptionItem("Path", d.path)
+    ]),
+    Separator("horizontal", { label: "Full text" }),
+    Prose(d.body.map(p => Markdown(p))),
+    d.code != null ? CodeBlock("go", { codeString: d.code.join("\n"), showLineNumbers: true, filename: d.path }) : null,
+    Separator("horizontal", { label: "Related documents" }),
+    List(related.map(r => ListItem(r.title, { description: `${sourceName[r.source]} · ${r.owner} · updated ${$util.formatDate(r.updated, "MMM D, YYYY")}`, icon: sourceIcon[r.source], onClick: () => { $openDoc = r.id } })), { divided: true })
+  ], { gap: "md" })
+}
