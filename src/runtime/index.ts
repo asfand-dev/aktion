@@ -23,3 +23,10 @@ export {
   EffectRunner,
   type EffectRunnerOptions,
 } from "./effects.js";
+export { getAktionErrorInfo } from "./error-info.js";
+export type {
+  AktionErrorInfo,
+  AktionErrorKind,
+  AktionErrorLocation,
+  AktionErrorReport,
+} from "./error-info.js";

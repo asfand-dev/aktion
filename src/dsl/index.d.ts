@@ -3696,7 +3696,7 @@ export interface ErrorBoundaryOptions extends BaseProps {
 }
 export type ErrorBoundaryProps = ErrorBoundaryOptions & OneOf<"children" | "child", Children>;
 export type ErrorBoundaryNamed = Omit<ErrorBoundaryOptions, "children" | "child">;
-/** Render a fallback subtree when rendering children fails. Pass a `fallback` node (or omit it for a built-in friendly error card, which shows a Retry button when `onRetry` is set); `onError(err)` fires with the error. Set `showDetails=true` to reveal the message inline (great in dev). */
+/** Render a fallback subtree when rendering children fails. Pass a `fallback` node (or omit it for a built-in friendly error card, which shows a Retry button when `onRetry` is set); `onError(err)` fires with the original error. Set `showDetails=true` to reveal the message inline (great in dev). */
 export declare function ErrorBoundary(children: Children, props?: ErrorBoundaryNamed): AktionNode<"ErrorBoundary">;
 export declare function ErrorBoundary(props: ErrorBoundaryProps): AktionNode<"ErrorBoundary">;
 export declare function ErrorBoundary(children: Children, fallback: Children | null | undefined, props?: Omit<ErrorBoundaryOptions, "children" | "child" | "fallback">): AktionNode<"ErrorBoundary">;
@@ -11103,8 +11103,8 @@ export interface AktionUtil extends UtilStatic {
   readonly rules: RulesNamespace;
   /** Computed reactive value — recomputes from the atoms the lambda reads. */
   derived<T>(fn: () => T): T;
-  /** Program-level error sink — fires with { error, source } when an action throws. */
-  onError(fn: ((info: { readonly error: unknown; readonly source: string }) => unknown) | null): void;
+  /** Program-level error sink — fires with { error, source, location, frames } when an action throws; location and frames give the .aktion file, line and column. */
+  onError(fn: ((info: { readonly error: unknown; readonly source: string; readonly location?: { readonly file: string; readonly line: number; readonly column: number; readonly function?: string }; readonly frames?: readonly { readonly file: string; readonly line: number; readonly column: number; readonly function?: string }[] }) => unknown) | null): void;
   /** Navigation guard: return false to block, a path string to redirect, anything else to allow. */
   onNavigate(fn: ((info: NavigationInfo) => boolean | string | void) | null): void;
   /** HTTP request interceptor — a partial return merges over every outgoing request (headers shallow-merged), or mutate the request and return nothing. Runs synchronously: a returned Promise is ignored. */

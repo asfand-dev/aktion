@@ -24,6 +24,7 @@ import type {
   Statement,
 } from "../parser/types.js";
 import type { EvaluationContext, ScopedEffectDecl } from "./evaluator.js";
+import { reportRuntimeError } from "./error-info.js";
 import {
   ReturnSignal,
   evaluate,
@@ -299,7 +300,7 @@ export class EffectRunner {
       const prior = mounted.cleanups.splice(0);
       if (prior.length > 0) {
         for (const fn of prior) {
-          try { fn(); } catch (err) { logCleanupError(mountKey, err); }
+          try { fn(); } catch (err) { logCleanupError(getCtx(), mountKey, decl, err); }
         }
         this.emitEffect(mountKey, decl, "cleanup", reason, { cleanups: prior.length });
       }
@@ -312,8 +313,9 @@ export class EffectRunner {
           duration: nowMs() - start,
           error: err instanceof Error ? err.message : String(err),
         });
-        // eslint-disable-next-line no-console
-        console.error(`[aktion] effect "${mountKey}" failed`, err);
+        reportRuntimeError(getCtx(), err, {
+          loc: decl.loc, source: mountKey, kind: "effect", message: `[aktion] effect "${mountKey}" failed`,
+        });
       } finally {
         this.options.notify();
       }
@@ -416,7 +418,7 @@ export class EffectRunner {
     if (mounted.cleanups.length > 0) {
       const count = mounted.cleanups.length;
       for (const fn of mounted.cleanups) {
-        try { fn(); } catch (err) { logCleanupError(name, err); }
+        try { fn(); } catch (err) { logCleanupError(mounted.ctxRef(), name, mounted.decl, err); }
       }
       this.emitEffect(name, mounted.decl, "cleanup", "unmount", { cleanups: count });
     }
@@ -434,8 +436,9 @@ export class EffectRunner {
         this.emitEffect(name, mounted.decl, "error", "unmount", {
           error: err instanceof Error ? err.message : String(err),
         });
-        // eslint-disable-next-line no-console
-        console.error(`[aktion] effect "${name}" unmount body threw`, err);
+        reportRuntimeError(mounted.ctxRef(), err, {
+          loc: mounted.decl.loc, source: name, kind: "effect", message: `[aktion] effect "${name}" unmount body threw`,
+        });
       }
     }
     this.emitEffect(name, mounted.decl, "unmount", "unmount");
@@ -659,9 +662,15 @@ function runStatement(
   }
 }
 
-function logCleanupError(name: string, err: unknown): void {
-  // eslint-disable-next-line no-console
-  console.error(`[aktion] cleanup for effect "${name}" threw`, err);
+function logCleanupError(
+  ctx: EvaluationContext,
+  name: string,
+  decl: { loc?: SourceLocation },
+  err: unknown,
+): void {
+  reportRuntimeError(ctx, err, {
+    loc: decl.loc, source: name, kind: "effect", message: `[aktion] cleanup for effect "${name}" threw`,
+  });
 }
 
 /**

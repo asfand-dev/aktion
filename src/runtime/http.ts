@@ -17,6 +17,7 @@
  */
 
 import type { EvaluationContext } from "./evaluator.js";
+import { reportRuntimeError } from "./error-info.js";
 
 /* -------------------------------------------------------------------------- */
 /*  Types                                                                     */
@@ -564,8 +565,9 @@ export function createHttpResource(
           try {
             resource.onDone(resource);
           } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error("[aktion] Http onDone callback threw", err);
+            reportRuntimeError(ctx, err, {
+              source: "onDone", kind: "http-callback", message: "[aktion] Http onDone callback threw",
+            });
           }
         }
       }
@@ -921,8 +923,9 @@ export function createMutationResource(
             try {
               resource.onDone(resource);
             } catch (err) {
-              // eslint-disable-next-line no-console
-              console.error("[aktion] $mutation onDone callback threw", err);
+              reportRuntimeError(ctx, err, {
+                source: "onDone", kind: "http-callback", message: "[aktion] $mutation onDone callback threw",
+              });
             }
           }
         }

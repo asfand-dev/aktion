@@ -302,12 +302,15 @@ export function aktionPlugin(options: AktionPluginOptions = {}): Plugin {
       }
 
       const moduleCode =
-        emitModule(result, code, cleanId, runtimeModuleId, { sourcesContent: options.devtools !== false }) +
+        emitModule(result, code, cleanId, runtimeModuleId, {
+          sourcesContent: options.devtools !== false,
+          display: (id) => displayPath(id, projectRoot),
+        }) +
         (isServe ? hostOnlyExports(result, frontends, displayPath(cleanId, projectRoot)) + HMR_FOOTER : "");
       // `moduleType: "js"`: Vite 8 (Rolldown) otherwise treats an `.aktion.ts`
       // id as TypeScript by its extension even after the oxc transform is
       // excluded. Rollup-based Vite ignores the field.
-      return { code: moduleCode, map: buildSourceMap(moduleCode, cleanId, code), moduleType: "js" };
+      return { code: moduleCode, map: buildSourceMap(displayPath(cleanId, projectRoot), code), moduleType: "js" };
     },
   };
 
@@ -950,33 +953,22 @@ function hasEntryBinding(program: Program): boolean {
 }
 
 /**
- * Build a minimal valid v3 source map for the generated module.
+ * A v3 source map that names the original `.aktion` file and carries its text
+ * (`sourcesContent`) so the file shows up in the browser's Sources panel, and
+ * maps nothing.
  *
  * The emitted module is machine-generated (an inert `JSON.parse(...)` of the
- * AST), so there is no line-by-line correspondence with the author's source.
- * The previous `{ mappings: "" }` left every runtime stack frame pointing at
- * that opaque blob (feedback §3.4). Instead we emit a map that (a) carries the
- * original `.aktion` path and its content (`sourcesContent`) so the file shows
- * up in the browser's Sources panel, and (b) maps each generated line to the
- * original file so frames resolve to the `.aktion` module rather than the
- * generated JS. `AAAA` is the VLQ for the segment `[0, 0, 0, 0]`
- * (generatedColumn 0 → source 0, original line 0, original column 0); repeated
- * per line it keeps the absolute original position at the top of the file.
+ * AST) and the program runs from that AST in the runtime's own chunk, so there
+ * is no correspondence between a generated line and the author's source. An
+ * earlier version mapped every generated line to 0:0 of the original, which
+ * made a debugger claim that every frame sat at the top of the file. Positions
+ * of runtime errors come from the AST (`getAktionErrorInfo`) instead.
  */
 function buildSourceMap(
-  generated: string,
   sourcePath: string,
   source: string,
 ): { version: 3; sources: string[]; sourcesContent: string[]; names: string[]; mappings: string } {
-  const lineCount = generated.split("\n").length;
-  const mappings = new Array(lineCount).fill("AAAA").join(";");
-  return {
-    version: 3,
-    sources: [sourcePath],
-    sourcesContent: [source],
-    names: [],
-    mappings,
-  };
+  return { version: 3, sources: [sourcePath], sourcesContent: [source], names: [], mappings: "" };
 }
 
 /** `JSON.stringify` replacer: the runtime never reads a statement's `let` / `const` / `var`
@@ -1000,9 +992,15 @@ function emitModule(
   entrySource: string,
   path: string,
   runtimeModuleId: string,
-  options: { sourcesContent: boolean },
+  options: { sourcesContent: boolean; display: (id: string) => string },
 ): string {
-  const programLiteral = JSON.stringify(JSON.stringify(result.program, omitDeclarationKeyword));
+  // Module paths in the payload are project-relative, so error locations and
+  // the `error` event never carry the build machine's absolute paths.
+  const program = result.program.sources
+    ? { ...result.program, sources: result.program.sources.map(options.display) }
+    : result.program;
+  path = options.display(path);
+  const programLiteral = JSON.stringify(JSON.stringify(program, omitDeclarationKeyword));
   const contents = options.sourcesContent
     ? `, sourcesContent: ${JSON.stringify(result.modules.map((m) => m.originalSource))}`
     : "";

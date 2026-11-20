@@ -83,7 +83,7 @@ describe("named imports from host code", () => {
   it("under the dev server (and so Vitest), the default import works and a named one throws the Aktion explanation", async () => {
     const host = (await server.ssrLoadModule("/src/host.ts")) as Record<string, unknown>;
     // Importing is harmless; only using a binding throws.
-    expect(host.path).toBe(join(dir, "src/api.aktion.ts"));
+    expect(host.path).toBe("src/api.aktion.ts");
     expect(host.kind).toBe("function");
     expect(host.dslKeys).toEqual(["default", "label"]);
     const explanation = /\[aktion\] `remaining` is not available to host code: the Aktion module ".*api\.aktion\.ts" gives host code only its compiled program/;
@@ -95,7 +95,7 @@ describe("named imports from host code", () => {
 
   it("an export named `then` gets no stand-in, so the namespace is not a thenable", async () => {
     const host = (await server.ssrLoadModule("/src/host.ts")) as Record<string, () => Promise<unknown>>;
-    await expect(host.loadThenable!()).resolves.toBe(join(dir, "src/thenable.aktion"));
+    await expect(host.loadThenable!()).resolves.toBe("src/thenable.aktion");
     expect(await host.thenableKeys!()).toEqual(["count", "default"]);
   });
 

@@ -267,6 +267,11 @@ export interface RenderHelpers {
    * is no longer accepted.
    */
   invoke: (callable: unknown, ...args: unknown[]) => void;
+  /**
+   * Report an error a component caught itself (an `ErrorBoundary`) to the
+   * host's error hook. Absent on hand-built helper objects.
+   */
+  reportError?: (err: unknown, source: string) => void;
   /** Set a state value. Used by library primitives for their own internal state writes. */
   setState: (name: string, value: unknown) => void;
   /** Reset state values back to their initial declared value. */
