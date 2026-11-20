@@ -5,6 +5,13 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## [0.12.0](https://github.com/asfand-dev/aktion/compare/v0.11.0...v0.12.0) (2026-11-20)
+
+
+### Features
+
+* **runtime:** attach .aktion file, line and column to runtime errors and add an element error hook ([#46](https://github.com/asfand-dev/aktion/issues/46)) ([3467bf9](https://github.com/asfand-dev/aktion/commit/3467bf9ba538b4f1b6e7f9a943f954b65cd23392))
+
 ## 2026-10-27
 
 ### Error Locations for Hosts
