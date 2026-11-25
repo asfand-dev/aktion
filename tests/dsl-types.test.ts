@@ -145,6 +145,7 @@ const STUB_RUNTIME = [
   "  readonly source: string;",
   "  readonly path: string;",
   "  readonly sourcesContent?: readonly string[];",
+  "  readonly sourceNames?: readonly string[];",
   "}",
   "",
 ].join("\n");
