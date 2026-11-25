@@ -1,0 +1,82 @@
+// Inputs — 10 reusable text/number input components (controlled via $state).
+$app(Column([header, Column(demos, { gap: "lg" })], { gap: "lg", padding: "md" }))
+
+header = PageHeader("Inputs", { subtitle: "10 reusable input components", badge: Badge("Components", { tone: "primary", icon: "keyboard" }) })
+function Demo(name, desc, body) { return Card([SectionHeader(name, { eyebrow: "COMPONENT", subtitle: desc }), body]) }
+
+// 1 — labelled text input with hint
+function LabeledInput(label, { placeholder = "", hint, type = "text" } = {}) {
+  const [v, setV] = $state("")
+  return FormControl(label || "Field", { hint, field: Input("li", { placeholder, type, value: v, onChange: setV }) })
+}
+
+// 2 — search field with a clear button that appears when filled
+function SearchField({ placeholder = "Search…" } = {}) {
+  const [q, setQ] = $state("")
+  return Row([
+    StackItem(SearchBar("sf", { placeholder, value: q, onChange: setQ }), { grow: 1 }),
+    q ? IconButton("xmark", { label: "Clear", variant: "ghost", onClick: () => setQ("") }) : null
+  ], { gap: "sm", align: "center" })
+}
+
+// 3 — password input with a live strength meter
+function PasswordField(label, {} = {}) {
+  const [v, setV] = $state("")
+  return FormControl(label || "Password", { field: PasswordInput("pwd", { value: v, onChange: setV, strengthMeter: true, placeholder: "At least 8 characters" }) })
+}
+
+// 4 — number input with +/- steppers and bounds
+function NumberStepper(label, { min = 0, max = 100, step = 1, initial = 1 } = {}) {
+  const [v, setV] = $state(initial)
+  return FormControl(label || "Quantity", { field: NumberInput("num", { value: v, min, max, step, onChange: setV }) })
+}
+
+// 5 — textarea with a live character counter
+function CharCountTextArea(label, { max = 140, initial = "" } = {}) {
+  const [v, setV] = $state(initial)
+  return FormControl(label || "Bio", { hint: `${v.length} / ${max}`, field: TextArea("ta", { value: v, onChange: t => setV(t.slice(0, max)), rows: 3, placeholder: "Write something…" }) })
+}
+
+// 6 — masked input (phone / card / postcode)
+function MaskedField(label, { mask = "(999) 999-9999", placeholder = "(555) 123-4567" } = {}) {
+  const [v, setV] = $state("")
+  return FormControl(label || "Phone", { field: MaskedInput("mask", { mask, value: v, onChange: setV, placeholder }) })
+}
+
+// 7 — chip/tag input bound to an array
+function TagsField(label, { initial = [] } = {}) {
+  const [tags, setTags] = $state(initial)
+  return FormControl(label || "Tags", { hint: `${tags.length} tags`, field: TagInput("tags", { value: tags, onChange: setTags, placeholder: "Type and press Enter" }) })
+}
+
+// 8 — per-digit code / OTP entry
+function OtpField(label, { length = 6 } = {}) {
+  const [code, setCode] = $state("")
+  return FormControl(label || "Verification code", { hint: code.length >= length ? "Complete" : `${code.length} / ${length} digits`, field: PinInput("otp", { length, value: code, onChange: setCode, type: "numeric" }) })
+}
+
+// 9 — currency input that echoes a formatted value
+function CurrencyInput(label, { initial = 0 } = {}) {
+  const [v, setV] = $state(initial)
+  return FormControl(label || "Amount", { hint: $util.format(Number(v) || 0, "currency", "USD"), field: NumberInput("cur", { value: v, min: 0, step: 1, onChange: setV }) })
+}
+
+// 10 — URL field with inline validity hint
+function UrlField(label, {} = {}) {
+  const [v, setV] = $state("")
+  const valid = v === "" || v.startsWith("http")
+  return FormControl(label || "Website", { hint: valid ? "Include https://" : "Must start with http", field: Input("url", { type: "url", value: v, onChange: setV, placeholder: "https://your-site.com" }) })
+}
+
+demos = [
+  Demo("LabeledInput", "Label + input + hint", LabeledInput("Full name", { placeholder: "Ada Lovelace", hint: "As it appears on your ID" })),
+  Demo("SearchField", "Search with conditional clear button", SearchField({ placeholder: "Search products…" })),
+  Demo("PasswordField", "Password with strength meter", PasswordField("Choose a password")),
+  Demo("NumberStepper", "Bounded numeric stepper", Row([NumberStepper("Quantity", { min: 1, max: 9 }), NumberStepper("Guests", { min: 1, max: 12, initial: 2 })], { wrap: true, gap: "lg" })),
+  Demo("CharCountTextArea", "Textarea capped at 140 chars", CharCountTextArea("Short bio", { max: 140 })),
+  Demo("MaskedField", "Pattern-masked input", Row([MaskedField("Phone"), MaskedField("Card", { mask: "9999 9999 9999 9999", placeholder: "4242 4242 4242 4242" })], { wrap: true, gap: "lg" })),
+  Demo("TagsField", "Tag/chip input", TagsField("Skills", { initial: ["aktion", "ui"] })),
+  Demo("OtpField", "One-time passcode entry", OtpField("Enter code", { length: 6 })),
+  Demo("CurrencyInput", "Number with formatted currency hint", CurrencyInput("Budget", { initial: 1200 })),
+  Demo("UrlField", "URL input with validity hint", UrlField("Portfolio URL"))
+]
