@@ -41198,6 +41198,7 @@ function Wo(t, e = {}) {
     // property added after construction would turn that read megamorphic.
     coverage: void 0,
     coverageSourcePath: e.coverageSourcePath,
+    sourceNames: e.sourceNames,
     hostErrorSink: e.onRuntimeError,
     sources: void 0,
     disposers: [],
@@ -41261,7 +41262,7 @@ function Ka(t, e) {
   return null;
 }
 function ud(t, e) {
-  if (e.sources = t.sources, pP() && (e.coverage = dP(t, e.coverageSourcePath)), e.coverage)
+  if (e.sources = e.sourceNames ?? t.sources, pP() && (e.coverage = dP(t, e.coverageSourcePath)), e.coverage)
     for (const r of t.statements) {
       const i = r.loc;
       i && ma(e.coverage, i);
@@ -61910,6 +61911,8 @@ class yo extends HTMLElement {
      * runnable `currentResponse`.
      */
     K(this, "compiledSourcesContent", null);
+    /** `CompiledProgram.sourceNames` of the mounted program: the names error locations carry. */
+    K(this, "compiledSourceNames", null);
     K(this, "renderScheduled", !1);
     /** True when the program text changed and the runtime needs a re-plan. */
     K(this, "programDirty", !0);
@@ -62043,7 +62046,7 @@ class yo extends HTMLElement {
     K(this, "deliverError", (r) => {
       const i = this.errorHook;
       if (!i) return;
-      const n = this.compiledSourcesContent, a = this.devtoolsProgram?.sources, o = (s) => {
+      const n = this.compiledSourcesContent, a = this.compiledSourceNames ?? this.devtoolsProgram?.sources, o = (s) => {
         if (!n) return;
         const l = a ? a.indexOf(s) : s === this.compiledSourceId ? 0 : -1;
         return l >= 0 ? n[l] : void 0;
@@ -62087,6 +62090,7 @@ class yo extends HTMLElement {
       // program to. A linked multi-file program carries its own `sources` and
       // ignores this.
       coverageSourcePath: this.compiledSourceId ?? void 0,
+      sourceNames: this.compiledSourceNames ?? void 0,
       notify: () => this.requestFullRender(),
       onEmit: (n, a) => this.emitCustomEvent(n, a),
       onRuntimeError: this.deliverError
@@ -62374,7 +62378,7 @@ class yo extends HTMLElement {
       );
       return;
     }
-    this.currentResponse = r.source, this.chunked = !1, this.compiledSourceId = r.path, this.pendingCompiled = { ...r.program, errors: [...r.program.errors] }, this.compiledProgram = r.program, this.compiledSourcesContent = r.sourcesContent ?? null, this.programDirty = !0, this.state.rebind([]), this.renderer.reset(), this.parseErrors = [], this.srcDiagnostics = [], this.srcErrors = [], i && this.state.hydrate(i), this.scheduleRender();
+    this.currentResponse = r.source, this.chunked = !1, this.compiledSourceId = r.path, this.pendingCompiled = { ...r.program, errors: [...r.program.errors] }, this.compiledProgram = r.program, this.compiledSourcesContent = r.sourcesContent ?? null, this.compiledSourceNames = r.sourceNames ?? null, this.programDirty = !0, this.state.rebind([]), this.renderer.reset(), this.parseErrors = [], this.srcDiagnostics = [], this.srcErrors = [], i && this.state.hydrate(i), this.scheduleRender();
   }
   /**
    * Module id of the compiled program currently mounted, or `null` when the
@@ -62390,7 +62394,7 @@ class yo extends HTMLElement {
    * `mountCompiled` (or the retained AST) could win over the new text.
    */
   forgetCompiled() {
-    this.pendingCompiled = null, this.compiledSourceId = null, this.compiledProgram = null, this.compiledSourcesContent = null;
+    this.pendingCompiled = null, this.compiledSourceId = null, this.compiledProgram = null, this.compiledSourcesContent = null, this.compiledSourceNames = null;
   }
   /** Current `src` attribute value, or `null` when none is set. */
   get src() {
@@ -62484,7 +62488,7 @@ class yo extends HTMLElement {
   appendChunk(r) {
     if (r == null) return;
     const i = typeof r == "string" ? r : String(r);
-    i !== "" && (this.currentResponse += i, this.chunked = !0, this.compiledProgram = null, this.compiledSourcesContent = null, this.programDirty = !0, this.scheduleRender());
+    i !== "" && (this.currentResponse += i, this.chunked = !0, this.compiledProgram = null, this.compiledSourcesContent = null, this.compiledSourceNames = null, this.programDirty = !0, this.scheduleRender());
   }
   setTheme(r) {
     rf(this, kl(r)), this.scriptThemeKeys = [], this.scheduleRender();
@@ -63369,6 +63373,7 @@ class yo extends HTMLElement {
       // program to. A linked multi-file program carries its own `sources` and
       // ignores this.
       coverageSourcePath: this.compiledSourceId ?? void 0,
+      sourceNames: this.compiledSourceNames ?? void 0,
       notify: () => this.requestFullRender(),
       onEmit: (c, u) => this.emitCustomEvent(c, u),
       onRuntimeError: this.deliverError
@@ -63400,7 +63405,7 @@ class yo extends HTMLElement {
     });
     for (const c of n.errors)
       this.reportDevtoolsError("plan", c.message, `line ${c.line}`);
-    const s = this.compiledSourceId ?? void 0, l = [
+    const s = this.compiledSourceNames?.[0] ?? this.compiledSourceId ?? void 0, l = [
       ...n.errors.map((c) => s ? { ...c, file: s } : c),
       ...this.srcErrors
     ];

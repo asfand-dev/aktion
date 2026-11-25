@@ -493,7 +493,7 @@ export interface EvaluationContext {
      */
     hostErrorSink?: (report: AktionErrorReport) => void;
     /** `program.sources` of the planned program, to name the file of a `loc`. */
-    sources?: string[];
+    sources?: readonly string[];
     /** Dispatch a custom event from an `emit("name", detail)` call. */
     onEmit?: (eventName: string, detail: unknown) => void;
     /**
@@ -574,6 +574,12 @@ export interface EvaluationContext {
      * multi-file program, whose own `Program.sources` is authoritative.
      */
     coverageSourcePath?: string;
+    /**
+     * Module names error locations are reported under, indexed like
+     * `Program.sources` (`CompiledProgram.sourceNames`). Falls back to
+     * `Program.sources` when absent.
+     */
+    sourceNames?: readonly string[];
 }
 /**
  * Optional injectables for `createContext` — the host element passes its
@@ -594,6 +600,8 @@ export interface CreateContextOptions {
      * `EvaluationContext.coverageSourcePath`.
      */
     coverageSourcePath?: string;
+    /** See `EvaluationContext.sourceNames`. */
+    sourceNames?: readonly string[];
     /** Host sink for errors the runtime used to only log. See `EvaluationContext.hostErrorSink`. */
     onRuntimeError?: (report: AktionErrorReport) => void;
     /**

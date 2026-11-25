@@ -61,6 +61,8 @@ export declare class AktionElement extends HTMLElement {
      * runnable `currentResponse`.
      */
     private compiledSourcesContent;
+    /** `CompiledProgram.sourceNames` of the mounted program: the names error locations carry. */
+    private compiledSourceNames;
     private renderScheduled;
     /** True when the program text changed and the runtime needs a re-plan. */
     private programDirty;

@@ -51222,6 +51222,7 @@ function createContext(state, options = {}) {
     // property added after construction would turn that read megamorphic.
     coverage: void 0,
     coverageSourcePath: options.coverageSourcePath,
+    sourceNames: options.sourceNames,
     hostErrorSink: options.onRuntimeError,
     sources: void 0,
     disposers: [],
@@ -51295,7 +51296,7 @@ function stateRefForArg(expr, ctx) {
   return null;
 }
 function planProgram(program, ctx) {
-  ctx.sources = program.sources;
+  ctx.sources = ctx.sourceNames ?? program.sources;
   if (isEnabled()) {
     ctx.coverage = registerProgram(program, ctx.coverageSourcePath);
   }
@@ -73680,6 +73681,8 @@ class AktionElement extends HTMLElement {
      * runnable `currentResponse`.
      */
     __publicField(this, "compiledSourcesContent", null);
+    /** `CompiledProgram.sourceNames` of the mounted program: the names error locations carry. */
+    __publicField(this, "compiledSourceNames", null);
     __publicField(this, "renderScheduled", false);
     /** True when the program text changed and the runtime needs a re-plan. */
     __publicField(this, "programDirty", true);
@@ -73814,10 +73817,10 @@ class AktionElement extends HTMLElement {
       const hook = this.errorHook;
       if (!hook) return;
       const contents = this.compiledSourcesContent;
-      const paths = this.devtoolsProgram?.sources;
+      const names = this.compiledSourceNames ?? this.devtoolsProgram?.sources;
       const sourceText = (file) => {
         if (!contents) return void 0;
-        const index = paths ? paths.indexOf(file) : file === this.compiledSourceId ? 0 : -1;
+        const index = names ? names.indexOf(file) : file === this.compiledSourceId ? 0 : -1;
         return index >= 0 ? contents[index] : void 0;
       };
       try {
@@ -73868,6 +73871,7 @@ class AktionElement extends HTMLElement {
       // program to. A linked multi-file program carries its own `sources` and
       // ignores this.
       coverageSourcePath: this.compiledSourceId ?? void 0,
+      sourceNames: this.compiledSourceNames ?? void 0,
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
       onRuntimeError: this.deliverError
@@ -74255,6 +74259,7 @@ class AktionElement extends HTMLElement {
     this.pendingCompiled = { ...compiled.program, errors: [...compiled.program.errors] };
     this.compiledProgram = compiled.program;
     this.compiledSourcesContent = compiled.sourcesContent ?? null;
+    this.compiledSourceNames = compiled.sourceNames ?? null;
     this.programDirty = true;
     this.state.rebind([]);
     this.renderer.reset();
@@ -74282,6 +74287,7 @@ class AktionElement extends HTMLElement {
     this.compiledSourceId = null;
     this.compiledProgram = null;
     this.compiledSourcesContent = null;
+    this.compiledSourceNames = null;
   }
   /** Current `src` attribute value, or `null` when none is set. */
   get src() {
@@ -74387,6 +74393,7 @@ class AktionElement extends HTMLElement {
     this.chunked = true;
     this.compiledProgram = null;
     this.compiledSourcesContent = null;
+    this.compiledSourceNames = null;
     this.programDirty = true;
     this.scheduleRender();
   }
@@ -75497,6 +75504,7 @@ class AktionElement extends HTMLElement {
       // program to. A linked multi-file program carries its own `sources` and
       // ignores this.
       coverageSourcePath: this.compiledSourceId ?? void 0,
+      sourceNames: this.compiledSourceNames ?? void 0,
       notify: () => this.requestFullRender(),
       onEmit: (eventName, detail) => this.emitCustomEvent(eventName, detail),
       onRuntimeError: this.deliverError
@@ -75543,7 +75551,7 @@ class AktionElement extends HTMLElement {
     for (const error of program.errors) {
       this.reportDevtoolsError("plan", error.message, `line ${error.line}`);
     }
-    const entryFile = this.compiledSourceId ?? void 0;
+    const entryFile = this.compiledSourceNames?.[0] ?? this.compiledSourceId ?? void 0;
     const errors = [
       ...program.errors.map((e) => entryFile ? { ...e, file: entryFile } : e),
       ...this.srcErrors
