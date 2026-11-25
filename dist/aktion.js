@@ -61775,7 +61775,7 @@ function f6(t, e) {
     return c[s.risk] - c[l.risk] || s.name.localeCompare(l.name);
   }), n;
 }
-const g6 = "0.12.0", Xa = "theme", Mn = "streaming", Il = "response", Wi = "showerrors", _i = "src", b6 = "scroll-restoration", El = "dir", Ml = "margin", Of = "route";
+const g6 = "0.12.1", Xa = "theme", Mn = "streaming", Il = "response", Wi = "showerrors", _i = "src", b6 = "scroll-restoration", El = "dir", Ml = "margin", Of = "route";
 function v6(t) {
   const e = t.getPath(), r = { ...t.getParams() }, i = t.getActivePattern(), n = {};
   if (typeof window < "u" && window.location) {
