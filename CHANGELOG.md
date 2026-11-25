@@ -5,6 +5,13 @@ Each entry is dated and summarises what was added, changed, or fixed.
 
 ---
 
+## [0.12.1](https://github.com/asfand-dev/aktion/compare/v0.12.0...v0.12.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* **plugin:** keep module paths absolute for coverage and carry error-location names in sourceNames ([#48](https://github.com/asfand-dev/aktion/issues/48)) ([cc70bb7](https://github.com/asfand-dev/aktion/commit/cc70bb73f5294a41474771317f2eccc1f031bffc))
+
 ## [0.12.0](https://github.com/asfand-dev/aktion/compare/v0.11.0...v0.12.0) (2026-11-20)
 
 
